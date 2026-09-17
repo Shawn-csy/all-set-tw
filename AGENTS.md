@@ -64,15 +64,15 @@
 
 開始修改前，依任務範圍閱讀下表文件的相關章節；跨領域變更須涵蓋所有涉及的文件，不必每次讀完整個 `docs/`。
 
-| 涉及的變更                              | 修改前閱讀，描述受影響時同步更新                                |
-| --------------------------------------- | --------------------------------------------------------------- |
-| 後端架構、同步、Queue、排程             | `docs/002-backend-architecture.md`                              |
-| 前端結構、資料查詢、共用元件            | `docs/003-frontend-architecture.md`                             |
-| 連接器、登入、驗證碼、資料正規化        | `docs/004-connector-development.md`；涉及同步流程時也讀後端架構 |
-| 部署、自動更新、環境變數                | `docs/005-deployment.md`、`README.md` 對應章節                  |
-| 資料庫 schema                           | `docs/database-schema.md`、相關 `packages/db/migrations/*.sql`  |
-| Drizzle schema、client、repository 轉換 | `docs/002-backend-architecture.md`                              |
-| 使用方式、支援資料來源、限制            | `README.md` 對應章節                                            |
+| 涉及的變更                              | 修改前閱讀，描述受影響時同步更新                                                                                                                            |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 後端架構、同步、Queue、排程             | `docs/002-backend-architecture.md`                                                                                                                          |
+| 前端結構、資料查詢、共用元件            | `docs/003-frontend-architecture.md`                                                                                                                         |
+| 連接器、登入、驗證碼、資料正規化        | `docs/004-connector-development.md`；涉及同步流程時也讀後端架構                                                                                             |
+| 部署、自動更新、環境變數                | `docs/005-deployment.md`、`README.md` 對應章節；全網頁部署見 `docs/006-browser-deployment-plan.md` 與第 0 階段 `docs/006-stage0-capability-verification.md` |
+| 資料庫 schema                           | `docs/database-schema.md`、相關 `packages/db/migrations/*.sql`                                                                                              |
+| Drizzle schema、client、repository 轉換 | `docs/002-backend-architecture.md`                                                                                                                          |
+| 使用方式、支援資料來源、限制            | `README.md` 對應章節                                                                                                                                        |
 
 - 若變更使文件描述不再正確，必須在同一個 PR 更新相關文件；純重構且不影響文件描述時，不必為了更新而更新。
 - Schema 變更須同步維護 `packages/db/schema-metadata.json`，並從 repo root 執行 `npm run db:schema:docs`，提交重新產生的 `docs/database-schema.md`；不得直接手改產生的文件。

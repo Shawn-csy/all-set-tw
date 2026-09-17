@@ -1,8 +1,8 @@
 # 全網頁部署與更新實作計畫
 
-狀態：待實作。日期：2026-09-17。
+狀態：第 0 階段文件驗證完成，隔離帳戶寫入實測未做。日期：2026-09-17。
 
-本文件規劃免 GitHub 帳號、免下載、免終端機的部署流程，不代表現有功能已支援。此次僅新增計畫，沒有建立或修改線上資源。
+本文件規劃免 GitHub 帳號、免下載、免終端機的部署流程，不代表現有功能已支援。第 0 階段發現見 [`docs/006-stage0-capability-verification.md`](./006-stage0-capability-verification.md)。兩份文件都沒有建立或修改線上資源。
 
 ## 1. 目標與第一版範圍
 
@@ -22,27 +22,32 @@
 
 ## 2. 已確認能力與待驗證項目
 
-### 已確認
+第 0 階段的 API／文件對照、Dashboard 深連結、Access 路徑、D1 ledger 建議與成本表見 [`docs/006-stage0-capability-verification.md`](./006-stage0-capability-verification.md)。下列為計畫層摘要。
+
+### 已由文件／API 證實（尚未線上寫入實測）
 
 - 現行 README 與 `docs/005-deployment.md` 的 GitHub 依賴來自部署 repository、Workers Builds 與同步上游 workflow，應用執行本身沒有此依賴。
 - `scripts/deploy-with-vapid.mjs` 已有 Queue 建立與 VAPID 金鑰保留邏輯；新流程沿用其行為規則，不能在 Worker 直接執行這支 Node 子程序腳本。
 - `wrangler.toml` 定義 Worker、靜態資源、D1、Queue producer／consumer、Browser、AI 及 Cron，均須納入新部署流程。
 - Cloudflare 已公開自行建立 OAuth client 的流程；公開 client 可供其他帳戶使用，需要完成網域驗證。採官方 client 註冊，不借用 Wrangler 的 client ID。[官方建立文件](https://developers.cloudflare.com/fundamentals/oauth/create-an-oauth-client/)
-- Cloudflare 提供 OAuth 授權、token、撤銷及使用者資訊端點。[官方整合文件](https://developers.cloudflare.com/fundamentals/oauth/integrate-with-cloudflare/)
+- Cloudflare 提供 OAuth 授權、token、撤銷及使用者資訊端點；PKCE `S256` 與 `refresh_token`／`offline_access` 出現在 OpenID 設定。[官方整合文件](https://developers.cloudflare.com/fundamentals/oauth/integrate-with-cloudflare/)
 - Worker 靜態資源可透過 API upload session 上傳，再用完成憑證與 Worker 部署綁定，不必為每位使用者建立 Git repository。[Direct Uploads](https://developers.cloudflare.com/workers/static-assets/direct-upload/)
+- 目標帳戶可用 REST 建立 D1、Queue、Queue consumer、Worker secrets，以及啟用／關閉該 script 的 workers.dev（含關閉 preview）。
+- Access Application 的 `destinations` 支援 `type: "worker"`，可對單一 Worker 套用 Access，不要求使用者自有 zone。Email OTP 可用 REST 新增；policy 可 `include` 單一 email。Organization `auth_domain` 與 Application `aud` 可讀出，對應 `TEAM_DOMAIN`／`POLICY_AUD`。
+- Wrangler 遠端 migration 走 D1 `/query`，ledger 為 `d1_migrations(id, name, applied_at)`；一個檔案加一筆 `INSERT` 作為一次請求。不可用分號天真拆 SQL。
 
-以上由本機程式、Cloudflare Docs MCP 與官方文件確認，尚未對新帳戶進行線上實測。
+### 第 0 階段結論（2026-09-17）
 
-### 第 0 階段必須解決
+| 項目          | 文件結論                                                                                                                                                 | 未通過或未實測時的處理                                                                |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| OAuth scopes  | 應對齊 token permissions：Workers Scripts、D1、Queues、Access Apps and Policies、Org／IdP、Memberships。範例 `workers-platform.write` 不足以當完整目錄。 | 隔離帳戶用 `GET /oauth/scopes` 回填 ID；缺 scope 則縮小功能或記為阻塞，不改用過度授權 |
+| 全新帳戶      | workers.dev 子網域 API 存在；Zero Trust 開通文件要求 Dashboard 選方案並填付款資料（Free 仍要填）。不得宣稱零人工步驟。                                   | 預檢 + 深連結；缺組織則停在可續跑狀態                                                 |
+| Access        | REST 路徑已見於 Application `worker` destination + OTP IdP + email allow。`worker_id` 實際值與一鍵 Access 是否完全等價待實測。                           | API 失敗則引導 Dashboard 一鍵 Access；成功前不開放入口                                |
+| D1 migrations | REST runner 應模仿 Wrangler ledger 與每檔一次 `/query`。REST 是否原子回滾未由文件保證。`0044` 為大表重建。                                               | 先在隔離帳戶重播；非原子則改 `/import` 或受控 Wrangler runner                         |
+| 更新一致性    | Queue 可 pause delivery；D1 Time Travel 可當復原點。同步中更新仍屬第 4 階段。                                                                            | 未實測前不得開放含 schema 變更的更新                                                  |
+| 資源與成本    | 使用者端與現行 Free 額度相同（含 10 ms CPU、每日 10 分鐘 Browser Run）。部署服務本身建議 Paid，因 Free subrequest／CPU 不夠編排完整安裝。                | 明示限制，不承諾永久零成本                                                            |
 
-| 項目          | 驗證內容                                                                                                 | 未通過時的處理                                       |
-| ------------- | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| OAuth scopes  | Worker、assets、D1、Queues、Access、帳戶資訊及相關 bindings 所需的確切 scope；多帳戶選擇、撤銷與過期行為 | 縮小功能或記錄阻塞，不默默改用過度授權 token         |
-| 全新帳戶      | workers.dev 子網域、Zero Trust organization、條款或方案啟用是否需要 Dashboard 操作                       | 提供網頁深連結及返回後重新檢查；不得宣稱無需人工步驟 |
-| Access        | workers.dev 的 Application、Email OTP、精確 Email allow policy、AUD／Team Domain 的建立及取得            | 保持部署未開放，顯示必須完成的網頁操作               |
-| D1 migrations | 既有 SQL 經 REST 執行的 transaction、PRAGMA、重建表及 migration ledger 相容性                            | 不用分號拆 SQL 或另造不相容 ledger；先調整執行方案   |
-| 更新一致性    | 同步／Queue 執行中如何暫停寫入、等待既有工作結束並套用 migration                                         | 未驗證前不得開放含 schema 變更的更新                 |
-| 資源與成本    | 使用者帳戶的額度／啟用條件，以及部署服務自身的 CPU、記憶體、上傳與儲存需求                               | 明示限制，不承諾維護者端與使用者端永久零成本         |
+**Go／no-go：** 沒有已證實的 API 硬阻塞，第 1 階段可以開始做版本產物設計。在 Ted 隔離帳戶完成最小安裝實測前，不開始第 2 階段 workspace，也不把 REST migration 當成已保證原子。若 OAuth 無法同時取得 Workers＋D1＋Queues＋Access，或 Access 無法保護 workers.dev 且無法用 Dashboard 深連結補齊，再列為產品阻塞。
 
 ## 3. 使用者流程
 
@@ -155,16 +160,16 @@ flowchart LR
 
 ## 7. 實作階段與驗收
 
-| 階段              | 交付內容                                                                           | 驗收／完成條件                                                      |
-| ----------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| 0：能力驗證       | OAuth scope/API 對照表、全新帳戶與 Access 路徑、migration 原型、成本與執行限制紀錄 | 在隔離測試帳戶證明完整最小安裝可行；每個需 Dashboard 操作的步驟明列 |
-| 1：版本發布       | Release manifest、建置腳本、R2 發布流程                                            | 固定版本可重現安裝；產物完整，摘要不符即拒絕；既有部署不受影響      |
-| 2：授權與工作基礎 | 兩個部署 workspace、session、帳戶預檢、D1 工作紀錄、Queue consumer                 | 跨帳戶存取被拒；撤銷／過期可恢復；重送不建立第二個安裝              |
-| 3：首次安裝       | D1／Queue／Access／secrets／assets／Worker／Cron 全流程與進度 UI                   | 無 GitHub、無本機工具的新使用者可在桌面與手機完成安裝及登入         |
-| 4：網頁更新       | 版本比較、重新授權、維護模式、migration 與恢復                                     | 以含合成資料的舊版升級，資料、設定及金鑰不變；失敗可恢復            |
-| 5：上線準備       | 維護者正式 OAuth client／網域、營運清理與配額、文件與試用                          | 非維護者帳戶端到端通過；無敏感 log；部署服務故障不影響既有財務網站  |
+| 階段              | 交付內容                                                                                                                              | 驗收／完成條件                                                                                         |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| 0：能力驗證       | OAuth scope/API 對照表、全新帳戶與 Access 路徑、migration 原型、成本與執行限制紀錄（見 `docs/006-stage0-capability-verification.md`） | 文件／API 對照已完成。隔離測試帳戶的完整最小安裝仍待 Ted 授權後實測；每個需 Dashboard 操作的步驟已明列 |
+| 1：版本發布       | Release manifest、建置腳本、R2 發布流程                                                                                               | 固定版本可重現安裝；產物完整，摘要不符即拒絕；既有部署不受影響                                         |
+| 2：授權與工作基礎 | 兩個部署 workspace、session、帳戶預檢、D1 工作紀錄、Queue consumer                                                                    | 跨帳戶存取被拒；撤銷／過期可恢復；重送不建立第二個安裝                                                 |
+| 3：首次安裝       | D1／Queue／Access／secrets／assets／Worker／Cron 全流程與進度 UI                                                                      | 無 GitHub、無本機工具的新使用者可在桌面與手機完成安裝及登入                                            |
+| 4：網頁更新       | 版本比較、重新授權、維護模式、migration 與恢復                                                                                        | 以含合成資料的舊版升級，資料、設定及金鑰不變；失敗可恢復                                               |
+| 5：上線準備       | 維護者正式 OAuth client／網域、營運清理與配額、文件與試用                                                                             | 非維護者帳戶端到端通過；無敏感 log；部署服務故障不影響既有財務網站                                     |
 
-開發依序進行，先完成階段 0，避免同時鋪開全部功能。每階段可各自拆 PR；階段 0 的實測環境與外部資源寫入另依當次實作授權處理，本計畫沒有執行這些動作。
+開發依序進行，先完成階段 0，避免同時鋪開全部功能。每階段可各自拆 PR。階段 0 的文件／API 驗證已寫入 `docs/006-stage0-capability-verification.md`；隔離帳戶寫入實測另依當次授權處理，本計畫與第 0 階段文件都沒有對正式或測試帳戶建立資源。
 
 ### 必要測試
 
