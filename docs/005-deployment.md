@@ -156,7 +156,7 @@ XDG_CONFIG_HOME=.wrangler-config node scripts/deploy-with-vapid.mjs \
 
 ## 全網頁部署版本包（開發中）
 
-目前已提供維護者的離線打包工具，尚未提供使用者的 OAuth 部署網站。現有 GitHub 部署方式仍可使用。進度與平台限制見 [實作計畫](006-browser-deployment-plan.md) 及 [能力驗證紀錄](006-stage0-capability-verification.md)。
+目前已提供維護者的離線打包工具，以及部署網站的 session、帳戶預檢、首次安裝與手動更新編排。正式 OAuth client、R2 latest 發布與一般使用者端到端登入尚未完成，因此仍不可作為一般使用者的一鍵部署。現有 GitHub 部署方式仍可使用。進度與平台限制見 [實作計畫](006-browser-deployment-plan.md) 及 [能力驗證紀錄](006-stage0-capability-verification.md)。
 
 從乾淨且已安裝依賴的 checkout 執行：
 

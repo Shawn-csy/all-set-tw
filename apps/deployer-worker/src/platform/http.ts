@@ -28,7 +28,12 @@ export function apiErrorResponse(error: Error) {
     );
   }
 
-  console.error("[deployer] unhandled error");
+  console.error(
+    "[deployer] unhandled error",
+    error instanceof Error
+      ? { name: error.name, message: error.message }
+      : { message: "unknown" },
+  );
   return jsonError("INTERNAL_ERROR", "An unexpected error occurred.", 500);
 }
 

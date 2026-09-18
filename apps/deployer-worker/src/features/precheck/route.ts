@@ -61,7 +61,7 @@ function mapPrecheckError(error: unknown) {
         401,
       );
     }
-    return jsonError("FORBIDDEN", "無法完成帳戶預檢。", 403);
+    return jsonError(error.code, "無法完成帳戶預檢。", error.status);
   }
   if (error instanceof AccountNotAuthorizedError) {
     return jsonError(

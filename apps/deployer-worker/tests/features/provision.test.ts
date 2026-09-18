@@ -200,6 +200,31 @@ describe("first-install provisioner", () => {
     }
   });
 
+  it("persists the Access application before creating its policy", async () => {
+    const ctx = await createDeployerEnv();
+    try {
+      const { body } = await startInstall(ctx.env);
+      let sawAppWithoutPolicy = false;
+      for (let index = 0; index < 40; index += 1) {
+        const job = await getJobById(ctx.env.DB, body.job.id);
+        const resources = JSON.parse(job?.createdResources ?? "{}") as {
+          accessAppId?: string;
+          accessPolicyId?: string;
+        };
+        if (resources.accessAppId && !resources.accessPolicyId) {
+          sawAppWithoutPolicy = true;
+          expect(ctx.cloudflare.accessApps).toHaveLength(1);
+          expect(ctx.cloudflare.policies).toHaveLength(0);
+          break;
+        }
+        await processDeployJob(ctx.env, body.job.id, `lease-access-${index}`);
+      }
+      expect(sawAppWithoutPolicy).toBe(true);
+    } finally {
+      await dispose(ctx);
+    }
+  });
+
   it("pauses for reauth when a write returns 401", async () => {
     const ctx = await createDeployerEnv({ expireOnWrite: true });
     try {

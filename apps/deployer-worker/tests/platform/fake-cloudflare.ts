@@ -72,7 +72,11 @@ export async function handleCloudflareApi(
   init?: RequestInit,
 ) {
   if (!url.startsWith(CLOUDFLARE_API_BASE)) return null;
-  const path = url.slice(CLOUDFLARE_API_BASE.length);
+  const parsed = new URL(url);
+  const path = parsed.pathname.startsWith("/client/v4")
+    ? parsed.pathname.slice("/client/v4".length)
+    : parsed.pathname;
+  const query = parsed.searchParams;
   const method = (init?.method ?? "GET").toUpperCase();
   const isWrite = method !== "GET";
   if (isWrite) {
@@ -96,8 +100,12 @@ export async function handleCloudflareApi(
 
   const listD1 = path.match(/^\/accounts\/[^/]+\/d1\/database$/);
   if (listD1 && method === "GET") {
+    const name = query.get("name");
+    const items = name
+      ? state.d1.filter((item) => item.name === name)
+      : state.d1;
     return Response.json({
-      result: state.d1.map((item) => ({ uuid: item.id, name: item.name })),
+      result: items.map((item) => ({ uuid: item.id, name: item.name })),
     });
   }
   if (listD1 && method === "POST") {

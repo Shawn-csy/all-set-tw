@@ -70,7 +70,7 @@ export async function createDeployerEnv(options?: {
         return Response.json({ sub: subjects[code] ?? "user-a" });
       }
       if (url === OAUTH_REVOKE_URL) return new Response(null, { status: 200 });
-      if (url === `${CLOUDFLARE_API_BASE}/memberships`) {
+      if (url.startsWith(`${CLOUDFLARE_API_BASE}/memberships`)) {
         return Response.json({
           result: accounts.map((account) => ({ account })),
         });
@@ -116,6 +116,14 @@ export function cookieHeader(response: Response) {
   return cookie.split(";")[0]!;
 }
 
+export function oauthStateCookieHeader(response: Response) {
+  const cookie = response.headers
+    .getSetCookie()
+    .find((value) => value.startsWith("all_set_deployer_oauth_state="));
+  if (!cookie) throw new Error("Missing OAuth state cookie");
+  return cookie.split(";")[0]!;
+}
+
 export async function login(
   env: Env,
   code = "ok",
@@ -130,7 +138,7 @@ export async function login(
   const state = new URL(location).searchParams.get("state");
   const callback = await app.request(
     `http://localhost/api/auth/callback?code=${code}&state=${state}`,
-    {},
+    { headers: { Cookie: oauthStateCookieHeader(loginResponse) } },
     env,
   );
   const cookie = cookieHeader(callback);

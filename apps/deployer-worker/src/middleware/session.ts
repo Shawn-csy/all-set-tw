@@ -5,7 +5,9 @@ import { jsonError, isLocalDevMode } from "../platform/http";
 import { getSession } from "../features/auth/repository";
 
 export const SESSION_COOKIE = "all_set_deployer_session";
+export const OAUTH_STATE_COOKIE = "all_set_deployer_oauth_state";
 export const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
+export const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 
 export function cookieOptions(env: Env, expires: Date) {
   return {
@@ -39,6 +41,34 @@ export function clearSessionCookie(c: {
   header: (name: string, value: string) => void;
 }) {
   deleteCookie(c as never, SESSION_COOKIE, cookieOptions(c.env, new Date(0)));
+}
+
+export function setOAuthStateCookie(args: {
+  setCookie: (
+    name: string,
+    value: string,
+    options: ReturnType<typeof cookieOptions>,
+  ) => void;
+  env: Env;
+  state: string;
+  expiresAt: string;
+}) {
+  args.setCookie(
+    OAUTH_STATE_COOKIE,
+    args.state,
+    cookieOptions(args.env, new Date(args.expiresAt)),
+  );
+}
+
+export function clearOAuthStateCookie(c: {
+  env: Env;
+  header: (name: string, value: string) => void;
+}) {
+  deleteCookie(
+    c as never,
+    OAUTH_STATE_COOKIE,
+    cookieOptions(c.env, new Date(0)),
+  );
 }
 
 export const sessionMiddleware = honoFactory.createMiddleware(

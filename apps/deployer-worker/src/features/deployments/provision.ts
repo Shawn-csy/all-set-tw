@@ -29,6 +29,7 @@ import {
   putWorkerScript,
   putWorkerSecret,
   createAssetUploadSession,
+  hasCloudflareAccessChallenge,
   readAnonymousUrl,
 } from "../../platform/cloudflare-provision";
 import type { Env } from "../../platform/env";
@@ -437,9 +438,7 @@ async function stepCreateAccessApp(
   ) {
     return { resources, secrets: {} };
   }
-  let appId = resources.accessAppId;
-  let aud = resources.policyAud;
-  if (!appId) {
+  if (!resources.accessAppId) {
     const created = await createAccessApplication({
       accessToken: ctx.accessToken,
       accountId: ctx.accountId,
@@ -447,27 +446,32 @@ async function stepCreateAccessApp(
       workerId: resources.workerScriptId,
       allowedIdpId: resources.otpIdpId,
     });
-    appId = created.id;
-    aud = created.aud;
+    return {
+      resources: {
+        ...resources,
+        accessAppId: created.id,
+        policyAud: created.aud,
+      },
+      secrets: {},
+      stayOnStep: true,
+    };
   }
-  let policyId = resources.accessPolicyId;
-  if (!policyId) {
-    policyId = await createAccessPolicy({
+  if (!resources.accessPolicyId) {
+    const policyId = await createAccessPolicy({
       accessToken: ctx.accessToken,
       accountId: ctx.accountId,
-      appId,
+      appId: resources.accessAppId,
       email: ctx.allowedEmail,
     });
+    return {
+      resources: {
+        ...resources,
+        accessPolicyId: policyId,
+      },
+      secrets: {},
+    };
   }
-  return {
-    resources: {
-      ...resources,
-      accessAppId: appId,
-      accessPolicyId: policyId,
-      policyAud: aud,
-    },
-    secrets: {},
-  };
+  return { resources, secrets: {} };
 }
 
 async function stepWriteAccessSecrets(
@@ -547,7 +551,9 @@ export async function stepApplyMigrations(
     sql: pending.sql,
   });
   const migrations = [...applied, pending.name];
-  const done = migrations.length >= release.migrations.length;
+  const done = release.migrations.every((file) =>
+    migrations.includes(file.name),
+  );
   return {
     resources: { ...resources, migrations },
     secrets: {},
@@ -717,7 +723,7 @@ export async function stepVerifyInstall(
   if (probe.status === 200) {
     throw new ProvisionError("ACCESS_NOT_ENFORCED");
   }
-  if (probe.status !== 302 && probe.status !== 401 && probe.status !== 403) {
+  if (!hasCloudflareAccessChallenge(probe)) {
     throw new ProvisionError("VERIFY_FAILED");
   }
   return { resources: { ...resources, verified: true }, secrets: {} };

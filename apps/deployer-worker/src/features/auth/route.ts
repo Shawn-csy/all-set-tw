@@ -10,10 +10,14 @@ import {
   listAuthorizedAccounts,
 } from "../../platform/cloudflare";
 import {
+  clearOAuthStateCookie,
   clearSessionCookie,
+  getCookie,
+  OAUTH_STATE_COOKIE,
   requireCsrf,
   requireSession,
   setCookie,
+  setOAuthStateCookie,
   setSessionCookie,
 } from "../../middleware/session";
 import {
@@ -34,7 +38,13 @@ function registerAuthRoutes(api: Hono<AppBindings>) {
 
   api.get("/auth/login", async (c) => {
     try {
-      const { authorizeUrl } = await beginOAuthLogin(c.env);
+      const { authorizeUrl, state, expiresAt } = await beginOAuthLogin(c.env);
+      setOAuthStateCookie({
+        setCookie: (name, value, options) => setCookie(c, name, value, options),
+        env: c.env,
+        state,
+        expiresAt,
+      });
       return c.redirect(authorizeUrl, 302);
     } catch (error) {
       return mapAuthError(error);
@@ -44,7 +54,9 @@ function registerAuthRoutes(api: Hono<AppBindings>) {
   api.get("/auth/callback", async (c) => {
     const code = c.req.query("code");
     const state = c.req.query("state");
-    if (!code || !state) {
+    const cookieState = getCookie(c, OAUTH_STATE_COOKIE);
+    clearOAuthStateCookie(c);
+    if (!code || !state || !cookieState || cookieState !== state) {
       return jsonError(
         "INVALID_OAUTH_STATE",
         "缺少授權參數，請重新登入。",
@@ -159,7 +171,7 @@ function mapAuthError(error: unknown) {
         401,
       );
     }
-    return jsonError("FORBIDDEN", "無法讀取此次授權的帳戶清單。", 403);
+    return jsonError(error.code, "無法讀取此次授權的帳戶清單。", error.status);
   }
   throw error;
 }

@@ -28,6 +28,7 @@ import {
   getInstallationById,
   insertInstallation,
   listInstallationsForOwnerAccount,
+  updateInstallation,
   type InstallationRow,
 } from "./repository";
 
@@ -146,12 +147,38 @@ export async function createOrReuseInstallation(
     return { installation, job, reused: true };
   }
 
-  const job = await createOrReuseJob(env, installation.id, {
+  let currentInstallation = installation;
+  if (reused) {
+    const active = await findActiveJob(env.DB, currentInstallation.id);
+    if (
+      !active &&
+      (currentInstallation.targetVersion !== input.targetVersion ||
+        currentInstallation.targetDigest !== input.targetDigest ||
+        currentInstallation.allowedEmail !== input.allowedEmail)
+    ) {
+      const updatedAt = new Date().toISOString();
+      await updateInstallation(env.DB, currentInstallation.id, {
+        allowedEmail: input.allowedEmail,
+        targetVersion: input.targetVersion,
+        targetDigest: input.targetDigest,
+        updatedAt,
+      });
+      currentInstallation = {
+        ...currentInstallation,
+        allowedEmail: input.allowedEmail,
+        targetVersion: input.targetVersion,
+        targetDigest: input.targetDigest,
+        updatedAt,
+      };
+    }
+  }
+
+  const job = await createOrReuseJob(env, currentInstallation.id, {
     kind: "install",
     targetVersion: input.targetVersion,
     targetDigest: input.targetDigest,
   });
-  return { installation, job, reused };
+  return { installation: currentInstallation, job, reused };
 }
 
 export async function createOrReuseJob(

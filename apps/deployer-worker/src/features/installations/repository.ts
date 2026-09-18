@@ -107,6 +107,7 @@ export async function updateInstallation(
   id: string,
   patch: {
     status?: string;
+    allowedEmail?: string;
     targetVersion?: string | null;
     targetDigest?: string | null;
     workerScriptId?: string | null;

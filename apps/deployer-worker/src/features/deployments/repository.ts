@@ -102,7 +102,9 @@ export async function listJobsForInstallation(
 }
 
 export const LEASE_MS = 60_000;
-export const MAX_JOB_ATTEMPTS = 80;
+// 完整首次安裝約 18 步 + Access 拆步 + ledger + 每個 migration 一次
+// invocation，再保留暫時性失敗重試額度。
+export const MAX_JOB_ATTEMPTS = 200;
 
 export async function acquireJobLease(
   db: D1Database,
@@ -160,4 +162,28 @@ export async function updateJob(
     .set(patch)
     .where(eq(deployJobs.id, jobId))
     .run();
+}
+
+export async function updateLeasedJob(
+  db: D1Database,
+  jobId: string,
+  leaseOwner: string,
+  patch: {
+    status?: string;
+    step?: string;
+    errorCode?: string | null;
+    createdResources?: string;
+    encryptedSecrets?: string | null;
+    migrationName?: string | null;
+    leaseOwner?: string | null;
+    leaseUntil?: string | null;
+    updatedAt: string;
+  },
+) {
+  const result = await createDrizzle(db)
+    .update(deployJobs)
+    .set(patch)
+    .where(and(eq(deployJobs.id, jobId), eq(deployJobs.leaseOwner, leaseOwner)))
+    .run();
+  return (result.meta.changes ?? 0) > 0;
 }

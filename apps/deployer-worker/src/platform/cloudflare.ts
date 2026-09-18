@@ -65,18 +65,58 @@ export async function cfRequest(
   if (response.status === 204) return { success: true, result: undefined };
   const text = await response.text();
   if (!text) return { success: true, result: undefined };
-  return JSON.parse(text) as { success?: boolean; result?: unknown };
+  return JSON.parse(text) as {
+    success?: boolean;
+    result?: unknown;
+    result_info?: {
+      page?: number;
+      per_page?: number;
+      count?: number;
+      total_count?: number;
+      total_pages?: number;
+    };
+  };
 }
 
 async function cfFetch(accessToken: string, path: string) {
   return cfRequest(accessToken, path);
 }
 
+async function cfFetchAllPages(accessToken: string, path: string) {
+  const items: unknown[] = [];
+  let page = 1;
+  const perPage = 50;
+  const maxPages = 100;
+  for (;;) {
+    const separator = path.includes("?") ? "&" : "?";
+    const body = await cfRequest(
+      accessToken,
+      `${path}${separator}page=${page}&per_page=${perPage}`,
+    );
+    const rows = Array.isArray(body.result) ? body.result : [];
+    items.push(...rows);
+    const info = body.result_info;
+    const pageSize = info?.per_page ?? perPage;
+    const totalPages =
+      info?.total_pages ??
+      (info?.total_count != null
+        ? Math.ceil(info.total_count / pageSize)
+        : undefined);
+    if (totalPages != null) {
+      if (page >= totalPages) break;
+    } else if (rows.length < pageSize) {
+      break;
+    }
+    page += 1;
+    if (page > maxPages) break;
+  }
+  return items;
+}
+
 export async function listAuthorizedAccounts(
   accessToken: string,
 ): Promise<CloudflareAccount[]> {
-  const body = await cfFetch(accessToken, "/memberships");
-  const rows = Array.isArray(body.result) ? body.result : [];
+  const rows = await cfFetchAllPages(accessToken, "/memberships");
   const accounts: CloudflareAccount[] = [];
   for (const row of rows) {
     const account = (row as { account?: { id?: string; name?: string } })
@@ -174,8 +214,10 @@ export async function findD1DatabaseByName(
   accountId: string,
   name: string,
 ) {
-  const body = await cfFetch(accessToken, `/accounts/${accountId}/d1/database`);
-  const rows = Array.isArray(body.result) ? body.result : [];
+  const rows = await cfFetchAllPages(
+    accessToken,
+    `/accounts/${accountId}/d1/database?name=${encodeURIComponent(name)}`,
+  );
   for (const row of rows) {
     const item = row as { uuid?: string; id?: string; name?: string };
     if (item.name === name && (item.uuid || item.id)) {
@@ -190,8 +232,10 @@ export async function findQueueByName(
   accountId: string,
   name: string,
 ) {
-  const body = await cfFetch(accessToken, `/accounts/${accountId}/queues`);
-  const rows = Array.isArray(body.result) ? body.result : [];
+  const rows = await cfFetchAllPages(
+    accessToken,
+    `/accounts/${accountId}/queues`,
+  );
   for (const row of rows) {
     const item = row as {
       queue_id?: string;

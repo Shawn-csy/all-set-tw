@@ -340,7 +340,31 @@ export async function readAnonymousUrl(url: string) {
   return {
     status: response.status,
     location: response.headers.get("Location"),
+    wwwAuthenticate: response.headers.get("WWW-Authenticate"),
   };
+}
+
+export function hasCloudflareAccessChallenge(probe: {
+  status: number;
+  location: string | null;
+  wwwAuthenticate?: string | null;
+}) {
+  const location = probe.location ?? "";
+  const authenticate = probe.wwwAuthenticate ?? "";
+  const accessLocation =
+    /https:\/\/[^/\s]+\.cloudflareaccess\.com(?:\/|$)/i.test(location) ||
+    /\/cdn-cgi\/access\//i.test(location);
+  const accessAuth =
+    /cloudflareaccess/i.test(authenticate) ||
+    /resource_metadata=/i.test(authenticate);
+  if (probe.status === 302 && accessLocation) return true;
+  if (
+    (probe.status === 401 || probe.status === 403) &&
+    (accessLocation || accessAuth)
+  ) {
+    return true;
+  }
+  return false;
 }
 
 export function isRetryableCloudflareError(error: unknown) {

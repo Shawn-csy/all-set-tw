@@ -11,6 +11,7 @@ import {
   authHeaders,
   createDeployerEnv,
   login,
+  oauthStateCookieHeader,
   queuedMessages,
 } from "../helpers";
 
@@ -337,6 +338,156 @@ describe("deployer auth, precheck, and jobs", () => {
       expect(jobs?.n).toBe(1);
       expect(current?.status).toBe("queued");
       expect(current?.step).toBe("generate_keys");
+    } finally {
+      await dispose(ctx);
+    }
+  });
+
+  it("rejects a valid OAuth callback that is missing the initiating browser cookie", async () => {
+    const ctx = await createDeployerEnv();
+    try {
+      const loginResponse = await app.request(
+        "http://localhost/api/auth/login",
+        {},
+        ctx.env,
+      );
+      const location = loginResponse.headers.get("location");
+      if (!location) throw new Error("Missing OAuth redirect");
+      const state = new URL(location).searchParams.get("state");
+      const stolen = await app.request(
+        `http://localhost/api/auth/callback?code=ok&state=${state}`,
+        {},
+        ctx.env,
+      );
+      expect(stolen.status).toBe(400);
+      const legitimate = await app.request(
+        `http://localhost/api/auth/callback?code=ok&state=${state}`,
+        { headers: { Cookie: oauthStateCookieHeader(loginResponse) } },
+        ctx.env,
+      );
+      expect(legitimate.status).toBe(302);
+    } finally {
+      await dispose(ctx);
+    }
+  });
+
+  it("retries when enqueueing the next step fails after a successful step", async () => {
+    const ctx = await createDeployerEnv();
+    try {
+      const session = await login(ctx.env);
+      await app.request(
+        "http://localhost/api/auth/select-account",
+        {
+          method: "POST",
+          headers: authHeaders(session),
+          body: JSON.stringify({ accountId: "acct-1" }),
+        },
+        ctx.env,
+      );
+      const created = await app.request(
+        "http://localhost/api/installations",
+        {
+          method: "POST",
+          headers: authHeaders(session),
+          body: JSON.stringify({
+            accountId: "acct-1",
+            workerName: "taiwan-fin-hub",
+            allowedEmail: "owner@example.com",
+            targetVersion: "v0.1.0",
+            targetDigest: TARGET_DIGEST,
+          }),
+        },
+        ctx.env,
+      );
+      const body = (await created.json()) as { job: { id: string } };
+      ctx.send.mockReset();
+      ctx.send.mockRejectedValueOnce(new Error("queue down"));
+      const outcome = await processDeployJob(
+        ctx.env,
+        body.job.id,
+        "lease-enqueue",
+      );
+      expect(outcome).toBe("retry");
+      const job = await getJobById(ctx.env.DB, body.job.id);
+      expect(job?.status).toBe("queued");
+      expect(job?.errorCode).toBeNull();
+      expect(job?.step).toBe("load_release");
+    } finally {
+      await dispose(ctx);
+    }
+  });
+
+  it("updates a failed installation to the new target version on reuse", async () => {
+    const ctx = await createDeployerEnv();
+    try {
+      const session = await login(ctx.env);
+      await app.request(
+        "http://localhost/api/auth/select-account",
+        {
+          method: "POST",
+          headers: authHeaders(session),
+          body: JSON.stringify({ accountId: "acct-1" }),
+        },
+        ctx.env,
+      );
+      const first = await app.request(
+        "http://localhost/api/installations",
+        {
+          method: "POST",
+          headers: authHeaders(session),
+          body: JSON.stringify({
+            accountId: "acct-1",
+            workerName: "taiwan-fin-hub",
+            allowedEmail: "owner@example.com",
+            targetVersion: "v0.1.0",
+            targetDigest: TARGET_DIGEST,
+          }),
+        },
+        ctx.env,
+      );
+      const firstBody = (await first.json()) as {
+        installation: { id: string };
+        job: { id: string };
+      };
+      await ctx.env.DB.prepare(
+        "UPDATE deploy_jobs SET status = 'failed' WHERE id = ?",
+      )
+        .bind(firstBody.job.id)
+        .run();
+      await ctx.env.DB.prepare(
+        "UPDATE installations SET status = 'failed' WHERE id = ?",
+      )
+        .bind(firstBody.installation.id)
+        .run();
+      const nextDigest = "c".repeat(64);
+      const reused = await app.request(
+        "http://localhost/api/installations",
+        {
+          method: "POST",
+          headers: authHeaders(session),
+          body: JSON.stringify({
+            accountId: "acct-1",
+            workerName: "taiwan-fin-hub",
+            allowedEmail: "owner@example.com",
+            targetVersion: "v0.2.0",
+            targetDigest: nextDigest,
+          }),
+        },
+        ctx.env,
+      );
+      const reusedBody = (await reused.json()) as {
+        installation: {
+          id: string;
+          targetVersion: string;
+          targetDigest: string;
+        };
+        job: { id: string; targetVersion: string; targetDigest: string };
+      };
+      expect(reusedBody.installation.id).toBe(firstBody.installation.id);
+      expect(reusedBody.installation.targetVersion).toBe("v0.2.0");
+      expect(reusedBody.installation.targetDigest).toBe(nextDigest);
+      expect(reusedBody.job.id).not.toBe(firstBody.job.id);
+      expect(reusedBody.job.targetVersion).toBe("v0.2.0");
     } finally {
       await dispose(ctx);
     }

@@ -41,9 +41,13 @@
   let job = $state<DeployJob | null>(null);
   let updatePlan = $state<UpdatePlan | null>(null);
   let busy = $state(false);
-  let pollTimer: ReturnType<typeof setInterval> | undefined;
+  let pollTimer: ReturnType<typeof setTimeout> | undefined;
+  let pollInFlight = false;
 
   const summary = $derived(precheck ? precheckSummary(precheck.checks) : null);
+  const precheckMatchesInput = $derived(
+    precheck?.accountId === accountId && precheck?.workerName === workerName,
+  );
   const existingInstall = $derived(Boolean(installation));
   const jobInFlight = $derived(
     Boolean(
@@ -66,20 +70,21 @@
 
   function stopPolling() {
     if (pollTimer) {
-      clearInterval(pollTimer);
+      clearTimeout(pollTimer);
       pollTimer = undefined;
     }
   }
 
   function startPolling() {
     stopPolling();
-    pollTimer = setInterval(() => {
+    pollTimer = setTimeout(() => {
       void refreshJob();
     }, 2000);
   }
 
   async function refreshJob() {
-    if (!installation || !job) return;
+    if (!installation || !job || pollInFlight) return;
+    pollInFlight = true;
     try {
       const result = await fetchInstallationJob(installation.id, job.id);
       installation = result.installation;
@@ -94,12 +99,19 @@
         if (result.job.status === "succeeded") {
           await loadUpdatePlan();
         }
+        return;
       }
+      startPolling();
     } catch (error) {
+      stopPolling();
       if (error instanceof ApiRequestError && error.status === 401) {
-        stopPolling();
         actionError = "授權已過期，請重新授權後續跑。";
+        return;
       }
+      actionError =
+        error instanceof Error ? error.message : "無法更新安裝進度。";
+    } finally {
+      pollInFlight = false;
     }
   }
 
@@ -202,7 +214,8 @@
     actionError = "";
     busy = true;
     try {
-      await onSelectAccount();
+      await selectAccount(accountId);
+      await loadExisting();
       precheck = await runPrecheck({ accountId, workerName });
     } catch (error) {
       actionError = error instanceof Error ? error.message : "預檢失敗。";
@@ -381,7 +394,11 @@
       <button
         type="button"
         class="min-h-11 rounded-md border border-ink/20 px-4 text-sm font-medium disabled:opacity-50"
-        disabled={busy || !accountId || !allowedEmail || !summary?.ready}
+        disabled={busy ||
+          !accountId ||
+          !allowedEmail ||
+          !summary?.ready ||
+          !precheckMatchesInput}
         onclick={onCreateInstallation}
       >
         建立我的不用記帳
@@ -389,7 +406,7 @@
     </div>
   {/if}
 
-  {#if summary && !existingInstall}
+  {#if summary && precheckMatchesInput && !existingInstall}
     <ul class="flex flex-col gap-2">
       {#each precheck?.checks ?? [] as check}
         <li class="rounded-md border border-ink/10 bg-white px-3 py-2 text-sm">

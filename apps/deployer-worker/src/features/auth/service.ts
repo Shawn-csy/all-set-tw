@@ -10,7 +10,7 @@ import {
   revokeOAuthToken,
 } from "../../platform/oauth";
 import { hasReleaseSource } from "../../platform/release";
-import { SESSION_TTL_MS } from "../../middleware/session";
+import { OAUTH_STATE_TTL_MS, SESSION_TTL_MS } from "../../middleware/session";
 import {
   consumeOAuthState,
   getSession,
@@ -57,7 +57,7 @@ export function deployerAuthStatus(env: Env) {
 export async function beginOAuthLogin(
   env: Env,
   redirectPath = "/#setup",
-): Promise<{ authorizeUrl: string }> {
+): Promise<{ authorizeUrl: string; state: string; expiresAt: string }> {
   const config = readOAuthConfig(env);
   if (!config) {
     throw new AuthServiceError(
@@ -69,18 +69,21 @@ export async function beginOAuthLogin(
   const state = randomToken(32);
   const pkce = await createPkceChallenge();
   const now = new Date();
+  const expiresAt = new Date(now.getTime() + OAUTH_STATE_TTL_MS).toISOString();
   await insertOAuthState(env.DB, {
     state,
     codeVerifier: pkce.verifier,
     redirectPath: path,
     createdAt: now.toISOString(),
-    expiresAt: new Date(now.getTime() + 10 * 60 * 1000).toISOString(),
+    expiresAt,
   });
   return {
     authorizeUrl: buildAuthorizeUrl(config, {
       state,
       challenge: pkce.challenge,
     }),
+    state,
+    expiresAt,
   };
 }
 

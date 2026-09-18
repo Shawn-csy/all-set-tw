@@ -14,7 +14,7 @@ import {
   MAX_JOB_ATTEMPTS,
   acquireJobLease,
   getJobById,
-  updateJob,
+  updateLeasedJob,
 } from "./repository";
 import {
   nextInstallStep,
@@ -53,7 +53,14 @@ export async function processDeployJob(
   const current = await getJobById(env.DB, jobId);
   if (!current) return "ack";
   if (current.attemptCount > MAX_JOB_ATTEMPTS) {
-    await failJob(env, current.installationId, jobId, "TOO_MANY_ATTEMPTS", now);
+    await failJob(
+      env,
+      current.installationId,
+      jobId,
+      leaseOwner,
+      "TOO_MANY_ATTEMPTS",
+      now,
+    );
     return "ack";
   }
 
@@ -66,6 +73,7 @@ export async function processDeployJob(
       env,
       current.installationId,
       jobId,
+      leaseOwner,
       "INSTALLATION_NOT_FOUND",
       now,
     );
@@ -82,6 +90,7 @@ export async function processDeployJob(
       env,
       installation.id,
       jobId,
+      leaseOwner,
       code === "SESSION_EXPIRED" ? "TOKEN_EXPIRED" : code,
       now,
     );
@@ -97,7 +106,14 @@ export async function processDeployJob(
   try {
     secrets = await readJobSecrets(current, env.SESSION_ENCRYPTION_KEY);
   } catch {
-    await failJob(env, installation.id, jobId, "MISSING_ENCRYPTION_KEY", now);
+    await failJob(
+      env,
+      installation.id,
+      jobId,
+      leaseOwner,
+      "MISSING_ENCRYPTION_KEY",
+      now,
+    );
     return "ack";
   }
 
@@ -129,7 +145,7 @@ export async function processDeployJob(
     );
     const nowIso = now.toISOString();
     if (step === "finalize") {
-      await updateJob(env.DB, jobId, {
+      const persisted = await updateLeasedJob(env.DB, jobId, leaseOwner, {
         status: "succeeded",
         step,
         errorCode: null,
@@ -140,6 +156,7 @@ export async function processDeployJob(
         leaseUntil: null,
         updatedAt: nowIso,
       });
+      if (!persisted) return "ack";
       await updateInstallation(env.DB, installation.id, {
         status: "ready",
         workerScriptId: result.resources.workerScriptId ?? null,
@@ -157,7 +174,7 @@ export async function processDeployJob(
       : isUpdate
         ? nextUpdateStep(normalizeUpdateStep(current.step))
         : nextInstallStep(normalizeInstallStep(current.step));
-    await updateJob(env.DB, jobId, {
+    const persisted = await updateLeasedJob(env.DB, jobId, leaseOwner, {
       status: "queued",
       step: nextStep ?? step,
       errorCode: null,
@@ -171,25 +188,45 @@ export async function processDeployJob(
       leaseUntil: null,
       updatedAt: nowIso,
     });
+    if (!persisted) return "ack";
     await updateInstallationStatus(
       env.DB,
       installation.id,
       isUpdate ? "updating" : "installing",
       nowIso,
     );
-    await enqueueDeployJob(env, jobId);
+    try {
+      await enqueueDeployJob(env, jobId);
+    } catch {
+      console.error("[deployer] enqueue failed", jobId);
+      return "retry";
+    }
     return "ack";
   } catch (error) {
     if (error instanceof ReleaseUnavailableError) {
-      await pauseForRelease(env, installation.id, jobId, error.code, now);
+      await pauseForRelease(
+        env,
+        installation.id,
+        jobId,
+        leaseOwner,
+        error.code,
+        now,
+      );
       return "ack";
     }
     if (error instanceof CloudflareApiError && error.code === "TOKEN_EXPIRED") {
-      await pauseForReauth(env, installation.id, jobId, "TOKEN_EXPIRED", now);
+      await pauseForReauth(
+        env,
+        installation.id,
+        jobId,
+        leaseOwner,
+        "TOKEN_EXPIRED",
+        now,
+      );
       return "ack";
     }
     if (isRetryableCloudflareError(error)) {
-      await updateJob(env.DB, jobId, {
+      const persisted = await updateLeasedJob(env.DB, jobId, leaseOwner, {
         status: "queued",
         errorCode:
           error instanceof CloudflareApiError ? error.code : "UPSTREAM",
@@ -197,6 +234,7 @@ export async function processDeployJob(
         leaseUntil: null,
         updatedAt: now.toISOString(),
       });
+      if (!persisted) return "ack";
       return "retry";
     }
     const code =
@@ -209,6 +247,7 @@ export async function processDeployJob(
       env,
       installation.id,
       jobId,
+      leaseOwner,
       code,
       now,
       step,
@@ -222,12 +261,13 @@ async function failJob(
   env: Env,
   installationId: string,
   jobId: string,
+  leaseOwner: string,
   errorCode: string,
   now: Date,
   step?: string,
   installationStatus = "failed",
 ) {
-  await updateJob(env.DB, jobId, {
+  const persisted = await updateLeasedJob(env.DB, jobId, leaseOwner, {
     status: "failed",
     ...(step ? { step } : {}),
     errorCode,
@@ -235,6 +275,7 @@ async function failJob(
     leaseUntil: null,
     updatedAt: now.toISOString(),
   });
+  if (!persisted) return;
   await updateInstallationStatus(
     env.DB,
     installationId,
@@ -247,16 +288,18 @@ async function pauseForReauth(
   env: Env,
   installationId: string,
   jobId: string,
+  leaseOwner: string,
   errorCode: string,
   now: Date,
 ) {
-  await updateJob(env.DB, jobId, {
+  const persisted = await updateLeasedJob(env.DB, jobId, leaseOwner, {
     status: "awaiting_reauth",
     errorCode,
     leaseOwner: null,
     leaseUntil: null,
     updatedAt: now.toISOString(),
   });
+  if (!persisted) return;
   await updateInstallationStatus(
     env.DB,
     installationId,
@@ -269,10 +312,11 @@ async function pauseForRelease(
   env: Env,
   installationId: string,
   jobId: string,
+  leaseOwner: string,
   errorCode: string,
   now: Date,
 ) {
-  await updateJob(env.DB, jobId, {
+  const persisted = await updateLeasedJob(env.DB, jobId, leaseOwner, {
     status: "awaiting_release",
     step: "load_release",
     errorCode,
@@ -280,6 +324,7 @@ async function pauseForRelease(
     leaseUntil: null,
     updatedAt: now.toISOString(),
   });
+  if (!persisted) return;
   await updateInstallationStatus(
     env.DB,
     installationId,
