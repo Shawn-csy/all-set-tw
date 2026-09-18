@@ -1,0 +1,352 @@
+import { cfRequest, CloudflareApiError } from "./cloudflare";
+
+export const BOOTSTRAP_WORKER_MODULE = `export default {
+  async fetch() {
+    return new Response("Installation is not ready.", {
+      status: 403,
+      headers: { "content-type": "text/plain; charset=utf-8" },
+    });
+  },
+};
+`;
+
+export async function createD1Database(
+  accessToken: string,
+  accountId: string,
+  name: string,
+) {
+  const body = await cfRequest(
+    accessToken,
+    `/accounts/${accountId}/d1/database`,
+    { method: "POST", body: JSON.stringify({ name }) },
+  );
+  const result = body.result as { uuid?: string; id?: string; name?: string };
+  const id = result?.uuid ?? result?.id;
+  if (!id) throw new Error("D1 create response missing id.");
+  return { id, name: result.name ?? name };
+}
+
+export async function createQueue(
+  accessToken: string,
+  accountId: string,
+  name: string,
+) {
+  const body = await cfRequest(accessToken, `/accounts/${accountId}/queues`, {
+    method: "POST",
+    body: JSON.stringify({ queue_name: name }),
+  });
+  const result = body.result as {
+    queue_id?: string;
+    id?: string;
+    queue_name?: string;
+  };
+  const id = result?.queue_id ?? result?.id;
+  if (!id) throw new Error("Queue create response missing id.");
+  return { id, name: result.queue_name ?? name };
+}
+
+export async function putWorkerScript(input: {
+  accessToken: string;
+  accountId: string;
+  workerName: string;
+  mainModule: string;
+  source: string;
+  metadata: Record<string, unknown>;
+}) {
+  const form = new FormData();
+  form.set("metadata", JSON.stringify(input.metadata));
+  form.set(
+    input.mainModule,
+    new Blob([input.source], { type: "application/javascript+module" }),
+    input.mainModule,
+  );
+  const body = await cfRequest(
+    input.accessToken,
+    `/accounts/${input.accountId}/workers/scripts/${input.workerName}`,
+    { method: "PUT", body: form },
+  );
+  const result = body.result as { id?: string; tag?: string; etag?: string };
+  const tag = result?.tag ?? result?.etag ?? result?.id;
+  if (!tag) throw new Error("Worker upload response missing tag.");
+  return { tag };
+}
+
+export async function enableWorkersDev(
+  accessToken: string,
+  accountId: string,
+  workerName: string,
+) {
+  await cfRequest(
+    accessToken,
+    `/accounts/${accountId}/workers/scripts/${workerName}/subdomain`,
+    {
+      method: "POST",
+      body: JSON.stringify({ enabled: true, previews_enabled: false }),
+    },
+  );
+}
+
+export async function listIdentityProviders(
+  accessToken: string,
+  accountId: string,
+) {
+  const body = await cfRequest(
+    accessToken,
+    `/accounts/${accountId}/access/identity_providers`,
+  );
+  const rows = Array.isArray(body.result) ? body.result : [];
+  return rows as Array<{ id?: string; type?: string; name?: string }>;
+}
+
+export async function createOtpIdentityProvider(
+  accessToken: string,
+  accountId: string,
+) {
+  const body = await cfRequest(
+    accessToken,
+    `/accounts/${accountId}/access/identity_providers`,
+    {
+      method: "POST",
+      body: JSON.stringify({ type: "onetimepin", name: "One-time PIN" }),
+    },
+  );
+  const result = body.result as { id?: string };
+  if (!result?.id) throw new Error("OTP IdP create response missing id.");
+  return result.id;
+}
+
+export async function createAccessApplication(input: {
+  accessToken: string;
+  accountId: string;
+  name: string;
+  workerId: string;
+  allowedIdpId?: string;
+}) {
+  const payload: Record<string, unknown> = {
+    name: input.name,
+    type: "self_hosted",
+    destinations: [{ type: "worker", worker_id: input.workerId }],
+    session_duration: "24h",
+  };
+  if (input.allowedIdpId) payload.allowed_idps = [input.allowedIdpId];
+  const body = await cfRequest(
+    input.accessToken,
+    `/accounts/${input.accountId}/access/apps`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+  const result = body.result as { id?: string; aud?: string };
+  if (!result?.id) throw new Error("Access app create response missing id.");
+  return { id: result.id, aud: result.aud ?? result.id };
+}
+
+export async function patchAccessApplication(input: {
+  accessToken: string;
+  accountId: string;
+  appId: string;
+  workerId: string;
+}) {
+  const body = await cfRequest(
+    input.accessToken,
+    `/accounts/${input.accountId}/access/apps/${input.appId}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        destinations: [{ type: "worker", worker_id: input.workerId }],
+      }),
+    },
+  );
+  const result = body.result as { id?: string; aud?: string };
+  return { id: result?.id ?? input.appId, aud: result?.aud };
+}
+
+export async function createAccessPolicy(input: {
+  accessToken: string;
+  accountId: string;
+  appId: string;
+  email: string;
+}) {
+  const body = await cfRequest(
+    input.accessToken,
+    `/accounts/${input.accountId}/access/apps/${input.appId}/policies`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        name: "allow-owner",
+        decision: "allow",
+        precedence: 1,
+        include: [{ email: { email: input.email } }],
+      }),
+    },
+  );
+  const result = body.result as { id?: string };
+  if (!result?.id) throw new Error("Access policy create response missing id.");
+  return result.id;
+}
+
+export async function putWorkerSecret(input: {
+  accessToken: string;
+  accountId: string;
+  workerName: string;
+  name: string;
+  value: string;
+}) {
+  await cfRequest(
+    input.accessToken,
+    `/accounts/${input.accountId}/workers/scripts/${input.workerName}/secrets`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        name: input.name,
+        text: input.value,
+        type: "secret_text",
+      }),
+    },
+  );
+}
+
+export async function ensureMigrationLedger(
+  accessToken: string,
+  accountId: string,
+  databaseId: string,
+) {
+  await queryD1(
+    accessToken,
+    accountId,
+    databaseId,
+    `CREATE TABLE IF NOT EXISTS "d1_migrations"(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT UNIQUE,
+  applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+);`,
+  );
+}
+
+export async function listAppliedMigrations(
+  accessToken: string,
+  accountId: string,
+  databaseId: string,
+) {
+  const body = await queryD1(
+    accessToken,
+    accountId,
+    databaseId,
+    `SELECT name FROM "d1_migrations" ORDER BY id`,
+  );
+  const rows = Array.isArray(body.result)
+    ? (
+        body.result as Array<{
+          results?: Array<{ name?: string }>;
+        }>
+      ).flatMap((item) => item.results ?? [])
+    : [];
+  return rows
+    .map((row) => row.name)
+    .filter((name): name is string => Boolean(name));
+}
+
+export async function applyMigrationFile(input: {
+  accessToken: string;
+  accountId: string;
+  databaseId: string;
+  name: string;
+  sql: string;
+}) {
+  const normalized = input.sql.replace(/\r\n/g, "\n").trimEnd();
+  await queryD1(
+    input.accessToken,
+    input.accountId,
+    input.databaseId,
+    `${normalized}\nINSERT INTO "d1_migrations" (name) values ('${input.name.replaceAll("'", "''")}');`,
+  );
+}
+
+export async function queryD1(
+  accessToken: string,
+  accountId: string,
+  databaseId: string,
+  sql: string,
+) {
+  return cfRequest(
+    accessToken,
+    `/accounts/${accountId}/d1/database/${databaseId}/query`,
+    { method: "POST", body: JSON.stringify({ sql }) },
+  );
+}
+
+export async function createAssetUploadSession(input: {
+  accessToken: string;
+  accountId: string;
+  workerName: string;
+  manifest: Record<string, { hash: string; size: number }>;
+}) {
+  const body = await cfRequest(
+    input.accessToken,
+    `/accounts/${input.accountId}/workers/scripts/${input.workerName}/assets-upload-session`,
+    { method: "POST", body: JSON.stringify({ manifest: input.manifest }) },
+  );
+  const result = body.result as { jwt?: string; buckets?: unknown[] };
+  if (!result?.jwt) throw new Error("Asset upload session missing jwt.");
+  return { jwt: result.jwt, buckets: result.buckets ?? [] };
+}
+
+export async function putQueueConsumer(input: {
+  accessToken: string;
+  accountId: string;
+  queueId: string;
+  workerName: string;
+}) {
+  const body = await cfRequest(
+    input.accessToken,
+    `/accounts/${input.accountId}/queues/${input.queueId}/consumers`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        script_name: input.workerName,
+        type: "worker",
+        environment: "production",
+        settings: {
+          batch_size: 1,
+          max_retries: 3,
+          max_wait_time_ms: 1000,
+          max_concurrency: 1,
+        },
+      }),
+    },
+  );
+  const result = body.result as { id?: string; consumer_id?: string };
+  return { id: result?.id ?? result?.consumer_id ?? input.queueId };
+}
+
+export async function putWorkerSchedules(input: {
+  accessToken: string;
+  accountId: string;
+  workerName: string;
+  crons: string[];
+}) {
+  await cfRequest(
+    input.accessToken,
+    `/accounts/${input.accountId}/workers/scripts/${input.workerName}/schedules`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        schedules: input.crons.map((cron) => ({ cron })),
+      }),
+    },
+  );
+}
+
+export async function readAnonymousUrl(url: string) {
+  const response = await fetch(url, { redirect: "manual" });
+  return {
+    status: response.status,
+    location: response.headers.get("Location"),
+  };
+}
+
+export function isRetryableCloudflareError(error: unknown) {
+  return (
+    error instanceof CloudflareApiError &&
+    (error.code === "RATE_LIMITED" ||
+      (error.code === "UPSTREAM" && error.status >= 500))
+  );
+}

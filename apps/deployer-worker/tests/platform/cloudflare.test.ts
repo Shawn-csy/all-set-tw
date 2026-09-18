@@ -25,6 +25,9 @@ describe("account precheck", () => {
         if (url.includes("/workers/scripts/")) {
           return new Response(null, { status: 404 });
         }
+        if (url.endsWith("/d1/database") || url.endsWith("/queues")) {
+          return Response.json({ result: [] });
+        }
         return new Response("unexpected " + url, { status: 500 });
       }),
     );

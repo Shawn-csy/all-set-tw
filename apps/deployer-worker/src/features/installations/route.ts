@@ -18,6 +18,7 @@ import {
   createOrReuseInstallation,
   getOwnedInstallation,
   getOwnedInstallationJob,
+  installerWritesEnabled,
   listOwnedInstallations,
   resumeOwnedInstallation,
   toInstallationDto,
@@ -71,7 +72,7 @@ function registerInstallationRoutes(api: Hono<AppBindings>) {
           installation: toInstallationDto(result.installation),
           job: toJobDto(result.job),
           reused: result.reused,
-          writesEnabled: false,
+          writesEnabled: installerWritesEnabled(c.env),
         });
       } catch (error) {
         return mapInstallationError(error);

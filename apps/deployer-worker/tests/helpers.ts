@@ -9,6 +9,10 @@ import {
 } from "../src/platform/oauth";
 import { CLOUDFLARE_API_BASE } from "../src/platform/cloudflare";
 import { createTestD1 } from "../testing/d1";
+import {
+  createFakeCloudflare,
+  handleCloudflareApi,
+} from "./platform/fake-cloudflare";
 
 export const TARGET_DIGEST = "a".repeat(64);
 
@@ -21,11 +25,16 @@ export async function createDeployerEnv(options?: {
   subdomain?: boolean;
   organization?: boolean;
   existingWorkers?: string[];
+  existingD1?: string[];
+  existingQueues?: string[];
   tokenExpiresIn?: number;
   subjects?: Record<string, string>;
+  localDevMode?: boolean;
+  expireOnWrite?: boolean;
 }) {
   const harness = await createTestD1();
   const send = vi.fn().mockResolvedValue(undefined);
+  const localDevMode = options?.localDevMode ?? true;
   const env = {
     DB: harness.binding,
     DEPLOY_QUEUE: { send } as unknown as Queue<DeployQueueMessage>,
@@ -33,13 +42,14 @@ export async function createDeployerEnv(options?: {
     OAUTH_CLIENT_SECRET: "test-secret",
     OAUTH_REDIRECT_URI: "http://localhost/api/auth/callback",
     SESSION_ENCRYPTION_KEY: "test-session-key",
-    LOCAL_DEV_MODE: true,
+    LOCAL_DEV_MODE: localDevMode,
   } as Env;
   const accounts = options?.accounts ?? [
     { id: "acct-1", name: "Primary" },
     { id: "acct-2", name: "Other" },
   ];
   const subjects = options?.subjects ?? { ok: "user-a", "user-b": "user-b" };
+  const cloudflare = createFakeCloudflare(options);
 
   vi.stubGlobal(
     "fetch",
@@ -65,39 +75,22 @@ export async function createDeployerEnv(options?: {
           result: accounts.map((account) => ({ account })),
         });
       }
-      const subdomainMatch = url.match(
-        /\/accounts\/([^/]+)\/workers\/subdomain$/,
-      );
-      if (subdomainMatch) {
-        if (options?.subdomain === false) {
-          return new Response(null, { status: 404 });
-        }
-        return Response.json({ result: { subdomain: "example" } });
-      }
-      const orgMatch = url.match(/\/accounts\/([^/]+)\/access\/organizations$/);
-      if (orgMatch) {
-        if (options?.organization === false) {
-          return new Response(null, { status: 404 });
-        }
-        return Response.json({
-          result: { auth_domain: "example.cloudflareaccess.com" },
+      if (url.includes(".workers.dev")) {
+        return new Response(null, {
+          status: 302,
+          headers: {
+            Location:
+              "https://example.cloudflareaccess.com/cdn-cgi/access/login",
+          },
         });
       }
-      const scriptMatch = url.match(
-        /\/accounts\/([^/]+)\/workers\/scripts\/([^/]+)$/,
-      );
-      if (scriptMatch) {
-        const name = scriptMatch[2]!;
-        if ((options?.existingWorkers ?? []).includes(name)) {
-          return Response.json({ result: { id: name } });
-        }
-        return new Response(null, { status: 404 });
-      }
+      const handled = await handleCloudflareApi(cloudflare, url, init);
+      if (handled) return handled;
       return new Response("unhandled", { status: 500 });
     }),
   );
 
-  return { env, send, harness };
+  return { env, send, harness, cloudflare };
 }
 
 export function useDeployerD1() {

@@ -27,3 +27,8 @@ migrations_dir = "migrations"
 [observability]
 enabled = true
 head_sampling_rate = 1
+
+# Optional maintainer binding for published release artifacts.
+# [[r2_buckets]]
+# binding = "RELEASE_BUCKET"
+# bucket_name = "all-set-deployer-releases"

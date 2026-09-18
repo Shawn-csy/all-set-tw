@@ -43,7 +43,7 @@ packages/
     └── migrations/
 ```
 
-`apps/deployer-worker` 是維護者營運的獨立 Worker，負責 OAuth session、帳戶預檢、安裝／工作紀錄與 Queue consumer。它使用自己的 D1 schema（`apps/deployer-worker/migrations`），不得綁定使用者財務 D1，也不得把部署紀錄混入 `packages/db`。Queue 訊息只帶 job ID。第 2 階段會把工作停在 `awaiting_stage3`，尚未對目標帳戶建立 D1／Access／正式 Worker。
+`apps/deployer-worker` 是維護者營運的獨立 Worker，負責 OAuth session、帳戶預檢、安裝／工作紀錄與 Queue consumer。它使用自己的 D1 schema（`apps/deployer-worker/migrations`），不得綁定使用者財務 D1，也不得把部署紀錄混入 `packages/db`。Queue 訊息只帶 job ID。第 3 階段的首次安裝由 Queue 每次 invocation 執行一個步驟；沒有 R2 版本來源時工作進入 `awaiting_release`，不會對目標帳戶建立資源。測試以 mock Cloudflare API 進行，不得指向正式 `taiwan-fin-hub` 資源。
 
 ## 相依方向
 

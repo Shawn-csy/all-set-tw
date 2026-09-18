@@ -74,6 +74,7 @@ export const deployJobs = sqliteTable(
     leaseUntil: text("lease_until"),
     attemptCount: integer("attempt_count").notNull(),
     createdResources: text("created_resources").notNull(),
+    encryptedSecrets: text("encrypted_secrets"),
     errorCode: text("error_code"),
     migrationName: text("migration_name"),
     createdAt: text("created_at").notNull(),

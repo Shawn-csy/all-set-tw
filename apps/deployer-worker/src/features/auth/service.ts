@@ -9,6 +9,7 @@ import {
   readOAuthSubject,
   revokeOAuthToken,
 } from "../../platform/oauth";
+import { hasReleaseSource } from "../../platform/release";
 import { SESSION_TTL_MS } from "../../middleware/session";
 import {
   consumeOAuthState,
@@ -48,7 +49,7 @@ export function deployerAuthStatus(env: Env) {
     oauthConfigured: readOAuthConfig(env) !== null,
     stage: {
       oauthLiveVerified: false,
-      writesEnabled: false,
+      writesEnabled: hasReleaseSource(env),
     },
   };
 }

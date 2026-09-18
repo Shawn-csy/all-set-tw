@@ -8,8 +8,8 @@ export const trustPoints = [
     body: "安裝過程需要 Workers、D1、Queues 與 Access 權限。這段期間部署服務在技術上可能接觸你帳戶內的 Worker 與 D1，不能宣稱絕對無法存取。",
   },
   {
-    title: "目前還沒有一鍵寫入",
-    body: "現在可完成 Cloudflare 授權、帳戶預檢與安裝紀錄。建立 D1／Access／Worker 的寫入步驟仍屬後續階段。",
+    title: "版本包與寫入條件",
+    body: "授權通過後會依進度建立 D1、Access 與 Worker。沒有維護者發布的版本包時會停在可續跑狀態，不會對你的帳戶寫入。正式 OAuth 登入驗證尚未完成，目前不能當成已上線的一鍵部署。",
   },
 ] as const;
 

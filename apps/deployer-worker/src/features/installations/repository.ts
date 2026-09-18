@@ -99,9 +99,24 @@ export async function updateInstallationStatus(
   status: string,
   now: string,
 ) {
+  await updateInstallation(db, id, { status, updatedAt: now });
+}
+
+export async function updateInstallation(
+  db: D1Database,
+  id: string,
+  patch: {
+    status?: string;
+    workerScriptId?: string | null;
+    d1DatabaseId?: string | null;
+    queueId?: string | null;
+    accessAppId?: string | null;
+    updatedAt: string;
+  },
+) {
   await createDrizzle(db)
     .update(installations)
-    .set({ status, updatedAt: now })
+    .set(patch)
     .where(eq(installations.id, id))
     .run();
 }

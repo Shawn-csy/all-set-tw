@@ -3,6 +3,8 @@ import type {
   AuthSession,
   AuthStatus,
   CloudflareAccount,
+  CurrentRelease,
+  DeployJob,
   Installation,
   PrecheckResult,
 } from "./types";
@@ -33,6 +35,10 @@ export function runPrecheck(input: { accountId: string; workerName: string }) {
   return api.post<PrecheckResult>("/api/precheck", input);
 }
 
+export function fetchCurrentRelease() {
+  return api.get<CurrentRelease>("/api/releases/current");
+}
+
 export function createInstallation(input: {
   accountId: string;
   workerName: string;
@@ -42,8 +48,20 @@ export function createInstallation(input: {
 }) {
   return api.post<{
     installation: Installation;
-    job: { id: string; status: string; step: string };
+    job: DeployJob;
     reused: boolean;
     writesEnabled: boolean;
   }>("/api/installations", input);
+}
+
+export function fetchInstallationJob(installationId: string, jobId: string) {
+  return api.get<{ installation: Installation; job: DeployJob }>(
+    `/api/installations/${installationId}/jobs/${jobId}`,
+  );
+}
+
+export function resumeInstallation(installationId: string) {
+  return api.post<{ installation: Installation; job: DeployJob }>(
+    `/api/installations/${installationId}/jobs`,
+  );
 }

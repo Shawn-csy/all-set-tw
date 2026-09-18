@@ -181,4 +181,4 @@ npm run release:verify -- dist/releases/v0.1.0
 
 開發期間可加 `--allow-dirty` 產生本機驗證包，manifest 會標記 `sourceDirty: true`，不得發布給使用者。CI 在既有檢查及 build 通過後建置並保留版本 artifact；此 artifact 尚未發布到 R2，也不會觸發自動更新。R2 發布與 latest 指標需待部署服務的版本儲存位置確定後接上。
 
-部署服務本身位於 `apps/deployer-web` 與 `apps/deployer-worker`，使用獨立 D1／Queue。目前可建立 OAuth session、帳戶預檢與安裝工作紀錄；尚未對使用者帳戶寫入 D1、Access 或正式 Worker，也尚未接上 R2 版本庫。現有 GitHub 部署路徑不受影響。
+部署服務本身位於 `apps/deployer-web` 與 `apps/deployer-worker`，使用獨立 D1／Queue。目前可建立 OAuth session、帳戶預檢，並以 Queue 逐步編排首次安裝（D1、Access、Worker、secrets）。沒有綁定 `RELEASE_BUCKET` 且非本機 fixture 時，工作會停在 `awaiting_release`，不會對目標帳戶寫入。正式 OAuth live consent 與 R2 latest 尚未接上。現有 GitHub 部署路徑不受影響。

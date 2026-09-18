@@ -35,7 +35,7 @@ describe("deployer auth, precheck, and jobs", () => {
       expect(response.status).toBe(200);
       await expect(response.json()).resolves.toEqual({
         oauthConfigured: false,
-        stage: { oauthLiveVerified: false, writesEnabled: false },
+        stage: { oauthLiveVerified: false, writesEnabled: true },
       });
     } finally {
       await harness.mf.dispose();
@@ -190,7 +190,7 @@ describe("deployer auth, precheck, and jobs", () => {
         writesEnabled: boolean;
       };
       expect(created.status).toBe(200);
-      expect(firstBody.writesEnabled).toBe(false);
+      expect(firstBody.writesEnabled).toBe(true);
       const again = await app.request(
         "http://localhost/api/installations",
         {
@@ -335,8 +335,8 @@ describe("deployer auth, precheck, and jobs", () => {
       const current = await getJobById(ctx.env.DB, job!.id);
       expect(rows?.n).toBe(1);
       expect(jobs?.n).toBe(1);
-      expect(current?.status).toBe("awaiting_stage3");
-      expect(current?.step).toBe("provision_resources");
+      expect(current?.status).toBe("queued");
+      expect(current?.step).toBe("generate_keys");
     } finally {
       await dispose(ctx);
     }

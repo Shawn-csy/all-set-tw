@@ -2,6 +2,7 @@ import { authRoutes } from "./features/auth/route";
 import { consumeDeployQueue } from "./features/deployments/service";
 import { installationRoutes } from "./features/installations/route";
 import { precheckRoutes } from "./features/precheck/route";
+import { releaseRoutes } from "./features/releases/route";
 import { sessionMiddleware } from "./middleware/session";
 import type { DeployQueueMessage, Env } from "./platform/env";
 import { honoFactory } from "./platform/hono";
@@ -13,6 +14,7 @@ export const api = honoFactory.createApp();
 api.use("*", sessionMiddleware);
 api.route("/", authRoutes);
 api.route("/", precheckRoutes);
+api.route("/", releaseRoutes);
 api.route("/", installationRoutes);
 api.onError(apiErrorResponse);
 

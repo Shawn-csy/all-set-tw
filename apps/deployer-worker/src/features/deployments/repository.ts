@@ -6,7 +6,7 @@ export const ACTIVE_JOB_STATUSES = [
   "queued",
   "running",
   "awaiting_reauth",
-  "awaiting_stage3",
+  "awaiting_release",
 ] as const;
 
 export type DeployJobRow = {
@@ -21,6 +21,7 @@ export type DeployJobRow = {
   leaseUntil: string | null;
   attemptCount: number;
   createdResources: string;
+  encryptedSecrets: string | null;
   errorCode: string | null;
   migrationName: string | null;
   createdAt: string;
@@ -39,6 +40,7 @@ const jobColumns = {
   leaseUntil: deployJobs.leaseUntil,
   attemptCount: deployJobs.attemptCount,
   createdResources: deployJobs.createdResources,
+  encryptedSecrets: deployJobs.encryptedSecrets,
   errorCode: deployJobs.errorCode,
   migrationName: deployJobs.migrationName,
   createdAt: deployJobs.createdAt,
@@ -99,7 +101,7 @@ export async function listJobsForInstallation(
 }
 
 export const LEASE_MS = 60_000;
-export const MAX_JOB_ATTEMPTS = 10;
+export const MAX_JOB_ATTEMPTS = 80;
 
 export async function acquireJobLease(
   db: D1Database,
@@ -144,6 +146,9 @@ export async function updateJob(
     status?: string;
     step?: string;
     errorCode?: string | null;
+    createdResources?: string;
+    encryptedSecrets?: string | null;
+    migrationName?: string | null;
     leaseOwner?: string | null;
     leaseUntil?: string | null;
     updatedAt: string;

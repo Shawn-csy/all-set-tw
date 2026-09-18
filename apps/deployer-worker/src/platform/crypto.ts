@@ -64,11 +64,36 @@ export function randomToken(bytes = 32) {
   return bytesToBase64url(value);
 }
 
-function bytesToBase64url(bytes: Uint8Array) {
+export function randomHex(bytes = 32) {
+  const value = crypto.getRandomValues(new Uint8Array(bytes));
+  return Array.from(value, (byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
+}
+
+export function bytesToBase64url(bytes: Uint8Array) {
   return bytesToBase64(bytes)
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
+}
+
+export async function generateInstallKeys() {
+  const pair = await crypto.subtle.generateKey(
+    { name: "ECDH", namedCurve: "P-256" },
+    true,
+    ["deriveBits"],
+  );
+  const publicRaw = new Uint8Array(
+    await crypto.subtle.exportKey("raw", pair.publicKey),
+  );
+  const privateJwk = await crypto.subtle.exportKey("jwk", pair.privateKey);
+  if (!privateJwk.d) throw new Error("VAPID private key export failed.");
+  return {
+    configEncryptionKey: randomHex(32),
+    vapidPublicKey: bytesToBase64url(publicRaw),
+    vapidPrivateKey: privateJwk.d,
+  };
 }
 
 export async function sha256Base64url(value: string) {

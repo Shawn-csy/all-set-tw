@@ -6,7 +6,12 @@ export type CloudflareAccount = {
 };
 
 export type PrecheckItem = {
-  id: "workers_subdomain" | "access_organization" | "worker_name";
+  id:
+    | "workers_subdomain"
+    | "access_organization"
+    | "worker_name"
+    | "d1_name"
+    | "queue_name";
   ok: boolean;
   blocking: boolean;
   dashboardUrl?: string;
@@ -16,7 +21,12 @@ export class CloudflareApiError extends Error {
   constructor(
     public readonly status: number,
     public readonly code:
-      "TOKEN_EXPIRED" | "FORBIDDEN" | "NOT_FOUND" | "UPSTREAM",
+      | "TOKEN_EXPIRED"
+      | "FORBIDDEN"
+      | "NOT_FOUND"
+      | "CONFLICT"
+      | "RATE_LIMITED"
+      | "UPSTREAM",
   ) {
     super("Cloudflare API request failed.");
     this.name = "CloudflareApiError";
@@ -27,16 +37,39 @@ function mapStatus(status: number): CloudflareApiError["code"] {
   if (status === 401) return "TOKEN_EXPIRED";
   if (status === 403) return "FORBIDDEN";
   if (status === 404) return "NOT_FOUND";
+  if (status === 409) return "CONFLICT";
+  if (status === 429) return "RATE_LIMITED";
   return "UPSTREAM";
 }
 
-async function cfFetch(accessToken: string, path: string) {
+export async function cfRequest(
+  accessToken: string,
+  path: string,
+  init: RequestInit = {},
+) {
+  const headers = new Headers(init.headers);
+  headers.set("Authorization", `Bearer ${accessToken}`);
+  if (
+    init.body !== undefined &&
+    typeof init.body === "string" &&
+    !headers.has("Content-Type")
+  ) {
+    headers.set("Content-Type", "application/json");
+  }
   const response = await fetch(`${CLOUDFLARE_API_BASE}${path}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+    ...init,
+    headers,
   });
   if (!response.ok)
     throw new CloudflareApiError(response.status, mapStatus(response.status));
-  return response.json() as Promise<{ success?: boolean; result?: unknown }>;
+  if (response.status === 204) return { success: true, result: undefined };
+  const text = await response.text();
+  if (!text) return { success: true, result: undefined };
+  return JSON.parse(text) as { success?: boolean; result?: unknown };
+}
+
+async function cfFetch(accessToken: string, path: string) {
+  return cfRequest(accessToken, path);
 }
 
 export async function listAuthorizedAccounts(
@@ -59,8 +92,24 @@ export function workersDashboardUrl(accountId: string) {
   return `https://dash.cloudflare.com/${accountId}/workers-and-pages`;
 }
 
+export function d1DashboardUrl(accountId: string) {
+  return `https://dash.cloudflare.com/${accountId}/workers/d1`;
+}
+
+export function queuesDashboardUrl(accountId: string) {
+  return `https://dash.cloudflare.com/${accountId}/workers/queues`;
+}
+
 export function zeroTrustDashboardUrl() {
   return "https://one.dash.cloudflare.com/";
+}
+
+export function plannedD1Name(workerName: string) {
+  return workerName;
+}
+
+export function plannedQueueName(workerName: string) {
+  return `${workerName}-sync`;
 }
 
 export async function readWorkersSubdomain(
@@ -73,10 +122,10 @@ export async function readWorkersSubdomain(
       `/accounts/${accountId}/workers/subdomain`,
     );
     const result = body.result as { subdomain?: string } | undefined;
-    return Boolean(result?.subdomain);
+    return result?.subdomain ?? null;
   } catch (error) {
     if (error instanceof CloudflareApiError && error.code === "NOT_FOUND") {
-      return false;
+      return null;
     }
     throw error;
   }
@@ -92,10 +141,10 @@ export async function readAccessOrganization(
       `/accounts/${accountId}/access/organizations`,
     );
     const result = body.result as { auth_domain?: string } | undefined;
-    return Boolean(result?.auth_domain);
+    return result?.auth_domain ?? null;
   } catch (error) {
     if (error instanceof CloudflareApiError && error.code === "NOT_FOUND") {
-      return false;
+      return null;
     }
     throw error;
   }
@@ -120,26 +169,75 @@ export async function workerScriptExists(
   }
 }
 
+export async function findD1DatabaseByName(
+  accessToken: string,
+  accountId: string,
+  name: string,
+) {
+  const body = await cfFetch(accessToken, `/accounts/${accountId}/d1/database`);
+  const rows = Array.isArray(body.result) ? body.result : [];
+  for (const row of rows) {
+    const item = row as { uuid?: string; id?: string; name?: string };
+    if (item.name === name && (item.uuid || item.id)) {
+      return { id: item.uuid ?? item.id!, name: item.name };
+    }
+  }
+  return null;
+}
+
+export async function findQueueByName(
+  accessToken: string,
+  accountId: string,
+  name: string,
+) {
+  const body = await cfFetch(accessToken, `/accounts/${accountId}/queues`);
+  const rows = Array.isArray(body.result) ? body.result : [];
+  for (const row of rows) {
+    const item = row as {
+      queue_id?: string;
+      queue_name?: string;
+      id?: string;
+      name?: string;
+    };
+    const queueName = item.queue_name ?? item.name;
+    const queueId = item.queue_id ?? item.id;
+    if (queueName === name && queueId) {
+      return { id: queueId, name: queueName };
+    }
+  }
+  return null;
+}
+
 export async function runAccountPrecheck(input: {
   accessToken: string;
   accountId: string;
   workerName: string;
-}): Promise<{ ready: boolean; checks: PrecheckItem[] }> {
-  const [subdomain, organization, workerExists] = await Promise.all([
-    readWorkersSubdomain(input.accessToken, input.accountId),
-    readAccessOrganization(input.accessToken, input.accountId),
-    workerScriptExists(input.accessToken, input.accountId, input.workerName),
-  ]);
+}): Promise<{
+  ready: boolean;
+  checks: PrecheckItem[];
+  workersSubdomain: string | null;
+  teamDomain: string | null;
+}> {
+  const d1Name = plannedD1Name(input.workerName);
+  const queueName = plannedQueueName(input.workerName);
+  const [subdomain, organization, workerExists, existingD1, existingQueue] =
+    await Promise.all([
+      readWorkersSubdomain(input.accessToken, input.accountId),
+      readAccessOrganization(input.accessToken, input.accountId),
+      workerScriptExists(input.accessToken, input.accountId, input.workerName),
+      findD1DatabaseByName(input.accessToken, input.accountId, d1Name),
+      findQueueByName(input.accessToken, input.accountId, queueName),
+    ]);
   const checks: PrecheckItem[] = [
     {
       id: "workers_subdomain",
-      ok: subdomain,
+      ok: Boolean(subdomain),
       blocking: true,
       dashboardUrl: workersDashboardUrl(input.accountId),
     },
     {
       id: "access_organization",
-      ok: organization,
+      ok: Boolean(organization),
       blocking: true,
       dashboardUrl: zeroTrustDashboardUrl(),
     },
@@ -149,6 +247,23 @@ export async function runAccountPrecheck(input: {
       blocking: true,
       dashboardUrl: workersDashboardUrl(input.accountId),
     },
+    {
+      id: "d1_name",
+      ok: existingD1 === null,
+      blocking: true,
+      dashboardUrl: d1DashboardUrl(input.accountId),
+    },
+    {
+      id: "queue_name",
+      ok: existingQueue === null,
+      blocking: true,
+      dashboardUrl: queuesDashboardUrl(input.accountId),
+    },
   ];
-  return { ready: checks.every((check) => check.ok), checks };
+  return {
+    ready: checks.every((check) => check.ok),
+    checks,
+    workersSubdomain: subdomain,
+    teamDomain: organization,
+  };
 }

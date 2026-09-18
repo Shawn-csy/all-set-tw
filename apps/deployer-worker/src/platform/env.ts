@@ -3,6 +3,7 @@ export type DeployQueueMessage = { type: "run-deploy-job"; jobId: string };
 export interface Env {
   DB: D1Database;
   DEPLOY_QUEUE: Queue<DeployQueueMessage>;
+  RELEASE_BUCKET?: R2Bucket;
   ASSETS?: Fetcher;
   OAUTH_CLIENT_ID?: string;
   OAUTH_CLIENT_SECRET?: string;

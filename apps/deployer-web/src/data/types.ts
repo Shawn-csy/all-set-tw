@@ -20,7 +20,12 @@ export type CloudflareAccount = {
 };
 
 export type PrecheckItem = {
-  id: "workers_subdomain" | "access_organization" | "worker_name";
+  id:
+    | "workers_subdomain"
+    | "access_organization"
+    | "worker_name"
+    | "d1_name"
+    | "queue_name";
   ok: boolean;
   blocking: boolean;
   dashboardUrl?: string;
@@ -31,6 +36,12 @@ export type PrecheckResult = {
   workerName: string;
   ready: boolean;
   checks: PrecheckItem[];
+};
+
+export type CurrentRelease = {
+  version: string;
+  digest: string;
+  source: "r2" | "local_fixture";
 };
 
 export type Installation = {
@@ -49,5 +60,8 @@ export type DeployJob = {
   kind: string;
   status: string;
   step: string;
+  targetVersion: string;
+  targetDigest: string;
   errorCode: string | null;
+  createdResources: Record<string, unknown>;
 };

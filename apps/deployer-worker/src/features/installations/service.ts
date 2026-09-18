@@ -1,5 +1,6 @@
 import { randomToken } from "../../platform/crypto";
 import type { Env, PublicSession } from "../../platform/env";
+import { hasReleaseSource } from "../../platform/release";
 import { listAuthorizedAccounts } from "../../platform/cloudflare";
 import { readAccessToken } from "../auth/service";
 import { AccountNotAuthorizedError } from "../precheck/service";
@@ -128,8 +129,12 @@ export async function createOrReuseJob(
 ) {
   const existing = await findActiveJob(env.DB, installationId);
   if (existing) {
-    if (existing.status === "queued" || existing.status === "awaiting_reauth") {
-      if (existing.status === "awaiting_reauth") {
+    if (
+      existing.status === "queued" ||
+      existing.status === "awaiting_reauth" ||
+      existing.status === "awaiting_release"
+    ) {
+      if (existing.status !== "queued") {
         await updateJob(env.DB, existing.id, {
           status: "queued",
           errorCode: null,
@@ -148,7 +153,7 @@ export async function createOrReuseJob(
     installationId,
     kind: input.kind,
     status: "queued",
-    step: "validate_authorization",
+    step: "precheck",
     targetVersion: input.targetVersion,
     targetDigest: input.targetDigest,
     attemptCount: 0,
@@ -161,6 +166,10 @@ export async function createOrReuseJob(
   const stored = await getJobById(env.DB, job.id);
   if (!stored) throw new Error("Failed to persist deploy job.");
   return stored;
+}
+
+export function installerWritesEnabled(env: Env) {
+  return hasReleaseSource(env);
 }
 
 export async function listOwnedInstallations(env: Env, session: PublicSession) {
