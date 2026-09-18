@@ -26,6 +26,8 @@ export type FakeCloudflareState = {
   deliveryPaused: Set<string>;
   pendingMessages: Map<string, number>;
   bookmarks: Map<string, string>;
+  uploadedAssetHashes: string[];
+  uploadedWorkerModules: string[][];
 };
 
 export function createFakeCloudflare(options?: {
@@ -63,6 +65,8 @@ export function createFakeCloudflare(options?: {
     deliveryPaused: new Set(),
     pendingMessages: new Map(),
     bookmarks: new Map(),
+    uploadedAssetHashes: [],
+    uploadedWorkerModules: [],
   };
 }
 
@@ -328,7 +332,31 @@ export async function handleCloudflareApi(
     /^\/accounts\/[^/]+\/workers\/scripts\/([^/]+)\/assets-upload-session$/,
   );
   if (assets && method === "POST") {
-    return Response.json({ result: { jwt: "asset-jwt" } });
+    const body = JSON.parse(String(init?.body ?? "{}")) as {
+      manifest?: Record<string, { hash?: string }>;
+    };
+    const hashes = Object.values(body.manifest ?? {})
+      .map((item) => item.hash)
+      .filter((hash): hash is string => Boolean(hash));
+    return Response.json({
+      result: {
+        jwt: "asset-jwt",
+        buckets: hashes.length ? [hashes] : [],
+      },
+    });
+  }
+
+  const assetUpload = path.match(
+    /^\/accounts\/[^/]+\/workers\/assets\/upload$/,
+  );
+  if (assetUpload && method === "POST") {
+    const form = init?.body as FormData | undefined;
+    if (form && typeof form.keys === "function") {
+      for (const key of form.keys()) {
+        state.uploadedAssetHashes.push(key);
+      }
+    }
+    return Response.json({ result: { jwt: "asset-jwt-complete" } });
   }
 
   const schedules = path.match(
@@ -369,6 +397,12 @@ export async function handleCloudflareApi(
     const tag = `tag-${name}-${state.writes.length}`;
     state.workers.add(name);
     state.workerTags.set(name, tag);
+    const form = init?.body as FormData | undefined;
+    if (form && typeof form.keys === "function") {
+      state.uploadedWorkerModules.push(
+        [...form.keys()].filter((key) => key !== "metadata"),
+      );
+    }
     return Response.json({ result: { id: name, tag } });
   }
 

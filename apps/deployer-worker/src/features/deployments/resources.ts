@@ -32,6 +32,9 @@ export type CreatedResources = {
   secretsVerified?: boolean;
   installedVersion?: string;
   installedDigest?: string;
+  assetUploadBuckets?: string[][];
+  assetUploadIndex?: number;
+  assetUploadComplete?: boolean;
   pendingMigrations?: string[];
 };
 

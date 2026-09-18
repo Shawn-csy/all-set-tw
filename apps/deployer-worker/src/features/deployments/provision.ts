@@ -1,4 +1,5 @@
 import {
+  base64ToBytes,
   decryptJson,
   encryptJson,
   generateInstallKeys,
@@ -16,11 +17,13 @@ import {
   BOOTSTRAP_WORKER_MODULE,
   createAccessApplication,
   createAccessPolicy,
+  createAssetUploadSession,
   createD1Database,
   createOtpIdentityProvider,
   createQueue,
   enableWorkersDev,
   ensureMigrationLedger,
+  hasCloudflareAccessChallenge,
   listAppliedMigrations,
   listIdentityProviders,
   patchAccessApplication,
@@ -28,9 +31,8 @@ import {
   putWorkerSchedules,
   putWorkerScript,
   putWorkerSecret,
-  createAssetUploadSession,
-  hasCloudflareAccessChallenge,
   readAnonymousUrl,
+  uploadWorkerAssetBucket,
 } from "../../platform/cloudflare-provision";
 import type { Env } from "../../platform/env";
 import { loadRelease, type ReleaseArtifact } from "../../platform/release";
@@ -601,23 +603,65 @@ export async function stepUploadAssets(
   resources: CreatedResources,
   secrets: JobSecrets,
 ) {
-  if (secrets.assetJwt) return { resources, secrets };
+  if (resources.assetUploadComplete && secrets.assetJwt) {
+    return { resources, secrets };
+  }
   const release = await readJobRelease(env, job);
-  const manifest = Object.fromEntries(
-    release.assets.map((asset) => [
-      asset.path,
-      { hash: asset.hash, size: asset.size },
-    ]),
+  if (!secrets.assetJwt) {
+    const manifest = Object.fromEntries(
+      release.assets.map((asset) => [
+        asset.path,
+        { hash: asset.hash, size: asset.size },
+      ]),
+    );
+    const session = await createAssetUploadSession({
+      accessToken: ctx.accessToken,
+      accountId: ctx.accountId,
+      workerName: ctx.workerName,
+      manifest,
+    });
+    const buckets = session.buckets;
+    return {
+      resources: {
+        ...resources,
+        assetUploadBuckets: buckets,
+        assetUploadIndex: 0,
+        assetUploadComplete: buckets.length === 0,
+      },
+      secrets: { ...secrets, assetJwt: session.jwt },
+      stayOnStep: buckets.length > 0,
+    };
+  }
+  const buckets = resources.assetUploadBuckets ?? [];
+  const index = resources.assetUploadIndex ?? 0;
+  if (index >= buckets.length) {
+    return {
+      resources: { ...resources, assetUploadComplete: true },
+      secrets,
+    };
+  }
+  const byHash = new Map(
+    release.assets.map((asset) => [asset.hash, asset] as const),
   );
-  const session = await createAssetUploadSession({
-    accessToken: ctx.accessToken,
-    accountId: ctx.accountId,
-    workerName: ctx.workerName,
-    manifest,
+  const files = (buckets[index] ?? []).map((hash) => {
+    const asset = byHash.get(hash);
+    if (!asset) throw new ProvisionError("ASSET_MISSING");
+    return { hash, base64: asset.contentBase64 };
   });
+  const uploaded = await uploadWorkerAssetBucket({
+    jwt: secrets.assetJwt,
+    accountId: ctx.accountId,
+    files,
+  });
+  const nextIndex = index + 1;
   return {
-    resources,
-    secrets: { ...secrets, assetJwt: session.jwt },
+    resources: {
+      ...resources,
+      assetUploadIndex: nextIndex,
+      assetUploadComplete: nextIndex >= buckets.length,
+    },
+    secrets: { ...secrets, assetJwt: uploaded.jwt },
+    stayOnStep: nextIndex < buckets.length,
   };
 }
 
@@ -655,6 +699,11 @@ export async function stepDeployWorker(
     workerName: ctx.workerName,
     mainModule: release.workerMain,
     source: release.workerSource,
+    modules: release.workerModules.map((module) => ({
+      name: module.name,
+      contentType: module.contentType,
+      bytes: base64ToBytes(module.contentBase64),
+    })),
     metadata,
   });
   if (resources.accessAppId && uploaded.tag !== resources.workerScriptId) {

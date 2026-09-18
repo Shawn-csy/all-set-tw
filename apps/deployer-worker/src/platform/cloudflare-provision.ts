@@ -1,4 +1,9 @@
-import { cfRequest, CloudflareApiError } from "./cloudflare";
+import {
+  cfRequest,
+  CloudflareApiError,
+  CLOUDFLARE_API_BASE,
+} from "./cloudflare";
+import { bytesToArrayBuffer } from "./crypto";
 
 export const BOOTSTRAP_WORKER_MODULE = `export default {
   async fetch() {
@@ -51,15 +56,35 @@ export async function putWorkerScript(input: {
   workerName: string;
   mainModule: string;
   source: string;
+  modules?: Array<{
+    name: string;
+    contentType: string;
+    bytes: Uint8Array | string;
+  }>;
   metadata: Record<string, unknown>;
 }) {
   const form = new FormData();
   form.set("metadata", JSON.stringify(input.metadata));
-  form.set(
-    input.mainModule,
-    new Blob([input.source], { type: "application/javascript+module" }),
-    input.mainModule,
-  );
+  const modules = input.modules?.length
+    ? input.modules
+    : [
+        {
+          name: input.mainModule,
+          contentType: "application/javascript+module",
+          bytes: input.source,
+        },
+      ];
+  for (const module of modules) {
+    const bytes =
+      typeof module.bytes === "string"
+        ? new TextEncoder().encode(module.bytes)
+        : module.bytes;
+    form.set(
+      module.name,
+      new Blob([bytesToArrayBuffer(bytes)], { type: module.contentType }),
+      module.name,
+    );
+  }
   const body = await cfRequest(
     input.accessToken,
     `/accounts/${input.accountId}/workers/scripts/${input.workerName}`,
@@ -286,7 +311,47 @@ export async function createAssetUploadSession(input: {
   );
   const result = body.result as { jwt?: string; buckets?: unknown[] };
   if (!result?.jwt) throw new Error("Asset upload session missing jwt.");
-  return { jwt: result.jwt, buckets: result.buckets ?? [] };
+  return { jwt: result.jwt, buckets: normalizeAssetBuckets(result.buckets) };
+}
+
+function normalizeAssetBuckets(value: unknown): string[][] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((bucket) =>
+      Array.isArray(bucket)
+        ? bucket.filter((item): item is string => typeof item === "string")
+        : [],
+    )
+    .filter((bucket) => bucket.length > 0);
+}
+
+export async function uploadWorkerAssetBucket(input: {
+  jwt: string;
+  accountId: string;
+  files: Array<{ hash: string; base64: string }>;
+}) {
+  const form = new FormData();
+  for (const file of input.files) {
+    form.set(file.hash, file.base64);
+  }
+  const response = await fetch(
+    `${CLOUDFLARE_API_BASE}/accounts/${input.accountId}/workers/assets/upload?base64=true`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${input.jwt}` },
+      body: form,
+    },
+  );
+  if (!response.ok) {
+    throw new CloudflareApiError(
+      response.status,
+      response.status === 429 ? "RATE_LIMITED" : "UPSTREAM",
+    );
+  }
+  const text = await response.text();
+  if (!text) return { jwt: input.jwt };
+  const body = JSON.parse(text) as { result?: { jwt?: string } };
+  return { jwt: body.result?.jwt ?? input.jwt };
 }
 
 export async function putQueueConsumer(input: {

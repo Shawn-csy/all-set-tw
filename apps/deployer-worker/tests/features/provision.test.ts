@@ -14,6 +14,7 @@ import {
   login,
   queuedMessages,
 } from "../helpers";
+import { MemoryR2Bucket, seedPublishedRelease } from "../platform/memory-r2";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -105,6 +106,8 @@ describe("first-install provisioner", () => {
       expect(resources.accessAppId).toBeTruthy();
       expect(resources.workerDeployed).toBe(true);
       expect(resources.verified).toBe(true);
+      expect(ctx.cloudflare.uploadedAssetHashes).toEqual(["local-index-html"]);
+      expect(ctx.cloudflare.uploadedWorkerModules.at(-1)).toEqual(["index.js"]);
       expect(ctx.cloudflare.d1).toHaveLength(1);
       expect(ctx.cloudflare.queues).toHaveLength(1);
       expect(
@@ -290,6 +293,62 @@ describe("first-install provisioner", () => {
       const finished = await runJob(ctx.env, body.job.id);
       expect(finished.status).toBe("failed");
       expect(finished.errorCode).toBe("PRECHECK_INCOMPLETE");
+    } finally {
+      await dispose(ctx);
+    }
+  });
+
+  it("installs from a published R2 release and uploads asset buckets", async () => {
+    const bucket = new MemoryR2Bucket();
+    const published = await seedPublishedRelease(bucket, {
+      extraModule: {
+        name: "chunk.js",
+        path: "worker/chunk.js",
+        source: "export const chunk = 1;",
+      },
+    });
+    const ctx = await createDeployerEnv({
+      localDevMode: false,
+      releaseBucket: published.bucket,
+    });
+    try {
+      const session = await login(ctx.env);
+      await app.request(
+        "http://localhost/api/auth/select-account",
+        {
+          method: "POST",
+          headers: authHeaders(session),
+          body: JSON.stringify({ accountId: "acct-1" }),
+        },
+        ctx.env,
+      );
+      const created = await app.request(
+        "http://localhost/api/installations",
+        {
+          method: "POST",
+          headers: authHeaders(session),
+          body: JSON.stringify({
+            accountId: "acct-1",
+            workerName: "taiwan-fin-hub",
+            allowedEmail: "owner@example.com",
+            targetVersion: published.version,
+            targetDigest: published.digest,
+          }),
+        },
+        ctx.env,
+      );
+      const body = (await created.json()) as {
+        job: { id: string };
+        writesEnabled: boolean;
+      };
+      expect(body.writesEnabled).toBe(true);
+      const finished = await runJob(ctx.env, body.job.id);
+      expect(finished.status).toBe("succeeded");
+      expect(ctx.cloudflare.uploadedAssetHashes).toEqual(["r2-index-html"]);
+      expect(ctx.cloudflare.uploadedWorkerModules.at(-1)).toEqual([
+        "index.js",
+        "chunk.js",
+      ]);
     } finally {
       await dispose(ctx);
     }

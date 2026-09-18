@@ -43,7 +43,7 @@ packages/
     └── migrations/
 ```
 
-`apps/deployer-worker` 是維護者營運的獨立 Worker，負責 OAuth session、帳戶預檢、安裝／工作紀錄與 Queue consumer。它使用自己的 D1 schema（`apps/deployer-worker/migrations`），不得綁定使用者財務 D1，也不得把部署紀錄混入 `packages/db`。Queue 訊息只帶 job ID。首次安裝與網頁更新都由 Queue 每次 invocation 執行一個步驟；沒有 R2 版本來源時工作進入 `awaiting_release`，不會對目標帳戶建立資源。更新不得重建 D1／Access 或輪替 `CONFIG_ENCRYPTION_KEY`／VAPID。測試以 mock Cloudflare API 進行，不得指向正式 `taiwan-fin-hub` 資源。
+`apps/deployer-worker` 是維護者營運的獨立 Worker，負責 OAuth session、帳戶預檢、安裝／工作紀錄與 Queue consumer。它使用自己的 D1 schema（`apps/deployer-worker/migrations`），不得綁定使用者財務 D1，也不得把部署紀錄混入 `packages/db`。Queue 訊息只帶 job ID。首次安裝與網頁更新都由 Queue 每次 invocation 執行一個步驟；沒有 R2 版本來源時工作進入 `awaiting_release`，不會對目標帳戶建立資源。綁定 `RELEASE_BUCKET` 時會驗證 `release.json` 的 SHA-256 與 `files[].sha256`，再依 Direct Upload `session.buckets` 上傳資產。更新不得重建 D1／Access 或輪替 `CONFIG_ENCRYPTION_KEY`／VAPID。測試以 mock Cloudflare API 與記憶體 R2 進行，不得指向正式 `taiwan-fin-hub` 資源。
 
 ## 相依方向
 

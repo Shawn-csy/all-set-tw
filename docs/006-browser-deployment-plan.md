@@ -1,6 +1,6 @@
 # 全網頁部署與更新實作計畫
 
-狀態：第 0 階段部分線上實測完成；第 1 階段離線版本包與 CI artifact 已實作，R2 發布未接；第 2 階段部署 workspace／session／預檢／工作基礎已落地；第 3 階段首次安裝寫入編排與進度畫面已接上；第 4 階段網頁更新（版本比較、維護模式、migration、復原點）已接上（測試以 mock Cloudflare API，未對正式帳戶寫入）。更新日期：2026-09-18。
+狀態：第 0 階段部分線上實測完成；第 1 階段離線版本包、CI artifact、R2 載入驗證與發布乾跑腳本已實作，維護者帳戶實際寫入 R2／latest 未執行；第 2 階段部署 workspace／session／預檢／工作基礎已落地；第 3 階段首次安裝寫入編排與進度畫面已接上（含 Direct Upload `session.buckets`）；第 4 階段網頁更新（版本比較、維護模式、migration、復原點）已接上（測試以 mock Cloudflare API 與記憶體 R2，未對正式帳戶寫入）。更新日期：2026-09-18。
 
 本文件規劃免 GitHub 帳號、免下載、免終端機的部署流程，不代表現有功能已支援。第 0 階段發現見 [`docs/006-stage0-capability-verification.md`](./006-stage0-capability-verification.md)。2026-09-18 已在使用者指定帳戶建立獨立測試資源，實測範圍與未完成項目見能力驗證紀錄末節。
 
@@ -193,12 +193,12 @@ flowchart LR
 
 ## 9. 2026-09-18 實作進度
 
-- 已新增 `scripts/build-release.mjs`、`scripts/verify-release.mjs` 與 `scripts/release/artifact.mjs`，產生含 SHA-256 與 Direct Upload asset hash 的固定版本包。
+- 已新增 `scripts/build-release.mjs`、`scripts/verify-release.mjs`、`scripts/publish-release.mjs` 與 `scripts/release/artifact.mjs`，產生含 SHA-256 與 Direct Upload asset hash 的固定版本包，並以乾跑列出 R2 物件鍵。
 - 原始 SQL 保留位元組，Worker 使用固定 Wrangler dry-run 的 multipart modules；公開 config 不接受帳戶 ID、私人 bindings 或未支援的頂層設定。
-- 已新增產物完整性、重建一致性、敏感 binding、symlink／路徑穿越及資源 hash 測試，納入 `test:deploy`／`test:backend`。
-- CI 在原有驗證後建置、驗證並保留 artifact。尚未發布 R2／latest，也未認證 `allowedUpgradeFrom`。
+- 已新增產物完整性、重建一致性、敏感 binding、symlink／路徑穿越、資源 hash 與發布乾跑測試，納入 `test:deploy`／`test:backend`。
+- CI 在原有驗證後建置、驗證並保留 artifact。不會自動執行 `release:publish --execute`，也未認證 `allowedUpgradeFrom`。
 - 已實測 D1 migration、代表性回滾、Worker bindings、Queue consumer、Cron、Access 建立及匿名攔截。OAuth client 建立被目前 MCP 憑證的 Authentication error 阻擋，使用者登入及實際 token 流程尚待完成。
 - 已新增 `apps/deployer-web` 與 `apps/deployer-worker`：OAuth Authorization Code + PKCE session、帳戶預檢、安裝／工作 D1 schema、Queue consumer。跨帳戶存取回 404／403，重送同一 Worker 名稱不會建立第二筆安裝；token 過期的工作進入 `awaiting_reauth`。
-- 第 3 階段已接上首次安裝步驟機：Queue 每次 invocation 只跑一步，依序建立 D1／Queue／bootstrap Worker／Access／migrations／secrets／assets／正式 Worker／consumer／Cron，並提供「準備環境 → 設定登入保護 → 安裝版本 → 驗證完成」進度畫面。沒有 R2 版本包且非本機 fixture 時工作進入 `awaiting_release`，不對目標帳戶寫入。金鑰產生一次並加密暫存，重試不輪替；成功後清除部署服務上的副本。測試以 mock Cloudflare API 覆蓋，未對正式 `taiwan-fin-hub` 資源寫入。
+- 第 3 階段已接上首次安裝步驟機：Queue 每次 invocation 只跑一步，依序建立 D1／Queue／bootstrap Worker／Access／migrations／secrets／assets／正式 Worker／consumer／Cron，並提供「準備環境 → 設定登入保護 → 安裝版本 → 驗證完成」進度畫面。沒有 R2 版本包且非本機 fixture 時工作進入 `awaiting_release`，不對目標帳戶寫入。綁定 `RELEASE_BUCKET` 時驗證 `release.json`／`files[].sha256`，並依 Direct Upload `session.buckets` 分批上傳資產、部署全部 Worker modules。金鑰產生一次並加密暫存，重試不輪替；成功後清除部署服務上的副本。測試以 mock Cloudflare API 與記憶體 R2 覆蓋，未對正式 `taiwan-fin-hub` 資源寫入。
 - 第 4 階段已接上網頁更新：ready 安裝可讀取 update-plan、比較 `allowedUpgradeFrom`、進入維護模式（暫停 Queue delivery、清空 Cron、寫入 `DEPLOY_MAINTENANCE`）、等待 inflight、建立 D1 Time Travel bookmark、只套用尚未記入 ledger 的 migration、檢查既有 secrets 而不輪替金鑰，再部署新版本並恢復同步。失敗將安裝標為 `update_failed` 並保留復原點，不自動倒跑 SQL。金融 Worker 在 `DEPLOY_MAINTENANCE` 期間拒絕新的手動同步，也不啟動新的排程 tick；已在途的發票／集保分段會做完當下這段、不再 enqueue continuation。本機 fixture 可從 `dev-local`／`v0.1.0` 升到 `dev-local-2`（含 `0002_probe_note.sql`）。測試仍以 mock Cloudflare API 覆蓋。
-- 正式 OAuth client、R2 latest 發布，以及非維護者帳戶的端到端登入驗證仍屬後續階段。不能將目前成果描述為可供一般使用者一鍵部署。
+- 正式 OAuth client、維護者帳戶實際寫入 R2 latest，以及非維護者帳戶的端到端登入驗證仍屬後續階段。不能將目前成果描述為可供一般使用者一鍵部署。

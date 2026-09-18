@@ -15,7 +15,7 @@
     "typecheck": "npm run typecheck --workspaces",
     "test:unit": "npm run test:unit -w @taiwan-fin-hub/web && npm run test:unit -w @taiwan-fin-hub/deployer-web",
     "test:backend": "npm test -w @taiwan-fin-hub/worker && npm test -w @taiwan-fin-hub/db && npm run test:selfcheck -w @taiwan-fin-hub/connectors && npm test -w @taiwan-fin-hub/deployer-worker && npm run test:deploy",
-    "test:deploy": "node --test scripts/deploy-with-vapid.test.mjs scripts/sync-upstream.test.mjs scripts/release/artifact.test.mjs",
+    "test:deploy": "node --test scripts/deploy-with-vapid.test.mjs scripts/sync-upstream.test.mjs scripts/release/artifact.test.mjs scripts/release/publish.test.mjs",
     "test:e2e": "npm run test:e2e -w @taiwan-fin-hub/web",
     "verify:web": "npm run typecheck -w @taiwan-fin-hub/web && npm run test:unit -w @taiwan-fin-hub/web && npm run test:e2e -w @taiwan-fin-hub/web && npm run build -w @taiwan-fin-hub/web",
     "dev": "npm run dev -w @taiwan-fin-hub/worker",
@@ -24,7 +24,8 @@
     "db:migrate:remote": "XDG_CONFIG_HOME=.wrangler-config wrangler d1 migrations apply DB --remote",
     "db:schema:docs": "node scripts/generate-database-schema.mjs",
     "release:build": "node scripts/build-release.mjs",
-    "release:verify": "node scripts/verify-release.mjs"
+    "release:verify": "node scripts/verify-release.mjs",
+    "release:publish": "node scripts/publish-release.mjs"
   },
   "cloudflare": {
     "bindings": {

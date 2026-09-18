@@ -31,6 +31,7 @@ export async function createDeployerEnv(options?: {
   subjects?: Record<string, string>;
   localDevMode?: boolean;
   expireOnWrite?: boolean;
+  releaseBucket?: R2Bucket;
 }) {
   const harness = await createTestD1();
   const send = vi.fn().mockResolvedValue(undefined);
@@ -43,6 +44,9 @@ export async function createDeployerEnv(options?: {
     OAUTH_REDIRECT_URI: "http://localhost/api/auth/callback",
     SESSION_ENCRYPTION_KEY: "test-session-key",
     LOCAL_DEV_MODE: localDevMode,
+    ...(options?.releaseBucket
+      ? { RELEASE_BUCKET: options.releaseBucket }
+      : {}),
   } as Env;
   const accounts = options?.accounts ?? [
     { id: "acct-1", name: "Primary" },

@@ -1,15 +1,36 @@
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-function bytesToBase64(bytes: Uint8Array) {
+export function bytesToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer;
+}
+
+export function bytesToBase64(bytes: Uint8Array) {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary);
 }
 
-function base64ToBytes(value: string) {
+export function base64ToBytes(value: string) {
   const binary = atob(value);
   return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+export function utf8ToBase64(value: string) {
+  return bytesToBase64(encoder.encode(value));
+}
+
+export async function sha256Hex(data: Uint8Array) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    bytesToArrayBuffer(data),
+  );
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
 }
 
 async function encryptionKey(secret: string) {

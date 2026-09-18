@@ -27,7 +27,7 @@
 - `apps/worker/src/features`：依業務功能組織的後端 vertical slices。
 - `apps/worker/src/connectors`：依賴 Browser Rendering、Workers AI 等 Worker bindings 的連接器 adapter。
 - `apps/deployer-web`：全網頁部署網站（Svelte 5、feature-first）；授權、預檢、首次安裝與更新進度畫面。正式 OAuth live 驗證與 R2 latest 尚未接上。
-- `apps/deployer-worker`：部署服務 Hono API、OAuth session、帳戶預檢、安裝／工作 D1 與 Queue consumer。使用獨立 D1，不得綁定使用者金融資料庫。首次安裝與網頁更新皆以每 invocation 一步呼叫 Cloudflare API；無版本來源時不寫入目標帳戶。更新保留 D1、Access 與金鑰，並以 `DEPLOY_MAINTENANCE` 暫停金融 Worker 同步。
+- `apps/deployer-worker`：部署服務 Hono API、OAuth session、帳戶預檢、安裝／工作 D1 與 Queue consumer。使用獨立 D1，不得綁定使用者金融資料庫。首次安裝與網頁更新皆以每 invocation 一步呼叫 Cloudflare API；無版本來源時不寫入目標帳戶。從 R2 載入時驗證 `release.json` 與 `files[].sha256`，並依 Direct Upload `session.buckets` 上傳資產。更新保留 D1、Access 與金鑰，並以 `DEPLOY_MAINTENANCE` 暫停金融 Worker 同步。
 - `packages/core`：前後端、資料庫與連接器共用的穩定型別及契約。
 - `packages/connectors`：不依賴 Hono、D1 或 Worker `Env` 的外部資料來源邏輯。
 - `packages/db`：跨 feature 共用的 D1 基礎能力、Drizzle schema／client 與 migrations。
@@ -53,8 +53,8 @@
 - 前端驗證：`npm run verify:web`
 - 後端測試：`npm run test:backend`
 - 全部 workspace 建置：`npm run build`
-- 網頁部署版本包：`npm run release:build -- --version <version>`；驗證：`npm run release:verify -- dist/releases/<version>`（維護者工具；R2／latest 尚未接上）。
-- 部署網站本機：`npm run dev -w @taiwan-fin-hub/deployer-web` 與 `npm run dev -w @taiwan-fin-hub/deployer-worker`（OAuth live consent 與 R2 latest 尚未開放；本機 `LOCAL_DEV_MODE` 使用測試版本包，不得指向正式 Cloudflare 資源）。
+- 網頁部署版本包：`npm run release:build -- --version <version>`；驗證：`npm run release:verify -- dist/releases/<version>`；發布乾跑：`npm run release:publish -- dist/releases/<version>`（`--execute --bucket` 才寫入維護者 R2；不得指向正式金融帳戶）。
+- 部署網站本機：`npm run dev -w @taiwan-fin-hub/deployer-web` 與 `npm run dev -w @taiwan-fin-hub/deployer-worker`（OAuth live consent 與實際 R2 latest 發布尚未開放；本機 `LOCAL_DEV_MODE` 使用測試版本包，不得指向正式 Cloudflare 資源）。
 
 ## 提交與 PR 前必跑檢查
 
