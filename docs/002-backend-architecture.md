@@ -20,26 +20,20 @@
 ```text
 apps/
 ├── web/
-└── worker/
+├── worker/
+├── deployer-web/      # 部署網站 UI；不得依賴 apps/web 的 feature
+└── deployer-worker/   # 部署服務 API；獨立 D1／Queue，不讀取金融資料
     ├── src/
     │   ├── index.ts
+    │   ├── db/
     │   ├── features/
-    │   │   ├── activity/
-    │   │   ├── bank/
-    │   │   ├── classification/
-    │   │   ├── connectors/
-    │   │   ├── dashboard/
-    │   │   ├── exchange-rates/
-    │   │   ├── investments/
-    │   │   ├── invoices/
-    │   │   ├── manual-assets/
-    │   │   ├── net-worth/
-    │   │   ├── notifications/
-    │   │   ├── ocr/
-    │   │   └── sync/
-    │   ├── connectors/
+    │   │   ├── auth/
+    │   │   ├── precheck/
+    │   │   ├── installations/
+    │   │   └── deployments/
     │   ├── middleware/
     │   └── platform/
+    ├── migrations/
     └── tests/
 
 packages/
@@ -48,6 +42,8 @@ packages/
 └── db/
     └── migrations/
 ```
+
+`apps/deployer-worker` 是維護者營運的獨立 Worker，負責 OAuth session、帳戶預檢、安裝／工作紀錄與 Queue consumer。它使用自己的 D1 schema（`apps/deployer-worker/migrations`），不得綁定使用者財務 D1，也不得把部署紀錄混入 `packages/db`。Queue 訊息只帶 job ID。第 2 階段會把工作停在 `awaiting_stage3`，尚未對目標帳戶建立 D1／Access／正式 Worker。
 
 ## 相依方向
 

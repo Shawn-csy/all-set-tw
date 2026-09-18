@@ -153,3 +153,32 @@ XDG_CONFIG_HOME=.wrangler-config node scripts/deploy-with-vapid.mjs \
 執行前請再次確認 `database_id`、Worker 名稱與所有 bindings 都指向預期環境。資料庫 migration 會修改遠端 schema，不要使用未確認的正式資料庫進行測試。
 
 若既有 D1 已儲存連接器設定，部署時也必須提供原本相同的 `CONFIG_ENCRYPTION_KEY`；新的隨機金鑰無法解密既有資料。
+
+## 全網頁部署版本包（開發中）
+
+目前已提供維護者的離線打包工具，尚未提供使用者的 OAuth 部署網站。現有 GitHub 部署方式仍可使用。進度與平台限制見 [實作計畫](006-browser-deployment-plan.md) 及 [能力驗證紀錄](006-stage0-capability-verification.md)。
+
+從乾淨且已安裝依賴的 checkout 執行：
+
+```bash
+npm run release:build -- --version v0.1.0
+npm run release:verify -- dist/releases/v0.1.0
+```
+
+`release:build` 重新建置前端，使用專案固定版本的 Wrangler `deploy --dry-run` 產生 Worker modules，再打包原始 SQL migrations。過程不執行 Cloudflare build hook、不套用 migrations、不部署遠端資源。同名版本目錄已存在時拒絕覆寫。
+
+版本目錄包含：
+
+- `release.json`：來源 commit、版本、是否含未提交修改、bindings、Cron、Queue consumer、migrations 清單及所有產物的 SHA-256／大小。
+- `release.sha256`：manifest 本身的 SHA-256。
+- `worker/`：Wrangler 產生的執行期 modules 與對應 MIME 類型（記錄於 manifest）。
+- `assets/`、`assets-manifest.json`：前端資源及符合固定 Wrangler 演算法的 Direct Upload hash。
+- `migrations/`：保留原始位元組的 SQL；不切割 SQL、不在打包階段改寫 ledger。
+
+版本包中的 D1／Queue 為邏輯資源名稱，不含帳戶 ID、database ID、token 或金鑰。若 public config 出現目前打包器未支援的設定，會拒絕建置，必須先明確補上支援。第一版不打包 source maps，也尚未認證任何更新來源，因此 `allowedUpgradeFrom` 為空陣列。
+
+`release:verify` 檢查檔案摘要、大小、缺檔、多餘檔案、symlink、路徑穿越及 assets manifest。正式部署服務必須從可信版本目錄取得 manifest digest，並使用 `--sha256 <trusted-digest>` 或同等程式介面驗證；只比較版本包內的 checksum 不能證明發布者身分。
+
+開發期間可加 `--allow-dirty` 產生本機驗證包，manifest 會標記 `sourceDirty: true`，不得發布給使用者。CI 在既有檢查及 build 通過後建置並保留版本 artifact；此 artifact 尚未發布到 R2，也不會觸發自動更新。R2 發布與 latest 指標需待部署服務的版本儲存位置確定後接上。
+
+部署服務本身位於 `apps/deployer-web` 與 `apps/deployer-worker`，使用獨立 D1／Queue。目前可建立 OAuth session、帳戶預檢與安裝工作紀錄；尚未對使用者帳戶寫入 D1、Access 或正式 Worker，也尚未接上 R2 版本庫。現有 GitHub 部署路徑不受影響。

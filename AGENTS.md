@@ -26,6 +26,8 @@
 - `apps/worker`：Hono API、同步流程、Cloudflare bindings 與靜態網站服務。
 - `apps/worker/src/features`：依業務功能組織的後端 vertical slices。
 - `apps/worker/src/connectors`：依賴 Browser Rendering、Workers AI 等 Worker bindings 的連接器 adapter。
+- `apps/deployer-web`：全網頁部署網站（Svelte 5、feature-first）；目前僅授權／預檢／安裝紀錄，尚未提供一鍵寫入安裝。
+- `apps/deployer-worker`：部署服務 Hono API、OAuth session、帳戶預檢、安裝／工作 D1 與 Queue consumer。使用獨立 D1，不得綁定使用者金融資料庫。
 - `packages/core`：前後端、資料庫與連接器共用的穩定型別及契約。
 - `packages/connectors`：不依賴 Hono、D1 或 Worker `Env` 的外部資料來源邏輯。
 - `packages/db`：跨 feature 共用的 D1 基礎能力、Drizzle schema／client 與 migrations。
@@ -51,6 +53,8 @@
 - 前端驗證：`npm run verify:web`
 - 後端測試：`npm run test:backend`
 - 全部 workspace 建置：`npm run build`
+- 網頁部署版本包：`npm run release:build -- --version <version>`；驗證：`npm run release:verify -- dist/releases/<version>`（維護者工具；R2／latest 尚未接上）。
+- 部署網站本機：`npm run dev -w @taiwan-fin-hub/deployer-web` 與 `npm run dev -w @taiwan-fin-hub/deployer-worker`（OAuth live consent 與 Cloudflare 寫入安裝尚未開放）。
 
 ## 提交與 PR 前必跑檢查
 
@@ -70,12 +74,12 @@
 | 前端結構、資料查詢、共用元件            | `docs/003-frontend-architecture.md`                                                                                                                         |
 | 連接器、登入、驗證碼、資料正規化        | `docs/004-connector-development.md`；涉及同步流程時也讀後端架構                                                                                             |
 | 部署、自動更新、環境變數                | `docs/005-deployment.md`、`README.md` 對應章節；全網頁部署見 `docs/006-browser-deployment-plan.md` 與第 0 階段 `docs/006-stage0-capability-verification.md` |
-| 資料庫 schema                           | `docs/database-schema.md`、相關 `packages/db/migrations/*.sql`                                                                                              |
+| 資料庫 schema                           | `docs/database-schema.md`、相關 `packages/db/migrations/*.sql`；部署服務 D1 見 `apps/deployer-worker/migrations`，不走金融 schema metadata                  |
 | Drizzle schema、client、repository 轉換 | `docs/002-backend-architecture.md`                                                                                                                          |
 | 使用方式、支援資料來源、限制            | `README.md` 對應章節                                                                                                                                        |
 
 - 若變更使文件描述不再正確，必須在同一個 PR 更新相關文件；純重構且不影響文件描述時，不必為了更新而更新。
-- Schema 變更須同步維護 `packages/db/schema-metadata.json`，並從 repo root 執行 `npm run db:schema:docs`，提交重新產生的 `docs/database-schema.md`；不得直接手改產生的文件。
+- Schema 變更須同步維護 `packages/db/schema-metadata.json`，並從 repo root 執行 `npm run db:schema:docs`，提交重新產生的 `docs/database-schema.md`；不得直接手改產生的文件。部署服務 D1 使用 `apps/deployer-worker/migrations`，不要寫入金融 schema metadata。
 - 提交前對照 diff 檢查文件是否仍符合實作。PR 說明須列出文件更新項目；不需更新其他文件時，簡述原因。
 - `docs/001-cron-sync-design.md` 是歷史設計，不作為現行實作依據；現行排程與同步行為維護於 `docs/002-backend-architecture.md`。
 - 架構判斷以實際程式碼及各 workspace 的 `package.json` 為最終依據。

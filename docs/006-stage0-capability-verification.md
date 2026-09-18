@@ -1,8 +1,8 @@
 # 第 0 階段能力驗證紀錄
 
-狀態：文件與公開 API 驗證完成；尚未在隔離測試帳戶做寫入實測。日期：2026-09-17。
+狀態：文件驗證及隔離資源的部分線上實測完成；OAuth consent／token 與使用者登入驗證待完成。更新日期：2026-09-18。
 
-本文件對應 `docs/006-browser-deployment-plan.md` 第 0 階段。來源為官方文件、Cloudflare Docs MCP、公開 REST schema，以及本 repo 的 `wrangler.toml`、`packages/db/migrations`、Wrangler 開源 migration 實作。此次**沒有**對 `taiwan-fin-hub.n56jc8.workers.dev` 或任何正式帳戶建立、修改、刪除資源。
+本文件對應 `docs/006-browser-deployment-plan.md` 第 0 階段。來源為官方文件、Cloudflare Docs MCP、公開 REST schema，以及本 repo 的 `wrangler.toml`、`packages/db/migrations`、Wrangler 開源 migration 實作。2026-09-17 的文件驗證沒有修改線上資源。2026-09-18 依使用者指定帳戶建立獨立測試資源，沒有改動原有 `taiwan-fin-hub`。以下舊章節保留當時結論，最新實測差異以文末紀錄為準。
 
 **結論：** 全網頁部署在 API 層面看起來可行，沒有已證實的硬阻塞。全新帳戶仍可能需要若干 Dashboard 步驟（尤其是 Zero Trust 開通）。D1 migration 不可用分號天真拆 SQL；應沿用 Wrangler 相容的 `d1_migrations` ledger，並在 Ted 的隔離帳戶證明 `/query` 的原子性後才能定案 REST runner。
 
@@ -248,3 +248,40 @@ Bindings 在 [Workers script update](https://developers.cloudflare.com/api/resou
 8. 綁定 Browser／AI／Queue consumer／Cron，確認免費帳戶是否立即能用。
 
 通過後才能開始第 1 階段版本產物；本階段不建立 `apps/deployer-*` workspace。
+
+## 2026-09-18：隔離資源線上實測
+
+使用者指定的帳戶已有 workers.dev、Zero Trust organization 及正式 Worker，因此這次是**同帳戶內的獨立測試資源**，不是全新空帳戶。不能由此次結果推論新帳戶不需要 onboarding。
+
+透過 Cloudflare MCP 建立 `all-set-deploy-spike-20260918` 測試 D1、Queue、Worker 與 Access Application，沒有讀取既有金融資料。測試 Worker 只回傳固定文字與 HTTP 403，不含財務功能。
+
+| 實測項目                  | 結果                                                                                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OAuth scope 目錄          | `GET /oauth/scopes` 成功；確認下列確切 scope ID                                                                                                   |
+| D1 migration 重播         | repo 現有 45 個檔案（0001 至 0047，編號有缺號）逐檔全文加 ledger INSERT，以 REST `/query` 全部成功，包含 0044／0045／0046 重建表                  |
+| D1 DML 回滾               | 同一請求先 INSERT 再觸發 UNIQUE 錯誤；後續 SELECT 確認第一筆 INSERT 沒留下                                                                        |
+| D1 DDL 回滾               | 同一請求先 CREATE TABLE 再寫入不存在表；sqlite_master 確認新表沒留下                                                                              |
+| Worker bindings           | REST multipart 上傳成功，綁定測試 D1、Queue、Browser、AI；沒有啟動 Browser 或 AI 推論                                                             |
+| Queue consumer            | REST 建立成功，batch_size=1、max_wait_time_ms=1000、max_concurrency=1                                                                             |
+| Cron                      | 寫入測試 schedule、讀回成功後立即清空；未以 Cron 啟動任何金融同步                                                                                 |
+| Access worker destination | 使用 Worker 上傳回應的 `tag` 作為 `worker_id` 建立成功（不是 script name）                                                                        |
+| Access policy             | 沿用帳戶既有 OTP IdP，建立只允許使用者指定 Email 的專屬 policy；取得 aud，沒有修改共用 IdP／組織                                                  |
+| 未登入請求                | workers.dev HTTP 302 指向該組織的 Access 登入頁；preview URLs 關閉                                                                                |
+| OAuth client 建立         | MCP `POST /accounts/{account_id}/oauth_clients` 回傳 `10000 Authentication error`；目前連線憑證不足以完成此步，不能解讀為 Cloudflare 不支援 OAuth |
+
+實際存在的 scope ID：
+
+- `memberships.read`
+- `workers-scripts.read`、`workers-scripts.write`
+- `d1.read`、`d1.write`
+- `queues.read`、`queues.write`
+- `access.read`、`access.write`（account 範圍，不能改用 zone-access）
+- `access-org.read`、`access-idp.read`、`access-idp.write`
+
+以上是目錄確認，不代表這組 scope 已由第三方 OAuth consent 授權並實測可部署。沒有成功建立 OAuth client，也沒有取得或保存使用者 OAuth token。Dashboard 後備途徑目前停在使用者登入；需完成 client 設定後繼續測試 scope、token 壽命、撤銷與重新授權。
+
+D1 測試使用空資料庫及合成 probe 資料，證明目前 API 的代表性失敗回滾與新裝重播可行；尚未證明有真實舊資料、同步寫入或中斷重送下的更新安全性。Access 已確認匿名攔截，允許使用者實際登入仍待使用者回報。版本 assets Direct Upload 尚未透過真實上傳完成 end-to-end。
+
+測試資源的精確 ID 與清理進度記在本機忽略的 `.wrangler/browser-deployment-spike.json`；不將憑證存入該檔。測試用 Worker／Access 暫留供登入驗證，後續完成後清理；不建立背景自動清理或正式更新排程。
+
+已完成的 D1／Queue／consumer 實測資源已刪除；測試 Worker 已移除這些 bindings 及排程，僅保留固定文字供 Access 登入驗證。原有 Worker、資料庫與排程未修改。

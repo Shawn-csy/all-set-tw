@@ -1,8 +1,8 @@
 # 全網頁部署與更新實作計畫
 
-狀態：第 0 階段文件驗證完成，隔離帳戶寫入實測未做。日期：2026-09-17。
+狀態：第 0 階段部分線上實測完成；第 1 階段離線版本包與 CI artifact 已實作，R2 發布未接；第 2 階段部署 workspace／session／預檢／工作基礎已落地，尚未開放目標帳戶寫入安裝。更新日期：2026-09-18。
 
-本文件規劃免 GitHub 帳號、免下載、免終端機的部署流程，不代表現有功能已支援。第 0 階段發現見 [`docs/006-stage0-capability-verification.md`](./006-stage0-capability-verification.md)。兩份文件都沒有建立或修改線上資源。
+本文件規劃免 GitHub 帳號、免下載、免終端機的部署流程，不代表現有功能已支援。第 0 階段發現見 [`docs/006-stage0-capability-verification.md`](./006-stage0-capability-verification.md)。2026-09-18 已在使用者指定帳戶建立獨立測試資源，實測範圍與未完成項目見能力驗證紀錄末節。
 
 ## 1. 目標與第一版範圍
 
@@ -190,3 +190,13 @@ flowchart LR
 維護者需準備部署網站網域、OAuth client、R2 版本空間、部署服務 D1／Queue 與加密 secret。先使用 private client 測試；公開前完成官方所需資料與網域驗證。部署服務設工作數量限制、憑證 TTL 清理、去敏稽核及錯誤監控；不記錄銀行資料或整份 API response。
 
 第一版完成標準：一名沒有 GitHub 帳號、沒有開發工具的使用者，能只透過瀏覽器建立私人財務網站，之後回到部署網站完成版本更新，且全程不需貼 API Token、複製 Secret 或下載檔案。若 Cloudflare 帳戶首次啟用仍有必要人工步驟，介面需引導並可續跑，不能隱藏此限制。
+
+## 9. 2026-09-18 實作進度
+
+- 已新增 `scripts/build-release.mjs`、`scripts/verify-release.mjs` 與 `scripts/release/artifact.mjs`，產生含 SHA-256 與 Direct Upload asset hash 的固定版本包。
+- 原始 SQL 保留位元組，Worker 使用固定 Wrangler dry-run 的 multipart modules；公開 config 不接受帳戶 ID、私人 bindings 或未支援的頂層設定。
+- 已新增產物完整性、重建一致性、敏感 binding、symlink／路徑穿越及資源 hash 測試，納入 `test:deploy`／`test:backend`。
+- CI 在原有驗證後建置、驗證並保留 artifact。尚未發布 R2／latest，也未認證 `allowedUpgradeFrom`。
+- 已實測 D1 migration、代表性回滾、Worker bindings、Queue consumer、Cron、Access 建立及匿名攔截。OAuth client 建立被目前 MCP 憑證的 Authentication error 阻擋，使用者登入及實際 token 流程尚待完成。
+- 已新增 `apps/deployer-web` 與 `apps/deployer-worker`：OAuth Authorization Code + PKCE session、帳戶預檢、安裝／工作 D1 schema、Queue consumer。跨帳戶存取回 404／403，重送同一 Worker 名稱不會建立第二筆安裝；token 過期的工作進入 `awaiting_reauth`。Queue 將工作停在 `awaiting_stage3`，尚未對目標帳戶寫入資源。
+- 正式 OAuth client、R2 latest 發布，以及 D1／Access／Worker 寫入安裝仍屬後續階段。不能將目前成果描述為可供一般使用者一鍵部署。
