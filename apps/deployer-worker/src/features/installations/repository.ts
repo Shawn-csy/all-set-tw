@@ -107,6 +107,8 @@ export async function updateInstallation(
   id: string,
   patch: {
     status?: string;
+    targetVersion?: string | null;
+    targetDigest?: string | null;
     workerScriptId?: string | null;
     d1DatabaseId?: string | null;
     queueId?: string | null;

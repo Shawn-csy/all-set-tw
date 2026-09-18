@@ -350,3 +350,107 @@ export function isRetryableCloudflareError(error: unknown) {
       (error.code === "UPSTREAM" && error.status >= 500))
   );
 }
+
+export async function pauseQueueDelivery(
+  accessToken: string,
+  accountId: string,
+  queueId: string,
+) {
+  await cfRequest(
+    accessToken,
+    `/accounts/${accountId}/queues/${queueId}/pause_delivery`,
+    { method: "POST", body: JSON.stringify({}) },
+  );
+}
+
+export async function resumeQueueDelivery(
+  accessToken: string,
+  accountId: string,
+  queueId: string,
+) {
+  await cfRequest(
+    accessToken,
+    `/accounts/${accountId}/queues/${queueId}/resume_delivery`,
+    { method: "POST", body: JSON.stringify({}) },
+  );
+}
+
+export async function readQueueInflight(
+  accessToken: string,
+  accountId: string,
+  queueId: string,
+) {
+  const body = await cfRequest(
+    accessToken,
+    `/accounts/${accountId}/queues/${queueId}`,
+  );
+  const result = body.result as {
+    delivery_paused?: boolean;
+    pending_messages?: number;
+    messages?: { unacked?: number };
+  };
+  return {
+    paused: Boolean(result?.delivery_paused),
+    pending: result?.pending_messages ?? result?.messages?.unacked ?? 0,
+  };
+}
+
+export async function createD1Bookmark(
+  accessToken: string,
+  accountId: string,
+  databaseId: string,
+) {
+  const body = await cfRequest(
+    accessToken,
+    `/accounts/${accountId}/d1/database/${databaseId}/bookmark`,
+    { method: "POST", body: JSON.stringify({}) },
+  );
+  const result = body.result as { bookmark?: string; id?: string };
+  const bookmark = result?.bookmark ?? result?.id;
+  if (!bookmark) throw new Error("D1 bookmark response missing id.");
+  return bookmark;
+}
+
+export async function restoreD1Bookmark(input: {
+  accessToken: string;
+  accountId: string;
+  databaseId: string;
+  bookmark: string;
+}) {
+  await cfRequest(
+    input.accessToken,
+    `/accounts/${input.accountId}/d1/database/${input.databaseId}/time_travel/restore`,
+    {
+      method: "POST",
+      body: JSON.stringify({ bookmark: input.bookmark }),
+    },
+  );
+}
+
+export async function listWorkerSecretNames(
+  accessToken: string,
+  accountId: string,
+  workerName: string,
+) {
+  const body = await cfRequest(
+    accessToken,
+    `/accounts/${accountId}/workers/scripts/${workerName}/secrets`,
+  );
+  const rows = Array.isArray(body.result) ? body.result : [];
+  return rows
+    .map((row) => (row as { name?: string }).name)
+    .filter((name): name is string => Boolean(name));
+}
+
+export async function deleteWorkerSecret(input: {
+  accessToken: string;
+  accountId: string;
+  workerName: string;
+  name: string;
+}) {
+  await cfRequest(
+    input.accessToken,
+    `/accounts/${input.accountId}/workers/scripts/${input.workerName}/secrets/${input.name}`,
+    { method: "DELETE" },
+  );
+}

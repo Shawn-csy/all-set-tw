@@ -65,3 +65,19 @@ export type DeployJob = {
   errorCode: string | null;
   createdResources: Record<string, unknown>;
 };
+
+export type UpdatePlan = {
+  available: boolean;
+  reason:
+    | "INSTALL_NOT_READY"
+    | "RELEASE_UNAVAILABLE"
+    | "UP_TO_DATE"
+    | "UPGRADE_NOT_ALLOWED"
+    | null;
+  currentVersion: string | null;
+  currentDigest: string | null;
+  targetVersion: string | null;
+  targetDigest: string | null;
+  pendingMigrations: string[];
+  interruption: { pauseSync: boolean; hasMigrations: boolean };
+};

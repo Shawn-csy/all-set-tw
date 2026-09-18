@@ -267,3 +267,75 @@ export async function runAccountPrecheck(input: {
     teamDomain: organization,
   };
 }
+
+export async function runUpdatePrecheck(input: {
+  accessToken: string;
+  accountId: string;
+  workerName: string;
+  d1DatabaseId: string | null;
+  queueId: string | null;
+}): Promise<{
+  ready: boolean;
+  checks: PrecheckItem[];
+  workersSubdomain: string | null;
+  teamDomain: string | null;
+  d1DatabaseId: string | null;
+  queueId: string | null;
+}> {
+  const d1Name = plannedD1Name(input.workerName);
+  const queueName = plannedQueueName(input.workerName);
+  const [subdomain, organization, workerExists, existingD1, existingQueue] =
+    await Promise.all([
+      readWorkersSubdomain(input.accessToken, input.accountId),
+      readAccessOrganization(input.accessToken, input.accountId),
+      workerScriptExists(input.accessToken, input.accountId, input.workerName),
+      findD1DatabaseByName(input.accessToken, input.accountId, d1Name),
+      findQueueByName(input.accessToken, input.accountId, queueName),
+    ]);
+  const d1Matches =
+    existingD1 !== null &&
+    (input.d1DatabaseId === null || existingD1.id === input.d1DatabaseId);
+  const queueMatches =
+    existingQueue !== null &&
+    (input.queueId === null || existingQueue.id === input.queueId);
+  const checks: PrecheckItem[] = [
+    {
+      id: "workers_subdomain",
+      ok: Boolean(subdomain),
+      blocking: true,
+      dashboardUrl: workersDashboardUrl(input.accountId),
+    },
+    {
+      id: "access_organization",
+      ok: Boolean(organization),
+      blocking: true,
+      dashboardUrl: zeroTrustDashboardUrl(),
+    },
+    {
+      id: "worker_name",
+      ok: workerExists,
+      blocking: true,
+      dashboardUrl: workersDashboardUrl(input.accountId),
+    },
+    {
+      id: "d1_name",
+      ok: d1Matches,
+      blocking: true,
+      dashboardUrl: d1DashboardUrl(input.accountId),
+    },
+    {
+      id: "queue_name",
+      ok: queueMatches,
+      blocking: true,
+      dashboardUrl: queuesDashboardUrl(input.accountId),
+    },
+  ];
+  return {
+    ready: checks.every((check) => check.ok),
+    checks,
+    workersSubdomain: subdomain,
+    teamDomain: organization,
+    d1DatabaseId: existingD1?.id ?? null,
+    queueId: existingQueue?.id ?? null,
+  };
+}

@@ -26,8 +26,8 @@
 - `apps/worker`：Hono API、同步流程、Cloudflare bindings 與靜態網站服務。
 - `apps/worker/src/features`：依業務功能組織的後端 vertical slices。
 - `apps/worker/src/connectors`：依賴 Browser Rendering、Workers AI 等 Worker bindings 的連接器 adapter。
-- `apps/deployer-web`：全網頁部署網站（Svelte 5、feature-first）；授權、預檢、首次安裝進度畫面。正式 OAuth live 驗證與 R2 latest 尚未接上。
-- `apps/deployer-worker`：部署服務 Hono API、OAuth session、帳戶預檢、安裝／工作 D1 與 Queue consumer。使用獨立 D1，不得綁定使用者金融資料庫。首次安裝以每 invocation 一步呼叫 Cloudflare API；無版本來源時不寫入目標帳戶。
+- `apps/deployer-web`：全網頁部署網站（Svelte 5、feature-first）；授權、預檢、首次安裝與更新進度畫面。正式 OAuth live 驗證與 R2 latest 尚未接上。
+- `apps/deployer-worker`：部署服務 Hono API、OAuth session、帳戶預檢、安裝／工作 D1 與 Queue consumer。使用獨立 D1，不得綁定使用者金融資料庫。首次安裝與網頁更新皆以每 invocation 一步呼叫 Cloudflare API；無版本來源時不寫入目標帳戶。更新保留 D1、Access 與金鑰，並以 `DEPLOY_MAINTENANCE` 暫停金融 Worker 同步。
 - `packages/core`：前後端、資料庫與連接器共用的穩定型別及契約。
 - `packages/connectors`：不依賴 Hono、D1 或 Worker `Env` 的外部資料來源邏輯。
 - `packages/db`：跨 feature 共用的 D1 基礎能力、Drizzle schema／client 與 migrations。

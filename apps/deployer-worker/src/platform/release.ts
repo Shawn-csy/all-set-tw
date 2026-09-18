@@ -4,6 +4,8 @@ import { BOOTSTRAP_WORKER_MODULE } from "./cloudflare-provision";
 
 export const LOCAL_FIXTURE_VERSION = "dev-local";
 export const LOCAL_FIXTURE_DIGEST = "0".repeat(64);
+export const LOCAL_FIXTURE_NEXT_VERSION = "dev-local-2";
+export const LOCAL_FIXTURE_NEXT_DIGEST = "b".repeat(64);
 
 export class ReleaseUnavailableError extends Error {
   constructor(
@@ -25,17 +27,31 @@ export type ReleaseArtifact = {
   workerSource: string;
   migrations: Array<{ name: string; sql: string }>;
   assets: Array<{ path: string; hash: string; size: number; bytes: string }>;
+  allowedUpgradeFrom: string[];
 };
 
 export function hasReleaseSource(env: Env) {
   return Boolean(env.RELEASE_BUCKET) || isLocalDevMode(env);
 }
 
+const BASE_MIGRATION = {
+  name: "0001_initial.sql",
+  sql: "CREATE TABLE IF NOT EXISTS probe (\n  id INTEGER PRIMARY KEY\n);\n",
+};
+
+const NEXT_MIGRATION = {
+  name: "0002_probe_note.sql",
+  sql: "ALTER TABLE probe ADD COLUMN note TEXT;\n",
+};
+
 export function localFixtureRelease(
   version = LOCAL_FIXTURE_VERSION,
   digest = LOCAL_FIXTURE_DIGEST,
 ): ReleaseArtifact {
   const html = "<!doctype html><title>不用記帳</title><p>ok</p>";
+  const isNext =
+    version === LOCAL_FIXTURE_NEXT_VERSION ||
+    digest === LOCAL_FIXTURE_NEXT_DIGEST;
   return {
     version,
     digest,
@@ -46,23 +62,38 @@ export function localFixtureRelease(
     workerMain: "index.js",
     workerSource: BOOTSTRAP_WORKER_MODULE.replace(
       "Installation is not ready.",
-      "ALL SET",
+      isNext ? "ALL SET v2" : "ALL SET",
     ),
-    migrations: [
-      {
-        name: "0001_initial.sql",
-        sql: "CREATE TABLE IF NOT EXISTS probe (\n  id INTEGER PRIMARY KEY\n);\n",
-      },
-    ],
+    migrations: isNext ? [BASE_MIGRATION, NEXT_MIGRATION] : [BASE_MIGRATION],
     assets: [
       {
         path: "/index.html",
-        hash: "local-index-html",
+        hash: isNext ? "local-index-html-v2" : "local-index-html",
         size: html.length,
         bytes: html,
       },
     ],
+    allowedUpgradeFrom: isNext ? [LOCAL_FIXTURE_VERSION, "v0.1.0"] : [],
   };
+}
+
+export function localUpgradeRelease(currentVersion: string | null) {
+  if (currentVersion === LOCAL_FIXTURE_VERSION || currentVersion === "v0.1.0") {
+    return {
+      version: LOCAL_FIXTURE_NEXT_VERSION,
+      digest: LOCAL_FIXTURE_NEXT_DIGEST,
+      source: "local_fixture" as const,
+    };
+  }
+  return null;
+}
+
+export function canUpgradeFrom(
+  currentVersion: string,
+  release: ReleaseArtifact,
+) {
+  if (currentVersion === release.version) return false;
+  return release.allowedUpgradeFrom.includes(currentVersion);
 }
 
 export async function readCurrentRelease(env: Env) {
@@ -115,6 +146,7 @@ export async function loadRelease(
       crons?: string[];
       workerMain?: string;
       migrations?: Array<{ name: string }>;
+      allowedUpgradeFrom?: string[];
     };
     const actual = manifest.digest ?? manifest.sha256;
     if (actual !== digest) {
@@ -147,6 +179,7 @@ export async function loadRelease(
       workerSource: await workerObject.text(),
       migrations,
       assets: [],
+      allowedUpgradeFrom: manifest.allowedUpgradeFrom ?? [],
     };
   }
   if (isLocalDevMode(env)) {

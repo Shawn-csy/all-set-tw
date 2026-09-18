@@ -7,6 +7,7 @@ import type {
   DeployJob,
   Installation,
   PrecheckResult,
+  UpdatePlan,
 } from "./types";
 
 const api = createApiClient();
@@ -39,6 +40,16 @@ export function fetchCurrentRelease() {
   return api.get<CurrentRelease>("/api/releases/current");
 }
 
+export function fetchInstallations() {
+  return api.get<{ installations: Installation[] }>("/api/installations");
+}
+
+export function fetchInstallation(installationId: string) {
+  return api.get<{ installation: Installation; job: DeployJob | null }>(
+    `/api/installations/${installationId}`,
+  );
+}
+
 export function createInstallation(input: {
   accountId: string;
   workerName: string;
@@ -64,4 +75,21 @@ export function resumeInstallation(installationId: string) {
   return api.post<{ installation: Installation; job: DeployJob }>(
     `/api/installations/${installationId}/jobs`,
   );
+}
+
+export function fetchUpdatePlan(installationId: string) {
+  return api.get<UpdatePlan>(
+    `/api/installations/${installationId}/update-plan`,
+  );
+}
+
+export function startUpdate(
+  installationId: string,
+  input: { targetVersion: string; targetDigest: string },
+) {
+  return api.post<{
+    installation: Installation;
+    job: DeployJob;
+    writesEnabled: boolean;
+  }>(`/api/installations/${installationId}/updates`, input);
 }

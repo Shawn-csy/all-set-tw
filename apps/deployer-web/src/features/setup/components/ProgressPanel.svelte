@@ -1,8 +1,8 @@
 <script lang="ts">
   import {
     nextAction,
-    INSTALL_PHASES,
     phaseState,
+    phasesFor,
     publicSiteUrl,
   } from "../model/progress";
   import type { DeployJob, Installation } from "@/data/types";
@@ -29,21 +29,24 @@
   const siteUrl = $derived(
     publicSiteUrl(installation.workerName, job.createdResources),
   );
+  const phases = $derived(phasesFor(job.kind));
 </script>
 
 <section
   class="flex flex-col gap-4 rounded-xl border border-ink/10 bg-white p-4"
 >
   <header class="flex flex-col gap-1">
-    <h2 class="text-lg font-semibold">安裝進度</h2>
+    <h2 class="text-lg font-semibold">
+      {job.kind === "update" ? "更新進度" : "安裝進度"}
+    </h2>
     <p class="text-sm leading-6 text-ink/70">
       目標版本 {job.targetVersion}。重新整理不會重複建立資源。
     </p>
   </header>
 
   <ol class="flex flex-col gap-2">
-    {#each INSTALL_PHASES as phase}
-      {@const state = phaseState(phase.id, job)}
+    {#each phases as phase}
+      {@const state = phaseState(phase.id, job, job.kind)}
       <li
         class="flex min-h-11 items-center justify-between rounded-md border border-ink/10 px-3 py-2 text-sm"
       >

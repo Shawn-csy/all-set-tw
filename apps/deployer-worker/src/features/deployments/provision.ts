@@ -189,7 +189,7 @@ async function stepPrecheck(
   };
 }
 
-async function stepLoadRelease(
+export async function stepLoadRelease(
   env: Env,
   job: DeployJobRow,
   resources: CreatedResources,
@@ -500,7 +500,7 @@ async function stepWriteAccessSecrets(
   };
 }
 
-async function stepApplyMigrations(
+export async function stepApplyMigrations(
   env: Env,
   job: DeployJobRow,
   ctx: { accessToken: string; accountId: string },
@@ -588,7 +588,7 @@ async function stepWriteAppSecrets(
   };
 }
 
-async function stepUploadAssets(
+export async function stepUploadAssets(
   env: Env,
   job: DeployJobRow,
   ctx: { accessToken: string; accountId: string; workerName: string },
@@ -615,7 +615,7 @@ async function stepUploadAssets(
   };
 }
 
-async function stepDeployWorker(
+export async function stepDeployWorker(
   env: Env,
   job: DeployJobRow,
   ctx: { accessToken: string; accountId: string; workerName: string },
@@ -669,7 +669,7 @@ async function stepDeployWorker(
   };
 }
 
-async function stepAttachQueueConsumer(
+export async function stepAttachQueueConsumer(
   ctx: { accessToken: string; accountId: string; workerName: string },
   resources: CreatedResources,
 ) {
@@ -687,7 +687,7 @@ async function stepAttachQueueConsumer(
   };
 }
 
-async function stepAttachCron(
+export async function stepAttachCron(
   env: Env,
   job: DeployJobRow,
   ctx: { accessToken: string; accountId: string; workerName: string },
@@ -704,7 +704,7 @@ async function stepAttachCron(
   return { resources: { ...resources, cronAttached: true }, secrets: {} };
 }
 
-async function stepVerifyInstall(
+export async function stepVerifyInstall(
   ctx: { workerName: string },
   resources: CreatedResources,
 ) {

@@ -1,4 +1,4 @@
-import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { createDrizzle } from "../../db/client";
 import { deployJobs } from "../../db/schema";
 
@@ -97,6 +97,7 @@ export async function listJobsForInstallation(
     .select(jobColumns)
     .from(deployJobs)
     .where(eq(deployJobs.installationId, installationId))
+    .orderBy(desc(deployJobs.updatedAt))
     .all();
 }
 

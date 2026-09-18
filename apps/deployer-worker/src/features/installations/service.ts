@@ -1,7 +1,17 @@
 import { randomToken } from "../../platform/crypto";
 import type { Env, PublicSession } from "../../platform/env";
-import { hasReleaseSource } from "../../platform/release";
-import { listAuthorizedAccounts } from "../../platform/cloudflare";
+import {
+  canUpgradeFrom,
+  hasReleaseSource,
+  loadRelease,
+  localUpgradeRelease,
+  readCurrentRelease,
+} from "../../platform/release";
+import {
+  listAuthorizedAccounts,
+  plannedD1Name,
+  plannedQueueName,
+} from "../../platform/cloudflare";
 import { readAccessToken } from "../auth/service";
 import { AccountNotAuthorizedError } from "../precheck/service";
 import { enqueueDeployJob } from "../deployments/queue";
@@ -31,6 +41,20 @@ export class InstallationNotFoundError extends Error {
   constructor() {
     super("INSTALLATION_NOT_FOUND");
     this.name = "InstallationNotFoundError";
+  }
+}
+
+export class InstallationNotReadyError extends Error {
+  constructor(public readonly code = "INSTALL_NOT_READY") {
+    super(code);
+    this.name = "InstallationNotReadyError";
+  }
+}
+
+export class UpgradeNotAllowedError extends Error {
+  constructor(public readonly code = "UPGRADE_NOT_ALLOWED") {
+    super(code);
+    this.name = "UpgradeNotAllowedError";
   }
 }
 
@@ -110,12 +134,23 @@ export async function createOrReuseInstallation(
     throw new InstallationConflictError();
   }
 
+  const reused = installation.id !== candidate.id;
+  if (
+    reused &&
+    (installation.status === "ready" || installation.status === "update_failed")
+  ) {
+    const jobs = await listJobsForInstallation(env.DB, installation.id);
+    const job = jobs[0];
+    if (!job) throw new Error("Failed to persist deploy job.");
+    return { installation, job, reused: true };
+  }
+
   const job = await createOrReuseJob(env, installation.id, {
     kind: "install",
     targetVersion: input.targetVersion,
     targetDigest: input.targetDigest,
   });
-  return { installation, job, reused: installation.id !== candidate.id };
+  return { installation, job, reused };
 }
 
 export async function createOrReuseJob(
@@ -125,6 +160,8 @@ export async function createOrReuseJob(
     kind: "install" | "update";
     targetVersion: string;
     targetDigest: string;
+    step?: string;
+    createdResources?: string;
   },
 ) {
   const existing = await findActiveJob(env.DB, installationId);
@@ -153,11 +190,12 @@ export async function createOrReuseJob(
     installationId,
     kind: input.kind,
     status: "queued",
-    step: "precheck",
+    step:
+      input.step ?? (input.kind === "update" ? "precheck_update" : "precheck"),
     targetVersion: input.targetVersion,
     targetDigest: input.targetDigest,
     attemptCount: 0,
-    createdResources: "{}",
+    createdResources: input.createdResources ?? "{}",
     createdAt: now,
     updatedAt: now,
   };
@@ -207,6 +245,16 @@ export async function getOwnedInstallation(
   return installation;
 }
 
+export async function getOwnedInstallationDetail(
+  env: Env,
+  session: PublicSession,
+  installationId: string,
+) {
+  const installation = await getOwnedInstallation(env, session, installationId);
+  const jobs = await listJobsForInstallation(env.DB, installation.id);
+  return { installation, job: jobs[0] ?? null };
+}
+
 export async function getOwnedInstallationJob(
   env: Env,
   session: PublicSession,
@@ -226,13 +274,181 @@ export async function resumeOwnedInstallation(
   installationId: string,
 ) {
   const installation = await getOwnedInstallation(env, session, installationId);
+  const jobs = await listJobsForInstallation(env.DB, installation.id);
+  const latest = jobs[0];
+  if (latest?.status === "failed") {
+    await updateJob(env.DB, latest.id, {
+      status: "queued",
+      errorCode: null,
+      updatedAt: new Date().toISOString(),
+    });
+    await enqueueDeployJob(env, latest.id);
+    const job = await getJobById(env.DB, latest.id);
+    if (!job) throw new Error("Failed to persist deploy job.");
+    return { installation, job };
+  }
   if (!installation.targetVersion || !installation.targetDigest) {
     throw new Error("INVALID_REQUEST");
   }
   const job = await createOrReuseJob(env, installation.id, {
-    kind: "install",
-    targetVersion: installation.targetVersion,
-    targetDigest: installation.targetDigest,
+    kind: (latest?.kind as "install" | "update") ?? "install",
+    targetVersion: latest?.targetVersion ?? installation.targetVersion,
+    targetDigest: latest?.targetDigest ?? installation.targetDigest,
+  });
+  return { installation, job };
+}
+
+export async function getOwnedUpdatePlan(
+  env: Env,
+  session: PublicSession,
+  installationId: string,
+) {
+  const installation = await getOwnedInstallation(env, session, installationId);
+  const currentVersion = installation.targetVersion;
+  const currentDigest = installation.targetDigest;
+  if (
+    (installation.status !== "ready" &&
+      installation.status !== "update_failed") ||
+    !currentVersion ||
+    !currentDigest
+  ) {
+    return {
+      available: false,
+      reason: "INSTALL_NOT_READY" as const,
+      currentVersion,
+      currentDigest,
+      targetVersion: null,
+      targetDigest: null,
+      pendingMigrations: [] as string[],
+      interruption: { pauseSync: false, hasMigrations: false },
+    };
+  }
+
+  let target: {
+    version: string;
+    digest: string;
+    source: "r2" | "local_fixture";
+  };
+  try {
+    const latest = await readCurrentRelease(env);
+    const upgrade = localUpgradeRelease(currentVersion);
+    if (latest.source === "local_fixture" && upgrade) {
+      target = upgrade;
+    } else {
+      target = latest;
+    }
+  } catch {
+    return {
+      available: false,
+      reason: "RELEASE_UNAVAILABLE" as const,
+      currentVersion,
+      currentDigest,
+      targetVersion: null,
+      targetDigest: null,
+      pendingMigrations: [] as string[],
+      interruption: { pauseSync: false, hasMigrations: false },
+    };
+  }
+
+  if (target.version === currentVersion) {
+    return {
+      available: false,
+      reason: "UP_TO_DATE" as const,
+      currentVersion,
+      currentDigest,
+      targetVersion: target.version,
+      targetDigest: target.digest,
+      pendingMigrations: [] as string[],
+      interruption: { pauseSync: false, hasMigrations: false },
+    };
+  }
+
+  const currentReleaseArtifact = await loadRelease(
+    env,
+    currentVersion,
+    currentDigest,
+  );
+  const targetRelease = await loadRelease(env, target.version, target.digest);
+  if (!canUpgradeFrom(currentVersion, targetRelease)) {
+    return {
+      available: false,
+      reason: "UPGRADE_NOT_ALLOWED" as const,
+      currentVersion,
+      currentDigest,
+      targetVersion: target.version,
+      targetDigest: target.digest,
+      pendingMigrations: [] as string[],
+      interruption: { pauseSync: true, hasMigrations: true },
+    };
+  }
+  const applied = new Set(
+    currentReleaseArtifact.migrations.map((file) => file.name),
+  );
+  const pendingMigrations = targetRelease.migrations
+    .map((file) => file.name)
+    .filter((name) => !applied.has(name));
+  return {
+    available: true,
+    reason: null,
+    currentVersion,
+    currentDigest,
+    targetVersion: target.version,
+    targetDigest: target.digest,
+    pendingMigrations,
+    interruption: {
+      pauseSync: pendingMigrations.length > 0,
+      hasMigrations: pendingMigrations.length > 0,
+    },
+  };
+}
+
+export async function startOwnedUpdate(
+  env: Env,
+  session: PublicSession,
+  installationId: string,
+  input: { targetVersion: string; targetDigest: string },
+) {
+  if (
+    !VERSION_PATTERN.test(input.targetVersion) ||
+    !DIGEST_PATTERN.test(input.targetDigest)
+  ) {
+    throw new Error("INVALID_REQUEST");
+  }
+  const installation = await getOwnedInstallation(env, session, installationId);
+  if (
+    installation.status !== "ready" &&
+    installation.status !== "update_failed"
+  ) {
+    throw new InstallationNotReadyError();
+  }
+  if (!installation.targetVersion || !installation.targetDigest) {
+    throw new InstallationNotReadyError();
+  }
+  if (installation.targetVersion === input.targetVersion) {
+    throw new InstallationNotReadyError("UP_TO_DATE");
+  }
+  const release = await loadRelease(
+    env,
+    input.targetVersion,
+    input.targetDigest,
+  );
+  if (!canUpgradeFrom(installation.targetVersion, release)) {
+    throw new UpgradeNotAllowedError();
+  }
+  const job = await createOrReuseJob(env, installation.id, {
+    kind: "update",
+    targetVersion: input.targetVersion,
+    targetDigest: input.targetDigest,
+    createdResources: JSON.stringify({
+      d1DatabaseId: installation.d1DatabaseId,
+      queueId: installation.queueId,
+      workerScriptId: installation.workerScriptId,
+      accessAppId: installation.accessAppId,
+      d1DatabaseName: plannedD1Name(installation.workerName),
+      queueName: plannedQueueName(installation.workerName),
+      installedVersion: installation.targetVersion,
+      installedDigest: installation.targetDigest,
+    }),
   });
   return { installation, job };
 }

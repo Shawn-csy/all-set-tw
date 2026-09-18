@@ -23,6 +23,9 @@ export type FakeCloudflareState = {
   writes: Array<{ method: string; path: string }>;
   expireOnWrite?: boolean;
   conflictD1?: boolean;
+  deliveryPaused: Set<string>;
+  pendingMessages: Map<string, number>;
+  bookmarks: Map<string, string>;
 };
 
 export function createFakeCloudflare(options?: {
@@ -57,6 +60,9 @@ export function createFakeCloudflare(options?: {
     workersDev: new Set(),
     writes: [],
     expireOnWrite: options?.expireOnWrite,
+    deliveryPaused: new Set(),
+    pendingMessages: new Map(),
+    bookmarks: new Map(),
   };
 }
 
@@ -134,6 +140,22 @@ export async function handleCloudflareApi(
     return Response.json({ result: [{ results: [], success: true }] });
   }
 
+  const bookmark = path.match(
+    /^\/accounts\/[^/]+\/d1\/database\/([^/]+)\/bookmark$/,
+  );
+  if (bookmark && method === "POST") {
+    const id = `bm-${crypto.randomUUID()}`;
+    state.bookmarks.set(bookmark[1]!, id);
+    return Response.json({ result: { bookmark: id } });
+  }
+
+  const restore = path.match(
+    /^\/accounts\/[^/]+\/d1\/database\/([^/]+)\/time_travel\/restore$/,
+  );
+  if (restore && method === "POST") {
+    return Response.json({ result: { success: true } });
+  }
+
   const listQueues = path.match(/^\/accounts\/[^/]+\/queues$/);
   if (listQueues && method === "GET") {
     return Response.json({
@@ -173,6 +195,33 @@ export async function handleCloudflareApi(
     };
     state.consumers.push(created);
     return Response.json({ result: { id: created.id } });
+  }
+
+  const pauseQueue = path.match(
+    /^\/accounts\/[^/]+\/queues\/([^/]+)\/pause_delivery$/,
+  );
+  if (pauseQueue && method === "POST") {
+    state.deliveryPaused.add(pauseQueue[1]!);
+    return Response.json({ result: { delivery_paused: true } });
+  }
+
+  const resumeQueue = path.match(
+    /^\/accounts\/[^/]+\/queues\/([^/]+)\/resume_delivery$/,
+  );
+  if (resumeQueue && method === "POST") {
+    state.deliveryPaused.delete(resumeQueue[1]!);
+    return Response.json({ result: { delivery_paused: false } });
+  }
+
+  const queueById = path.match(/^\/accounts\/[^/]+\/queues\/([^/]+)$/);
+  if (queueById && method === "GET") {
+    const queueId = queueById[1]!;
+    return Response.json({
+      result: {
+        delivery_paused: state.deliveryPaused.has(queueId),
+        pending_messages: state.pendingMessages.get(queueId) ?? 0,
+      },
+    });
   }
 
   const idps = path.match(/^\/accounts\/[^/]+\/access\/identity_providers$/);
@@ -239,6 +288,16 @@ export async function handleCloudflareApi(
   const secrets = path.match(
     /^\/accounts\/[^/]+\/workers\/scripts\/([^/]+)\/secrets$/,
   );
+  if (secrets && method === "GET") {
+    const workerName = secrets[1]!;
+    const names = [...state.secrets.keys()]
+      .filter((key) => key.startsWith(`${workerName}:`))
+      .map((key) => ({
+        name: key.slice(workerName.length + 1),
+        type: "secret_text",
+      }));
+    return Response.json({ result: names });
+  }
   if (secrets && method === "PUT") {
     const workerName = secrets[1]!;
     const body = JSON.parse(String(init?.body ?? "{}")) as {
@@ -247,6 +306,14 @@ export async function handleCloudflareApi(
     };
     state.secrets.set(`${workerName}:${body.name}`, body.text ?? "");
     return Response.json({ result: { name: body.name, type: "secret_text" } });
+  }
+
+  const deleteSecret = path.match(
+    /^\/accounts\/[^/]+\/workers\/scripts\/([^/]+)\/secrets\/([^/]+)$/,
+  );
+  if (deleteSecret && method === "DELETE") {
+    state.secrets.delete(`${deleteSecret[1]}:${deleteSecret[2]}`);
+    return new Response(null, { status: 204 });
   }
 
   const assets = path.match(

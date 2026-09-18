@@ -24,6 +24,7 @@ import {
   runInstallStep,
   writeJobSecrets,
 } from "./provision";
+import { nextUpdateStep, normalizeUpdateStep, runUpdateStep } from "./update";
 import { parseCreatedResources } from "./resources";
 
 export type QueueOutcome = "ack" | "retry";
@@ -87,7 +88,10 @@ export async function processDeployJob(
     return "ack";
   }
 
-  const step = normalizeInstallStep(current.step);
+  const isUpdate = current.kind === "update";
+  const step = isUpdate
+    ? normalizeUpdateStep(current.step)
+    : normalizeInstallStep(current.step);
   const resources = parseCreatedResources(current.createdResources);
   let secrets;
   try {
@@ -98,15 +102,25 @@ export async function processDeployJob(
   }
 
   try {
-    const result = await runInstallStep({
-      env,
-      accessToken,
-      installation,
-      job: current,
-      step,
-      resources,
-      secrets,
-    });
+    const result = isUpdate
+      ? await runUpdateStep({
+          env,
+          accessToken,
+          installation,
+          job: current,
+          step: normalizeUpdateStep(current.step),
+          resources,
+          secrets,
+        })
+      : await runInstallStep({
+          env,
+          accessToken,
+          installation,
+          job: current,
+          step: normalizeInstallStep(current.step),
+          resources,
+          secrets,
+        });
     const mergedSecrets =
       step === "finalize" ? {} : { ...secrets, ...result.secrets };
     const encryptedSecrets = await writeJobSecrets(
@@ -132,11 +146,17 @@ export async function processDeployJob(
         d1DatabaseId: result.resources.d1DatabaseId ?? null,
         queueId: result.resources.queueId ?? null,
         accessAppId: result.resources.accessAppId ?? null,
+        targetVersion: current.targetVersion,
+        targetDigest: current.targetDigest,
         updatedAt: nowIso,
       });
       return "ack";
     }
-    const nextStep = result.stayOnStep ? step : nextInstallStep(step);
+    const nextStep = result.stayOnStep
+      ? step
+      : isUpdate
+        ? nextUpdateStep(normalizeUpdateStep(current.step))
+        : nextInstallStep(normalizeInstallStep(current.step));
     await updateJob(env.DB, jobId, {
       status: "queued",
       step: nextStep ?? step,
@@ -154,7 +174,7 @@ export async function processDeployJob(
     await updateInstallationStatus(
       env.DB,
       installation.id,
-      "installing",
+      isUpdate ? "updating" : "installing",
       nowIso,
     );
     await enqueueDeployJob(env, jobId);
@@ -185,7 +205,15 @@ export async function processDeployJob(
         : error instanceof CloudflareApiError
           ? error.code
           : "UPSTREAM";
-    await failJob(env, installation.id, jobId, code, now, step);
+    await failJob(
+      env,
+      installation.id,
+      jobId,
+      code,
+      now,
+      step,
+      isUpdate ? "update_failed" : "failed",
+    );
     return "ack";
   }
 }
@@ -197,6 +225,7 @@ async function failJob(
   errorCode: string,
   now: Date,
   step?: string,
+  installationStatus = "failed",
 ) {
   await updateJob(env.DB, jobId, {
     status: "failed",
@@ -209,7 +238,7 @@ async function failJob(
   await updateInstallationStatus(
     env.DB,
     installationId,
-    "failed",
+    installationStatus,
     now.toISOString(),
   );
 }

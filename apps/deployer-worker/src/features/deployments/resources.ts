@@ -25,6 +25,14 @@ export type CreatedResources = {
   verified?: boolean;
   releaseVersion?: string;
   releaseDigest?: string;
+  restoreBookmark?: string;
+  maintenanceEntered?: boolean;
+  cronDisabled?: boolean;
+  inflightClear?: boolean;
+  secretsVerified?: boolean;
+  installedVersion?: string;
+  installedDigest?: string;
+  pendingMigrations?: string[];
 };
 
 export type JobSecrets = {

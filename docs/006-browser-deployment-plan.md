@@ -1,6 +1,6 @@
 # 全網頁部署與更新實作計畫
 
-狀態：第 0 階段部分線上實測完成；第 1 階段離線版本包與 CI artifact 已實作，R2 發布未接；第 2 階段部署 workspace／session／預檢／工作基礎已落地；第 3 階段首次安裝寫入編排與進度畫面已接上（測試以 mock Cloudflare API，未對正式帳戶寫入）。更新日期：2026-09-18。
+狀態：第 0 階段部分線上實測完成；第 1 階段離線版本包與 CI artifact 已實作，R2 發布未接；第 2 階段部署 workspace／session／預檢／工作基礎已落地；第 3 階段首次安裝寫入編排與進度畫面已接上；第 4 階段網頁更新（版本比較、維護模式、migration、復原點）已接上（測試以 mock Cloudflare API，未對正式帳戶寫入）。更新日期：2026-09-18。
 
 本文件規劃免 GitHub 帳號、免下載、免終端機的部署流程，不代表現有功能已支援。第 0 階段發現見 [`docs/006-stage0-capability-verification.md`](./006-stage0-capability-verification.md)。2026-09-18 已在使用者指定帳戶建立獨立測試資源，實測範圍與未完成項目見能力驗證紀錄末節。
 
@@ -200,4 +200,5 @@ flowchart LR
 - 已實測 D1 migration、代表性回滾、Worker bindings、Queue consumer、Cron、Access 建立及匿名攔截。OAuth client 建立被目前 MCP 憑證的 Authentication error 阻擋，使用者登入及實際 token 流程尚待完成。
 - 已新增 `apps/deployer-web` 與 `apps/deployer-worker`：OAuth Authorization Code + PKCE session、帳戶預檢、安裝／工作 D1 schema、Queue consumer。跨帳戶存取回 404／403，重送同一 Worker 名稱不會建立第二筆安裝；token 過期的工作進入 `awaiting_reauth`。
 - 第 3 階段已接上首次安裝步驟機：Queue 每次 invocation 只跑一步，依序建立 D1／Queue／bootstrap Worker／Access／migrations／secrets／assets／正式 Worker／consumer／Cron，並提供「準備環境 → 設定登入保護 → 安裝版本 → 驗證完成」進度畫面。沒有 R2 版本包且非本機 fixture 時工作進入 `awaiting_release`，不對目標帳戶寫入。金鑰產生一次並加密暫存，重試不輪替；成功後清除部署服務上的副本。測試以 mock Cloudflare API 覆蓋，未對正式 `taiwan-fin-hub` 資源寫入。
+- 第 4 階段已接上網頁更新：ready 安裝可讀取 update-plan、比較 `allowedUpgradeFrom`、進入維護模式（暫停 Queue delivery、清空 Cron、寫入 `DEPLOY_MAINTENANCE`）、等待 inflight、建立 D1 Time Travel bookmark、只套用尚未記入 ledger 的 migration、檢查既有 secrets 而不輪替金鑰，再部署新版本並恢復同步。失敗將安裝標為 `update_failed` 並保留復原點，不自動倒跑 SQL。金融 Worker 在 `DEPLOY_MAINTENANCE` 期間拒絕新的手動同步，也不啟動新的排程 tick；已在途的發票／集保分段會做完當下這段、不再 enqueue continuation。本機 fixture 可從 `dev-local`／`v0.1.0` 升到 `dev-local-2`（含 `0002_probe_note.sql`）。測試仍以 mock Cloudflare API 覆蓋。
 - 正式 OAuth client、R2 latest 發布，以及非維護者帳戶的端到端登入驗證仍屬後續階段。不能將目前成果描述為可供一般使用者一鍵部署。
