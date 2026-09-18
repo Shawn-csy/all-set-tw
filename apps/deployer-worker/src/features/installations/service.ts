@@ -5,6 +5,7 @@ import {
   hasReleaseSource,
   loadRelease,
   localUpgradeRelease,
+  LOCAL_FIXTURE_NEXT_VERSION,
   readCurrentRelease,
 } from "../../platform/release";
 import {
@@ -334,6 +335,15 @@ export async function getOwnedUpdatePlan(
     const upgrade = localUpgradeRelease(currentVersion);
     if (latest.source === "local_fixture" && upgrade) {
       target = upgrade;
+    } else if (
+      latest.source === "local_fixture" &&
+      currentVersion === LOCAL_FIXTURE_NEXT_VERSION
+    ) {
+      target = {
+        version: currentVersion,
+        digest: currentDigest,
+        source: "local_fixture",
+      };
     } else {
       target = latest;
     }

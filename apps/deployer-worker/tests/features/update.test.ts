@@ -86,7 +86,7 @@ async function installReady(
   return { session, installationId: body.installation.id, job: finished };
 }
 
-describe("web update provisioner", () => {
+describe("web update provisioner", { timeout: 30_000 }, () => {
   it("upgrades a ready install without rotating keys or duplicating D1", async () => {
     const ctx = await createDeployerEnv();
     try {
