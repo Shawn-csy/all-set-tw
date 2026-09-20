@@ -1,6 +1,6 @@
 # 第 0 階段能力驗證紀錄
 
-狀態：文件驗證及隔離資源的部分線上實測完成；OAuth consent／token 與使用者登入驗證待完成。更新日期：2026-09-18。
+狀態：文件驗證及隔離資源的部分線上實測完成；部署完整 scopes 與 Access 使用者登入驗證待完成；2026-09-19 已完成唯讀 client 的真實 PKCE consent／token 交換，管理 API CORS 仍失敗，結果見文末。更新日期：2026-09-19。
 
 本文件對應 `docs/006-browser-deployment-plan.md` 第 0 階段。來源為官方文件、Cloudflare Docs MCP、公開 REST schema，以及本 repo 的 `wrangler.toml`、`packages/db/migrations`、Wrangler 開源 migration 實作。2026-09-17 的文件驗證沒有修改線上資源。2026-09-18 依使用者指定帳戶建立獨立測試資源，沒有改動原有 `taiwan-fin-hub`。以下舊章節保留當時結論，最新實測差異以文末紀錄為準。
 
@@ -285,3 +285,53 @@ D1 測試使用空資料庫及合成 probe 資料，證明目前 API 的代表�
 測試資源的精確 ID 與清理進度記在本機忽略的 `.wrangler/browser-deployment-spike.json`；不將憑證存入該檔。測試用 Worker／Access 暫留供登入驗證，後續完成後清理；不建立背景自動清理或正式更新排程。
 
 已完成的 D1／Queue／consumer 實測資源已刪除；測試 Worker 已移除這些 bindings 及排程，僅保留固定文字供 Access 登入驗證。原有 Worker、資料庫與排程未修改。
+
+## 2026-09-19：純前端部署可行性補驗
+
+首輪僅查官方文件、公開 OpenID 設定、OAuth API schema，以及執行 HTTP OPTIONS 與瀏覽器唯讀探測。後續由使用者在 Dashboard 完成獨立唯讀 OAuth client 建立與授權，真實結果見本節末尾；未建立 Worker／D1／Queue 或執行部署。
+
+### OAuth 不必依賴 client secret
+
+[現行官方文件](https://developers.cloudflare.com/fundamentals/oauth/create-an-oauth-client/#choose-a-flow)明確支援瀏覽器 SPA 使用 Authorization Code + PKCE S256，`token_endpoint_auth_method: "none"`，不需要 client secret。Cloudflare MCP 的建立 client schema 也包含 `none` 與 `allowed_cors_origins`；線上 `https://dash.cloudflare.com/.well-known/openid-configuration` 同時列出 `none`、`S256`。
+
+因此，第 1.1 節的「後端換 token」是原設計選擇，不是所有第三方 OAuth client 的必要限制。上述證據尚不代表已完成真實 consent／token 交換：本次 MCP 列出 OAuth clients 仍回 `10000 Authentication error`，未取得可供測試的 client 設定。
+
+OpenID 設定的 authorization endpoint 為 `https://dash.cloudflare.com/oauth2/auth`；目前程式使用 `/oauth2/authorize`。兩者是否相容尚未實測，正式 OAuth 驗證前需核對，本次未修改程式。
+
+### 瀏覽器直連管理 API 未通過 CORS
+
+以 Playwright Chromium 從 `http://127.0.0.1:5173` 發出帶 `Authorization: Bearer invalid-cors-probe` 的 GET，測試 `/memberships` 與目前 MCP 帳戶的 `/workers/subdomain`。兩者均在 OPTIONS 預檢階段被瀏覽器阻擋，錯誤為缺少 `Access-Control-Allow-Origin`；JavaScript 得到 `TypeError: Failed to fetch`，實際 GET 未送出。
+
+以 HTTP OPTIONS 再核對上述兩條路徑，Origin 分別使用本機來源與 `https://example.com`，均回 400、錯誤碼 9106，且沒有 CORS 允許標頭。瀏覽器預檢本來就不攜帶 Bearer token，所以不能透過換成有效 token 直接解決這次預檢失敗。
+
+另以不存在的全零資源 ID，預檢 D1 建立／query、Queue、Access Application、Worker PUT、asset upload session 與 asset upload；皆未取得 CORS 允許標頭。這些是路徑探測，不能當成真實資源或上傳 session 的完整驗證。OAuth token OPTIONS 回 403、沒有 CORS 標頭，但未註冊測試 origin，不能據此否定官方的 SPA PKCE 支援。
+
+尚未驗證將真實安裝網站加入 OAuth client 的 `allowed_cors_origins` 後，管理 API 是否改變 CORS 行為；不能將目前結果推廣為所有已註冊來源都不支援。
+
+### 架構判斷與未完成項目
+
+- **已確認：** OAuth 協議允許免 client secret；一般靜態網頁直接呼叫本次測試的管理 API 會被 CORS 預檢阻擋。
+- **目前判斷：** 尚不能移除部署後端並承諾純前端可用。可以先評估受限的 API 轉接後端；CORS 結果本身不代表一定需要部署 D1、Queue 或完整工作編排。
+- **版本來源：** 現行版本載入依賴 Worker 的 `RELEASE_BUCKET` binding，不能原封不動搬到瀏覽器。純前端方案需另外提供可讀取的 HTTP 版本產物，並保留 digest 驗證；本次未發布產物或開放 bucket。
+- **完成檢查：** 現行 `readAnonymousUrl` 會讀取跨來源 redirect 的狀態與 Location；瀏覽器的 manual redirect 無法原樣提供這些資訊，亦需調整或留在後端。
+- **仍待實測：** 合法 OAuth client 與允許來源的 consent／token、授權後的管理 API CORS、真實 Direct Upload、完整隔離安裝、重新整理及手機背景中斷後的恢復。這次沒有執行首次安裝或更新。
+
+下一個決策點是先完成註冊 origin 的 OAuth＋管理 API 瀏覽器測試；若管理 API 仍阻擋跨來源，就保留受限後端，再依是否要求關閉分頁後繼續部署，決定工作持久化與 Queue 的必要範圍。
+
+### 同日後續：已註冊來源與真實 PKCE 授權結果
+
+使用者在先前隔離驗證的帳戶建立 private client `all-set-pkce-readonly-probe-20260919`，並親自完成 consent。設定如下：
+
+- Response type：Code；grant：Authorization Code；認證方法：None (PKCE)。
+- Callback：`http://localhost:5173/callback`；Allowed CORS Origins：`http://localhost:5173`。
+- 僅 `memberships.read`、`workers-scripts.read`；未要求寫入、D1、Access 或 refresh token 權限。
+
+本機靜態驗證頁直接從 Chrome 呼叫 Cloudflare，沒有 API proxy。state 驗證通過，`/oauth2/auth` 成功導向 consent；回到 callback 後，瀏覽器 POST `/oauth2/token` 回 **HTTP 200**，成功取得 access token，證實此註冊來源可使用免 client secret 的 PKCE。
+
+接著以真實 token 呼叫 `https://api.cloudflare.com/client/v4/memberships`，仍失敗。Chrome DevTools Console 明確顯示 **OPTIONS 預檢缺少 Access-Control-Allow-Origin**，不是 API 回傳的權限不足。驗證頁顯示的「可讀帳戶數：0」是請求失敗後的預設顯示，不代表帳戶沒有 membership。因第一步失敗，後續 workers.dev 查詢未執行。
+
+**更新結論：** 設定 OAuth client 的允許來源可讓 token 交換成功，但未解決本次管理 API 的 CORS。現有使用 Bearer header 直連管理 API 的純前端方案未通過驗證；下一步應評估受限 API 轉接後端。這個結果不要求一定採用 D1／Queue 工作編排，也不代表已測完所有端點或 HTTPS 正式來源。
+
+測試 token 未顯示、未寫入 repo 或伺服器 log；驗證後已按頁面的「清除本頁憑證」，清除記憶體 token。**尚未撤銷 Cloudflare 端授權或刪除測試 client**，清除本機副本不等於撤銷。測試頁與無 request log 的本機 server 位於 Git 忽略目錄 `.wrangler/pkce-probe/`。
+
+仍未完成：完整部署 scopes、API proxy、Direct Upload、隔離首次安裝／更新、Access 登入，以及手機背景中斷恢復。
