@@ -12,7 +12,9 @@ DEPLOYMENT_MODE = "local-primary"
 LOCAL_DEV_MODE = "true"
 # During parallel validation use the dedicated local hostname. After the
 # final DNS cutover this may be reduced to https://finance.shawnup.com.
-APP_ORIGINS = "https://finance-local.shawnup.com https://finance.shawnup.com"
+# Cloudflare Tunnel terminates TLS before forwarding to the local Worker. The
+# browser-facing hostname can therefore arrive here with either scheme.
+APP_ORIGINS = "https://finance-local.shawnup.com http://finance-local.shawnup.com https://finance.shawnup.com http://finance.shawnup.com"
 
 [triggers]
 crons = ["*/10 * * * *"]
