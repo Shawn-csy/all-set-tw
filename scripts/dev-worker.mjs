@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
@@ -12,6 +12,7 @@ const projectRoot = path.resolve(
 );
 const workerDirectory = path.join(projectRoot, "apps", "worker");
 const relayToken = randomBytes(32).toString("hex");
+const LOCAL_CONFIG_KEYCHAIN_SERVICE = "taiwan-fin-hub/config-encryption-key";
 
 const relay = createServer(async (request, response) => {
   try {
@@ -79,6 +80,7 @@ const wranglerArgs = extraWranglerArgs.length
 const wranglerCwd = extraWranglerArgs.length ? projectRoot : workerDirectory;
 
 console.log(`CTBC local relay ready on 127.0.0.1:${address.port}`);
+const localConfigKey = loadLocalConfigKey();
 const wrangler = spawn(
   "npx",
   [
@@ -88,6 +90,9 @@ const wrangler = spawn(
     `CTBC_API_RELAY_URL:http://127.0.0.1:${address.port}/ctbc`,
     "--var",
     `CTBC_API_RELAY_TOKEN:${relayToken}`,
+    ...(localConfigKey
+      ? ["--var", `CONFIG_ENCRYPTION_KEY:${localConfigKey}`]
+      : []),
   ],
   {
     cwd: wranglerCwd,
@@ -135,4 +140,24 @@ function isStringRecord(value) {
     !Array.isArray(value) &&
     Object.values(value).every((item) => typeof item === "string")
   );
+}
+
+function loadLocalConfigKey() {
+  const configuredKey = process.env.CONFIG_ENCRYPTION_KEY?.trim();
+  if (configuredKey) return configuredKey;
+  if (process.platform !== "darwin") return "";
+
+  const result = spawnSync(
+    "security",
+    [
+      "find-generic-password",
+      "-a",
+      process.env.USER ?? "",
+      "-s",
+      LOCAL_CONFIG_KEYCHAIN_SERVICE,
+      "-w",
+    ],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+  );
+  return result.status === 0 ? result.stdout.trim() : "";
 }
