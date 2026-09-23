@@ -19,6 +19,7 @@
     "test:e2e": "npm run test:e2e -w @taiwan-fin-hub/web",
     "verify:web": "npm run typecheck -w @taiwan-fin-hub/web && npm run test:unit -w @taiwan-fin-hub/web && npm run test:e2e -w @taiwan-fin-hub/web && npm run build -w @taiwan-fin-hub/web",
     "dev": "npm run dev -w @taiwan-fin-hub/worker",
+    "dev:orbstack": "node scripts/dev-worker-orbstack.mjs",
     "deploy": "npm run db:migrate:remote && XDG_CONFIG_HOME=.wrangler-config node scripts/deploy-with-vapid.mjs",
     "db:migrate:local": "XDG_CONFIG_HOME=.wrangler-config wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "XDG_CONFIG_HOME=.wrangler-config wrangler d1 migrations apply DB --remote",

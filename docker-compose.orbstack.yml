@@ -1,0 +1,37 @@
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: docker/orbstack/worker.Dockerfile
+    container_name: taiwan-fin-hub-local-worker
+    init: true
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      TZ: Asia/Taipei
+      X_BROWSER_HEADFUL: "false"
+      WRANGLER_DEV_IP: 0.0.0.0
+    volumes:
+      - ./apps/worker/.dev.vars:/workspace/apps/worker/.dev.vars.base:ro
+      - ./apps/worker/.wrangler:/workspace/apps/worker/.wrangler
+      - ./.wrangler-config:/workspace/.wrangler-config
+    secrets:
+      - config_encryption_key
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:8787/api/runtime')
+          .then((response) => process.exit(response.ok ? 0 : 1))
+          .catch(() => process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: "no"
+
+secrets:
+  config_encryption_key:
+    file: ${CONFIG_ENCRYPTION_KEY_FILE:?Run npm run dev:orbstack so the Keychain secret can be prepared}

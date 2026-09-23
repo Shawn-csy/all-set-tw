@@ -1,0 +1,16 @@
+.git
+.gitignore
+.wrangler-config
+**/.wrangler
+**/.dev.vars
+**/.env
+**/.env.*
+!**/.env.example
+node_modules
+**/node_modules
+dist
+**/dist
+wrangler.private.toml
+*.log
+test-results
+**/test-results

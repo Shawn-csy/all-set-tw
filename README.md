@@ -168,6 +168,17 @@ npm run build
 
 本機 relay、資料庫遷移與既有 D1 部署方式請參考[進階部署與更新](docs/005-deployment.md)。
 
+### 使用 OrbStack 容器執行
+
+macOS 也可以用 OrbStack 執行完整的本地 Worker；容器會保留本地 D1 狀態，並只將
+`127.0.0.1:8787` 提供給主機上的 Cloudflare Tunnel：
+
+```bash
+npm run dev:orbstack
+```
+
+此指令會從 macOS Keychain 取得 `CONFIG_ENCRYPTION_KEY`，以暫時 Docker Secret 傳入容器，停止後自動清除。請不要直接執行 `docker compose up`，因為它不會自動準備金鑰 Secret。完整說明請參考[OrbStack 本地 Worker](docs/007-orbstack-local-worker.md)。
+
 ## 地端優先版本
 
 若要讓地端資料庫成為日常主資料、再定期備份到雲端 D1，請使用 `local-first-backup` 分支。這個版本的地端 Worker 負責頁面、銀行／發票同步與所有寫入；雲端 Worker 設為唯讀備份模式，不會啟動排程或 Queue 同步。完整設定與還原流程請參考[地端優先與雲端備份](docs/006-local-first-backup.md)。

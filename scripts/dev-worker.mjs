@@ -76,6 +76,7 @@ const dashDash = process.argv.indexOf("--");
 const extraWranglerArgs =
   dashDash === -1 ? [] : process.argv.slice(dashDash + 1);
 const wranglerCwd = extraWranglerArgs.length ? projectRoot : workerDirectory;
+const wranglerDevIp = process.env.WRANGLER_DEV_IP ?? "127.0.0.1";
 
 console.log(`CTBC local relay ready on 127.0.0.1:${address.port}`);
 const localConfigKey = loadLocalConfigKey();
@@ -94,20 +95,24 @@ const effectiveWranglerArgs = extraWranglerArgs.length
       "--var",
       `CTBC_API_RELAY_TOKEN:${relayToken}`,
     ]
-  : ["dev", "-c", "wrangler.local.toml", "--port", "8787"];
-const wrangler = spawn(
-  "npx",
-  ["wrangler", ...effectiveWranglerArgs],
-  {
-    cwd: wranglerCwd,
-    env: {
-      ...process.env,
-      X_BROWSER_HEADFUL: process.env.X_BROWSER_HEADFUL ?? "true",
-      XDG_CONFIG_HOME: path.join(projectRoot, ".wrangler-config"),
-    },
-    stdio: "inherit",
+  : [
+      "dev",
+      "-c",
+      "wrangler.local.toml",
+      "--ip",
+      wranglerDevIp,
+      "--port",
+      "8787",
+    ];
+const wrangler = spawn("npx", ["wrangler", ...effectiveWranglerArgs], {
+  cwd: wranglerCwd,
+  env: {
+    ...process.env,
+    X_BROWSER_HEADFUL: process.env.X_BROWSER_HEADFUL ?? "true",
+    XDG_CONFIG_HOME: path.join(projectRoot, ".wrangler-config"),
   },
-);
+  stdio: "inherit",
+});
 
 let stopping = false;
 const stop = (signal) => {
