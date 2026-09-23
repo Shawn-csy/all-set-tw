@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: docker/orbstack/worker.Dockerfile
-    container_name: taiwan-fin-hub-local-worker
+    container_name: finance
     init: true
     ports:
       - "127.0.0.1:8787:8787"

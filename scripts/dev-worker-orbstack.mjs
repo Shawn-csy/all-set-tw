@@ -74,7 +74,7 @@ try {
   });
   if (exitCode === 0) {
     console.log(
-      "OrbStack local Worker is running detached: taiwan-fin-hub-local-worker",
+      "OrbStack local Worker is running detached: finance",
     );
   }
   process.exitCode = exitCode;
