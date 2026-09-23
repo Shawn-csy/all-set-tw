@@ -29,6 +29,14 @@ npm run db:migrate:local -w @taiwan-fin-hub/worker
 
 `wrangler.local.toml` 使用本地模擬 D1，並將 `DEPLOYMENT_MODE` 設為 `local-primary`。不要在這個檔案使用正式 D1 的 `database_id` 或 `remote = true`。
 
+若要以目前雲端資料作為地端初始資料，先執行一次還原：
+
+```bash
+npm run restore:local -- --confirm
+```
+
+這會以雲端 D1 快照覆蓋地端 D1；若地端已有尚未備份的資料，請不要執行此指令。
+
 啟動地端 Worker：
 
 ```bash

@@ -171,6 +171,83 @@ export async function backupLocalD1({ confirm = false } = {}) {
   }
 }
 
+export async function restoreCloudD1ToLocal({ confirm = false } = {}) {
+  if (!confirm) {
+    throw new Error(
+      "This operation replaces the local primary database. Re-run with --confirm after checking both Wrangler configurations.",
+    );
+  }
+
+  const localConfig = configPath(
+    "LOCAL_WRANGLER_CONFIG",
+    "apps/worker/wrangler.local.toml",
+  );
+  const remoteConfig = configPath(
+    "REMOTE_WRANGLER_CONFIG",
+    "wrangler.private.toml",
+  );
+  const localDatabase = process.env.LOCAL_D1_NAME?.trim() || "DB";
+  const remoteDatabase = process.env.REMOTE_D1_NAME?.trim() || "DB";
+  const workingDirectory = await mkdtemp(
+    join(tmpdir(), "taiwan-fin-hub-restore-"),
+  );
+  const remoteExportPath = join(workingDirectory, "cloud-data.sql");
+  const restorePath = join(workingDirectory, "restore.sql");
+
+  try {
+    console.log("[restore] Applying migrations to the local primary database.");
+    await runWrangler([
+      "d1",
+      "migrations",
+      "apply",
+      localDatabase,
+      "--local",
+      "--config",
+      localConfig,
+    ]);
+
+    console.log("[restore] Exporting the cloud backup data.");
+    await runWrangler([
+      "d1",
+      "export",
+      remoteDatabase,
+      "--remote",
+      "--no-schema",
+      "--output",
+      remoteExportPath,
+      "--skip-confirmation",
+      "--config",
+      remoteConfig,
+    ]);
+
+    const remoteExport = await readFile(remoteExportPath, "utf8");
+    if (!remoteExport.trim()) {
+      throw new Error(
+        "The cloud backup export was empty; local D1 was not changed.",
+      );
+    }
+    await writeFile(restorePath, buildRestoreSql(remoteExport), "utf8");
+
+    console.log(
+      "[restore] Replacing local primary data from the cloud snapshot.",
+    );
+    await runWrangler([
+      "d1",
+      "execute",
+      localDatabase,
+      "--local",
+      "--file",
+      restorePath,
+      "--yes",
+      "--config",
+      localConfig,
+    ]);
+    console.log("[restore] Cloud backup restored to local D1.");
+  } finally {
+    await rm(workingDirectory, { recursive: true, force: true });
+  }
+}
+
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href

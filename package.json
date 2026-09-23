@@ -24,6 +24,7 @@
     "db:migrate:remote": "XDG_CONFIG_HOME=.wrangler-config wrangler d1 migrations apply DB --remote",
     "backup:local": "node scripts/backup-local-d1.mjs",
     "backup:watch": "node scripts/watch-local-d1-backup.mjs",
+    "restore:local": "node scripts/restore-cloud-d1.mjs",
     "db:schema:docs": "node scripts/generate-database-schema.mjs"
   },
   "cloudflare": {
