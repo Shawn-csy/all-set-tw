@@ -22,7 +22,12 @@ import { connectorContextMiddleware } from "./middleware/connector-context";
 import { requestSecurityMiddleware } from "./middleware/request-security";
 import type { Env, ScheduledSyncQueueMessage } from "./platform/env";
 import { honoFactory } from "./platform/hono";
-import { apiErrorResponse, demoReadOnlyMiddleware } from "./platform/http";
+import {
+  apiErrorResponse,
+  cloudBackupReadOnlyMiddleware,
+  demoReadOnlyMiddleware,
+  isCloudBackupMode,
+} from "./platform/http";
 
 export const app = honoFactory.createApp();
 export const api = honoFactory.createApp();
@@ -30,6 +35,7 @@ export const api = honoFactory.createApp();
 api.use("*", accessMiddleware);
 api.use("*", requestSecurityMiddleware);
 api.use("*", demoReadOnlyMiddleware);
+api.use("*", cloudBackupReadOnlyMiddleware);
 api.use("/connectors/:connectorId/*", connectorContextMiddleware);
 
 api.route("/", manualAssetRoutes);
@@ -55,9 +61,14 @@ app.get("*", async (c) => c.env.ASSETS.fetch(c.req.raw));
 export default {
   fetch: app.fetch,
   async scheduled(_controller, env, ctx) {
+    if (isCloudBackupMode(env)) return;
     ctx.waitUntil(enqueueScheduledSync(env));
   },
   async queue(batch: MessageBatch<ScheduledSyncQueueMessage>, env) {
+    if (isCloudBackupMode(env)) {
+      for (const message of batch.messages) message.ack();
+      return;
+    }
     await consumeScheduledSyncQueue(batch, env);
   },
 } satisfies ExportedHandler<Env, ScheduledSyncQueueMessage>;

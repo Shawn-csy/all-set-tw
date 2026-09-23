@@ -20,6 +20,7 @@ export interface Env {
   POLICY_AUDS?: string;
   DEMO_MODE?: string | boolean;
   LOCAL_DEV_MODE?: string | boolean;
+  DEPLOYMENT_MODE?: "cloud-primary" | "cloud-backup" | "local-primary" | string;
   API_RATE_LIMITER?: RateLimit;
   EXPENSIVE_RATE_LIMITER?: RateLimit;
   CTBC_API_RELAY_URL?: string;

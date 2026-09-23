@@ -7,12 +7,19 @@ assets = { directory = "../web/dist", binding = "ASSETS" }
 browser = { binding = "BROWSER" }
 ai = { binding = "AI", remote = true }
 
+[vars]
+DEPLOYMENT_MODE = "local-primary"
+LOCAL_DEV_MODE = "true"
+
+[triggers]
+crons = ["*/10 * * * *"]
+
 [[queues.producers]]
 binding = "SYNC_QUEUE"
-queue = "taiwan-fin-hub-sync"
+queue = "taiwan-fin-hub-sync-local"
 
 [[queues.consumers]]
-queue = "taiwan-fin-hub-sync"
+queue = "taiwan-fin-hub-sync-local"
 max_batch_size = 1
 max_batch_timeout = 1
 max_concurrency = 1
@@ -20,6 +27,4 @@ max_concurrency = 1
 [[d1_databases]]
 binding = "DB"
 database_name = "taiwan-fin-hub"
-database_id = "<YOUR_D1_DATABASE_ID>"
-remote = true
 migrations_dir = "../../packages/db/migrations"

@@ -5,8 +5,10 @@ import { z } from "zod";
 import type { AppBindings, Env } from "../../src/platform/env";
 import {
   apiErrorResponse,
+  cloudBackupReadOnlyMiddleware,
   demoReadOnlyMiddleware,
   encodePageCursor,
+  isCloudBackupMode,
   isDemoMode,
   parseKeysetPagination,
 } from "../../src/platform/http";
@@ -14,6 +16,7 @@ import {
 function testApp() {
   const app = new Hono<AppBindings>();
   app.use("*", demoReadOnlyMiddleware);
+  app.use("*", cloudBackupReadOnlyMiddleware);
   app.get("/resource", (c) => c.json({ ok: true }));
   app.put("/resource", (c) => c.json({ updated: true }));
   return app;
@@ -43,6 +46,29 @@ describe("demo read-only middleware", () => {
     expect(isDemoMode({ DEMO_MODE: true })).toBe(true);
     expect(isDemoMode({ DEMO_MODE: "YES" })).toBe(true);
     expect(isDemoMode({ DEMO_MODE: "false" })).toBe(false);
+  });
+});
+
+describe("cloud backup read-only middleware", () => {
+  it("allows reads from the backup deployment", async () => {
+    const response = await testApp().request("/resource", undefined, {
+      DEPLOYMENT_MODE: "cloud-backup",
+    } as Env);
+    expect(response.status).toBe(200);
+  });
+
+  it("blocks writes from the backup deployment", async () => {
+    const response = await testApp().request("/resource", { method: "PUT" }, {
+      DEPLOYMENT_MODE: "cloud-backup",
+    } as Env);
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "CLOUD_BACKUP_READ_ONLY" },
+    });
+  });
+
+  it("does not classify the local primary as a backup", () => {
+    expect(isCloudBackupMode({ DEPLOYMENT_MODE: "local-primary" })).toBe(false);
   });
 });
 

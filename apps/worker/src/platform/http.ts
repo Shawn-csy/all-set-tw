@@ -49,6 +49,10 @@ export function isDemoMode(env: Pick<Env, "DEMO_MODE">) {
   );
 }
 
+export function isCloudBackupMode(env: Pick<Env, "DEPLOYMENT_MODE">) {
+  return env.DEPLOYMENT_MODE === "cloud-backup";
+}
+
 export const demoReadOnlyMiddleware: MiddlewareHandler<AppBindings> = async (
   c,
   next,
@@ -64,6 +68,34 @@ export const demoReadOnlyMiddleware: MiddlewareHandler<AppBindings> = async (
       error: {
         code: "DEMO_MODE_READ_ONLY",
         message: "Demo site is read-only.",
+      },
+    },
+    403,
+  );
+};
+
+/**
+ * The cloud database is a backup target in the local-first deployment.
+ * It may serve reads for inspection, but must never run application writes
+ * or connector synchronization that could race with the local primary.
+ */
+export const cloudBackupReadOnlyMiddleware: MiddlewareHandler<
+  AppBindings
+> = async (c, next) => {
+  if (
+    !isCloudBackupMode(c.env) ||
+    SAFE_METHODS.has(c.req.method.toUpperCase())
+  ) {
+    await next();
+    return;
+  }
+
+  return c.json(
+    {
+      success: false as const,
+      error: {
+        code: "CLOUD_BACKUP_READ_ONLY",
+        message: "Cloud backup deployment is read-only.",
       },
     },
     403,
