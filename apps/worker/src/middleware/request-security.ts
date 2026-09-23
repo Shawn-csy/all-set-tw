@@ -27,6 +27,11 @@ export const requestSecurityMiddleware: MiddlewareHandler<AppBindings> =
 
     const requestUrl = new URL(c.req.url);
     if (!isAllowedOrigin(c.req.raw, requestUrl.hostname, c.env.APP_ORIGINS)) {
+      console.warn("[security] request origin rejected", {
+        origin: safeLogOrigin(c.req.header("Origin")),
+        referer: safeLogOrigin(c.req.header("Referer")),
+        host: requestUrl.hostname,
+      });
       return jsonError("INVALID_ORIGIN", "Request origin is not allowed.", 403);
     }
 
@@ -149,8 +154,16 @@ function isAllowedOrigin(
     allowedOrigins.add(new URL(request.url).origin);
   }
 
+  if (origin === "null") {
+    if (referer === null) return false;
+    try {
+      return allowedOrigins.has(new URL(referer).origin);
+    } catch {
+      return false;
+    }
+  }
+
   if (origin !== null && !allowedOrigins.has(origin)) return false;
-  if (origin === "null") return false;
 
   if (origin === null && referer !== null) {
     try {
@@ -160,6 +173,16 @@ function isAllowedOrigin(
     }
   }
   return true;
+}
+
+function safeLogOrigin(value: string | undefined) {
+  if (value === undefined) return null;
+  if (value === "null") return "null";
+  try {
+    return new URL(value).origin;
+  } catch {
+    return "[invalid-origin]";
+  }
 }
 
 function requestResource(pathname: string) {

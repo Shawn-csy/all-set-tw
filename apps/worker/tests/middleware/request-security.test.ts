@@ -93,4 +93,23 @@ describe("request security middleware", () => {
 
     expect(response.status).toBe(200);
   });
+
+  it("accepts an opaque origin when the referer is configured", async () => {
+    const limiter = {
+      limit: vi.fn().mockResolvedValue({ success: true }),
+    } as unknown as RateLimit;
+    const response = await testApp().request(
+      "https://finance.shawnup.com/api/sync",
+      {
+        method: "POST",
+        headers: {
+          Origin: "null",
+          Referer: "https://finance.shawnup.com/#/data-sources",
+        },
+      },
+      testEnv(limiter, "https://finance.shawnup.com"),
+    );
+
+    expect(response.status).toBe(200);
+  });
 });
