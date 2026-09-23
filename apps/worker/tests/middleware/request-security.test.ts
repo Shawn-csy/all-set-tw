@@ -112,4 +112,21 @@ describe("request security middleware", () => {
 
     expect(response.status).toBe(200);
   });
+
+  it("uses the local fallback limiter for the tunneled local-primary host", async () => {
+    const response = await testApp().request(
+      "https://finance.shawnup.com/api/sync",
+      {
+        method: "POST",
+        headers: { Origin: "http://finance.shawnup.com" },
+      },
+      {
+        DEPLOYMENT_MODE: "local-primary",
+        LOCAL_DEV_MODE: "true",
+        APP_ORIGINS: "http://finance.shawnup.com",
+      } as Env,
+    );
+
+    expect(response.status).toBe(200);
+  });
 });

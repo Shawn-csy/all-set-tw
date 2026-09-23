@@ -10,6 +10,15 @@ export const MAX_OCR_BODY_BYTES = 256 * 1024;
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const PRODUCTION_ORIGIN = "https://finance.shawnup.com";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+const LOCAL_RATE_LIMITS = {
+  api: { limit: 120, windowMs: 60_000 },
+  expensive: { limit: 30, windowMs: 60_000 },
+} as const;
+
+const localRateLimitWindows = new Map<
+  string,
+  { count: number; windowStartedAt: number }
+>();
 
 export class RequestBodyTooLargeError extends Error {
   constructor() {
@@ -60,12 +69,22 @@ export const requestSecurityMiddleware: MiddlewareHandler<AppBindings> =
         ? c.env.API_RATE_LIMITER
         : c.env.EXPENSIVE_RATE_LIMITER;
     if (!limiter) {
-      if (!LOCAL_HOSTS.has(requestUrl.hostname)) {
+      if (!isLocalRateLimitEnvironment(c.env, requestUrl.hostname)) {
         return jsonError(
           "RATE_LIMIT_UNAVAILABLE",
           "Request protection is temporarily unavailable.",
           503,
         );
+      }
+      const result = localRateLimit(resource);
+      if (!result.success) {
+        const response = jsonError(
+          "RATE_LIMITED",
+          "Too many requests. Please try again later.",
+          429,
+        );
+        response.headers.set("Retry-After", String(result.retryAfter));
+        return response;
       }
     } else {
       try {
@@ -84,7 +103,7 @@ export const requestSecurityMiddleware: MiddlewareHandler<AppBindings> =
           "[security] rate limit check failed",
           sanitizeErrorForLog(error),
         );
-        if (!LOCAL_HOSTS.has(requestUrl.hostname)) {
+        if (!isLocalRateLimitEnvironment(c.env, requestUrl.hostname)) {
           return jsonError(
             "RATE_LIMIT_UNAVAILABLE",
             "Request protection is temporarily unavailable.",
@@ -173,6 +192,43 @@ function isAllowedOrigin(
     }
   }
   return true;
+}
+
+function isLocalRateLimitEnvironment(
+  env: Pick<
+    AppBindings["Bindings"],
+    "DEPLOYMENT_MODE" | "LOCAL_DEV_MODE"
+  >,
+  hostname: string,
+) {
+  if (LOCAL_HOSTS.has(hostname)) return true;
+  return (
+    env.DEPLOYMENT_MODE === "local-primary" &&
+    (env.LOCAL_DEV_MODE === true ||
+      (typeof env.LOCAL_DEV_MODE === "string" &&
+        ["1", "true", "yes", "on"].includes(
+          env.LOCAL_DEV_MODE.trim().toLowerCase(),
+        )))
+  );
+}
+
+function localRateLimit(resource: "api" | "ocr" | "sync" | "notifications") {
+  const config =
+    resource === "api" ? LOCAL_RATE_LIMITS.api : LOCAL_RATE_LIMITS.expensive;
+  const key = resource === "api" ? "api" : "expensive";
+  const now = Date.now();
+  const current = localRateLimitWindows.get(key);
+  if (!current || now - current.windowStartedAt >= config.windowMs) {
+    localRateLimitWindows.set(key, { count: 1, windowStartedAt: now });
+    return { success: true as const, retryAfter: 60 };
+  }
+
+  if (current.count >= config.limit) {
+    return { success: false as const, retryAfter: 60 };
+  }
+
+  current.count += 1;
+  return { success: true as const, retryAfter: 60 };
 }
 
 function safeLogOrigin(value: string | undefined) {
