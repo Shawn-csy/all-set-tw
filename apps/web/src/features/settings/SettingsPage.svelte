@@ -219,9 +219,7 @@
       <section aria-label="資料來源頁標題" class="hidden min-w-0 md:block">
         <div>
           <h2 class="text-2xl font-bold tracking-tight">資料來源與連接器</h2>
-          <p class="mt-1 text-sm text-muted-foreground">
-            管理連線、驗證狀態與最近同步結果。
-          </p>
+          <p class="mt-1 text-sm text-muted-foreground">管理連線與同步。</p>
         </div>
       </section>
 
@@ -279,7 +277,7 @@
               <div>
                 <p class="text-base font-semibold">選擇一個連接器</p>
                 <p class="mt-1 text-sm text-muted-foreground">
-                  查看連線狀態、同步範圍與驗證設定。
+                  查看連線與同步設定。
                 </p>
               </div>
             </div>
@@ -324,9 +322,7 @@
     <div class="grid min-w-0 gap-4">
       <section aria-label="同步通知頁標題" class="hidden min-w-0 md:block">
         <h2 class="text-2xl font-bold tracking-tight">同步與通知</h2>
-        <p class="mt-1 text-sm text-muted-foreground">
-          設定所有連接器共用的預設排程與通知時機。
-        </p>
+        <p class="mt-1 text-sm text-muted-foreground">排程與通知。</p>
       </section>
 
       <div
@@ -379,7 +375,7 @@
         <div>
           <h2 class="text-2xl font-bold tracking-tight">匯率</h2>
           <p class="mt-1 text-sm text-muted-foreground">
-            查看資產與活動使用的換算基準，必要時手動更新。
+            管理資產與活動使用的匯率。
           </p>
         </div>
       </div>
@@ -422,9 +418,7 @@
       <div class="hidden items-center justify-between gap-4 md:flex">
         <div>
           <h2 class="text-2xl font-bold tracking-tight">分類規則</h2>
-          <p class="mt-1 text-sm text-muted-foreground">
-            管理自訂分類，也會自動處理帳戶互轉、信用卡年費減免與發票配對。
-          </p>
+          <p class="mt-1 text-sm text-muted-foreground">管理自訂分類規則。</p>
         </div>
       </div>
 
@@ -477,9 +471,7 @@
       >
         <div>
           <h2 class="text-2xl font-bold tracking-tight">設定總覽</h2>
-          <p class="mt-1 text-sm text-muted-foreground">
-            先處理資料異常，再調整日常偏好。
-          </p>
+          <p class="mt-1 text-sm text-muted-foreground">查看資料狀態與偏好。</p>
         </div>
         <p class="text-sm text-muted-foreground">
           狀態更新：{latestSuccessAt
@@ -548,17 +540,17 @@
           </h2>
           <p class="mt-1 text-sm text-muted-foreground">
             {#if syncJobsState === "loading"}
-              請稍候，正在讀取資料來源狀態。
+              載入中。
             {:else if syncJobsState === "error"}
-              無法確認資料來源狀態，請稍後再試。
+              請稍後再試。
             {:else if needsAction}
-              查看來源的錯誤說明，重試同步或完成必要的驗證。
+              查看錯誤並重試同步。
             {:else if pendingSources}
-              這些來源尚未完成第一次同步，完成後才會列入正常來源。
+              完成首次同步後會列入正常來源。
             {:else if configuredSources.length}
-              所有已設定連接器都能正常同步。
+              所有已設定來源正常。
             {:else}
-              設定資料來源後即可開始同步。
+              先設定資料來源。
             {/if}
           </p>
           {#if syncJobsState === "ready"}

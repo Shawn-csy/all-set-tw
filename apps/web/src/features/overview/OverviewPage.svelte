@@ -64,19 +64,43 @@
 
   const monthKey = new Date().toISOString().slice(0, 7);
   const currentMonthRange = { from: monthKey, to: monthKey };
-  const monthlyBank = createQuery(bankRangeQuery(() => api, currentMonthRange));
-  const investments = createQuery(investmentsQuery(() => api));
-  const monthlyInvoices = createQuery(
-    invoicesRangeQuery(() => api, currentMonthRange),
-  );
-  const invoiceMappings = createQuery(
-    invoiceTransactionMappingsQuery(() => api),
-  );
-  const manualAssets = createQuery(manualAssetsQuery(() => api));
-  const rates = createQuery(exchangeRatesQuery(() => api));
+  const overviewCache = {
+    staleTime: 5 * 60 * 1_000,
+    gcTime: 30 * 60 * 1_000,
+  };
+  const monthlyBank = createQuery({
+    ...bankRangeQuery(() => api, currentMonthRange),
+    ...overviewCache,
+  });
+  const investments = createQuery({
+    ...investmentsQuery(() => api),
+    ...overviewCache,
+  });
+  const monthlyInvoices = createQuery({
+    ...invoicesRangeQuery(() => api, currentMonthRange),
+    ...overviewCache,
+  });
+  const invoiceMappings = createQuery({
+    ...invoiceTransactionMappingsQuery(() => api),
+    ...overviewCache,
+  });
+  const manualAssets = createQuery({
+    ...manualAssetsQuery(() => api),
+    ...overviewCache,
+  });
+  const rates = createQuery({
+    ...exchangeRatesQuery(() => api),
+    ...overviewCache,
+  });
   const jobs = createQuery(syncJobsQuery(() => api));
-  const latestSyncReport = createQuery(latestSyncReportQuery(() => api));
-  const history = createQuery(netWorthHistoryQuery(() => api));
+  const latestSyncReport = createQuery({
+    ...latestSyncReportQuery(() => api),
+    ...overviewCache,
+  });
+  const history = createQuery({
+    ...netWorthHistoryQuery(() => api),
+    ...overviewCache,
+  });
 
   const bankData = $derived(
     $monthlyBank.data ?? { accounts: [], transactions: [] },
@@ -302,7 +326,7 @@
 </script>
 
 {#if loading}
-  <EmptyState title="載入總覽中" body="正在讀取最新紀錄。" />
+  <EmptyState title="載入總覽中" body="正在載入。" />
 {:else if failed}
   <EmptyState
     alert
@@ -381,7 +405,7 @@
         <div class="min-w-0">
           <h2 class="text-base font-semibold">本月收支</h2>
           <p class="mt-1 text-caption leading-6 text-ink/70">
-            銀行與信用卡活動，含未配對發票
+            銀行、信用卡與發票
           </p>
         </div>
         <Button variant="ghost" size="sm" onclick={() => navigate("activity")}

@@ -16,7 +16,7 @@ export const navItems: NavigationItem[] = [
     view: "overview",
     label: "總覽",
     shortLabel: "總覽",
-    description: "淨資產、同步健康度與近期財務活動。",
+    description: "淨資產與近期活動。",
     icon: BarChart3,
   },
   {
@@ -38,7 +38,7 @@ export const navItems: NavigationItem[] = [
     view: "settings",
     label: "設定",
     shortLabel: "設定",
-    description: "管理資料來源、同步排程、匯率與交易分類。",
+    description: "資料來源、排程與偏好。",
     icon: Settings,
   },
 ];
@@ -66,7 +66,7 @@ export const mobileSettingsLabels: Record<
 > = {
   "data-sources": {
     label: "資料來源與連接器",
-    description: "管理來源狀態、憑證、自動同步與重新驗證。",
+    description: "連線與同步。",
   },
   "sync-notifications": {
     label: "同步與通知",

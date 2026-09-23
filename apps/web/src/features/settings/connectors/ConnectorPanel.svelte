@@ -7,6 +7,7 @@
     useQueryClient,
   } from "@tanstack/svelte-query";
   import {
+    CircleCheckBig,
     KeyRound,
     Mail,
     RefreshCw,
@@ -62,6 +63,11 @@
   let values = $state<Record<string, string>>({});
   let focusedCredentialKeys = $state<Record<string, boolean>>({});
   let error = $state("");
+  type SyncNoticeTone = "info" | "success" | "error";
+  let syncNotice = $state<{
+    tone: SyncNoticeTone;
+    message: string;
+  } | null>(null);
   let otp = $state("");
   let tdccSetupStep = $state<"credentials" | "email" | "sms" | "complete">(
     "credentials",
@@ -213,6 +219,7 @@
   const sync = createMutation({
     mutationFn: async (target: SyncTarget) => {
       if (demoMode) throw new Error("Demo site 已停用連接器同步。");
+      syncNotice = { tone: "info", message: "同步中…" };
       const path =
         connectorId === "tdcc" && target !== "default"
           ? `/api/connectors/${connectorId}/sync/${target}`
@@ -246,15 +253,18 @@
       }
       if (connectorId === "einvoice") {
         showEinvoiceSyncQueued();
+        syncNotice = { tone: "info", message: "已送出，等待同步…" };
         startEinvoiceSyncPolling();
         return;
       }
       if (connectorId === "tdcc") {
         showTdccSyncQueued();
+        syncNotice = { tone: "info", message: "已送出，等待同步…" };
         startTdccSyncPolling();
         tdccSetupStep = "complete";
         return;
       }
+      syncNotice = { tone: "success", message: "同步完成" };
       invalidateLatestSyncReport();
       qc.invalidateQueries({ queryKey: queryKeys.syncJobs });
       qc.invalidateQueries({ queryKey: queryKeys.summary });
@@ -289,6 +299,7 @@
       if (handleTdccVerificationRequired(e)) return;
       if (handleCathayVerificationRequired(e)) return;
       error = e instanceof Error ? e.message : "同步失敗";
+      syncNotice = { tone: "error", message: error };
       if (browserBank)
         qc.invalidateQueries({
           queryKey: queryKeys.connectorSettings(connectorId),
@@ -299,6 +310,7 @@
   const connectTdcc = createMutation({
     mutationFn: async () => {
       if (demoMode) throw new Error("Demo site 已停用連接器同步。");
+      syncNotice = { tone: "info", message: "連線中…" };
       const config = buildConfig();
       if (
         !tdccCredentialsComplete &&
@@ -319,6 +331,7 @@
       });
       if (handleTdccVerificationRequired(e)) return;
       error = e instanceof Error ? e.message : "集保連線失敗";
+      syncNotice = { tone: "error", message: error };
     },
   });
   const prepareBrowserBank = createMutation({
@@ -345,6 +358,7 @@
   const verifyBrowserBank = createMutation({
     mutationFn: () => {
       if (demoMode) throw new Error("Demo site 已停用連接器同步。");
+      syncNotice = { tone: "info", message: "驗證並同步中…" };
       const pattern =
         bankCaptchaKind === "alphanumeric"
           ? new RegExp(`^[A-Za-z0-9]{${bankCaptchaDigitCount}}$`)
@@ -359,6 +373,7 @@
     },
     onSuccess: () => {
       error = "";
+      syncNotice = { tone: "success", message: "同步完成" };
       bankCaptcha = "";
       bankCaptchaImage = "";
       qc.invalidateQueries({
@@ -374,6 +389,7 @@
     onError: (e) => {
       const failure = browserCaptchaFailure(e);
       error = failure.message;
+      syncNotice = { tone: "error", message: failure.message };
       if (failure.sessionInvalidated) {
         bankCaptcha = "";
         bankCaptchaImage = "";
@@ -386,6 +402,7 @@
   const verifyOtp = createMutation({
     mutationFn: () => {
       if (demoMode) throw new Error("Demo site 已停用連接器同步。");
+      syncNotice = { tone: "info", message: "驗證中…" };
       if (!otp.trim()) throw new Error("請先輸入驗證碼。");
       const path =
         connectorId === "tdcc" && pendingSyncTarget !== "default"
@@ -403,12 +420,14 @@
         return;
       }
       error = e instanceof Error ? e.message : "驗證失敗";
+      syncNotice = { tone: "error", message: error };
     },
   });
 
   const requestCathayOtp = createMutation({
     mutationFn: (channel: "email" | "sms") => {
       if (demoMode) throw new Error("Demo site 已停用連接器同步。");
+      syncNotice = { tone: "info", message: "寄送驗證碼中…" };
       cathayOtpChannel = channel;
       return api.post(`/api/connectors/${connectorId}/sync`, {
         otpChannel: channel,
@@ -417,16 +436,19 @@
     onSuccess: () => {
       if (cathayOtpChannel) cathayVerificationStep = cathayOtpChannel;
       error = "";
+      syncNotice = { tone: "info", message: "驗證碼已寄出" };
     },
     onError: (e) => {
       if (handleCathayVerificationRequired(e)) return;
       error = e instanceof Error ? e.message : "寄送驗證碼失敗";
+      syncNotice = { tone: "error", message: error };
     },
   });
 
   const verifyCathayOtp = createMutation({
     mutationFn: () => {
       if (demoMode) throw new Error("Demo site 已停用連接器同步。");
+      syncNotice = { tone: "info", message: "驗證並同步中…" };
       if (!otp.trim()) throw new Error("請先輸入驗證碼。");
       if (!cathayOtpChannel) throw new Error("請先選擇驗證方式。");
       return api.post(`/api/connectors/${connectorId}/sync`, {
@@ -441,6 +463,7 @@
         return;
       }
       error = e instanceof Error ? e.message : "驗證失敗";
+      syncNotice = { tone: "error", message: error };
     },
   });
 
@@ -448,6 +471,7 @@
     if (!(errorValue instanceof ApiRequestError)) return false;
     if (errorValue.code === "TDCC_EMAIL_OTP_REQUIRED") {
       error = "";
+      syncNotice = { tone: "info", message: "請輸入 Email 驗證碼。" };
       otp = "";
       tdccSetupStep = "email";
       pendingSyncTarget = "default";
@@ -455,6 +479,7 @@
     }
     if (errorValue.code === "TDCC_SMS_OTP_REQUIRED") {
       error = "";
+      syncNotice = { tone: "info", message: "請輸入簡訊驗證碼。" };
       otp = "";
       tdccSetupStep = "sms";
       return true;
@@ -466,6 +491,7 @@
     if (!(errorValue instanceof ApiRequestError)) return false;
     if (errorValue.code === "CATHAY_OTP_CHANNEL_REQUIRED") {
       error = "";
+      syncNotice = { tone: "info", message: "請選擇驗證方式。" };
       otp = "";
       cathayOtpChannel = null;
       cathayVerificationStep = "choose";
@@ -479,6 +505,7 @@
       errorValue.code === "CATHAY_SMS_OTP_REQUIRED"
     ) {
       error = "";
+      syncNotice = { tone: "info", message: "請輸入驗證碼。" };
       otp = "";
       cathayOtpChannel =
         errorValue.code === "CATHAY_SMS_OTP_REQUIRED" ? "sms" : "email";
@@ -491,11 +518,13 @@
     if (errorValue.code === "CATHAY_OTP_SESSION_EXPIRED") {
       resetCathayVerification();
       error = errorValue.message;
+      syncNotice = { tone: "error", message: error };
       return true;
     }
     if (errorValue.code === "CATHAY_OTP_INVALID") {
       otp = "";
       error = errorValue.message;
+      syncNotice = { tone: "error", message: error };
       return true;
     }
     return false;
@@ -514,6 +543,7 @@
 
   function finishCathayVerification() {
     error = "";
+    syncNotice = { tone: "success", message: "同步完成" };
     resetCathayVerification();
     cathayVerificationStep = "complete";
     qc.invalidateQueries({
@@ -562,6 +592,7 @@
 
   function finishTdccConnection() {
     error = "";
+    syncNotice = { tone: "info", message: "已送出，等待同步…" };
     otp = "";
     tdccSetupStep = "complete";
     $sync.reset();
@@ -612,6 +643,7 @@
     }, 5_000);
   }
   function startEinvoiceSyncPolling() {
+    syncNotice = { tone: "info", message: "等待同步開始…" };
     einvoiceSyncPolling = "awaiting-active";
     einvoiceSyncPreviousLastRunAt = job?.lastRunAt ?? null;
     clearTimeout(einvoiceSyncPollingTimer);
@@ -633,6 +665,7 @@
     );
     if (einvoiceJob?.running) {
       einvoiceSyncPolling = "active";
+      syncNotice = { tone: "info", message: "同步中…" };
     } else if (
       einvoiceSyncPolling === "active" ||
       einvoiceJob?.lastRunAt !== einvoiceSyncPreviousLastRunAt
@@ -640,9 +673,13 @@
       const completedSuccessfully = einvoiceJob?.lastStatus === "success";
       stopEinvoiceSyncPolling();
       if (completedSuccessfully) {
+        syncNotice = { tone: "success", message: "同步完成" };
         invalidateLatestSyncReport();
         qc.invalidateQueries({ queryKey: queryKeys.summary });
         qc.invalidateQueries({ queryKey: queryKeys.invoices });
+      } else {
+        error = einvoiceJob?.lastError ?? "電子發票同步失敗，請重試。";
+        syncNotice = { tone: "error", message: error };
       }
       return;
     }
@@ -651,6 +688,7 @@
     }, 2_000);
   }
   function startTdccSyncPolling() {
+    syncNotice = { tone: "info", message: "等待同步開始…" };
     tdccSyncPolling = "awaiting-active";
     tdccSyncPreviousLastRunAt = job?.lastRunAt ?? null;
     clearTimeout(tdccSyncPollingTimer);
@@ -671,6 +709,7 @@
     );
     if (tdccJob?.running) {
       tdccSyncPolling = "active";
+      syncNotice = { tone: "info", message: "同步中…" };
     } else if (
       tdccJob &&
       (tdccSyncPolling === "active" ||
@@ -679,6 +718,7 @@
       const status = tdccJob?.lastStatus;
       stopTdccSyncPolling();
       if (status === "success") {
+        syncNotice = { tone: "success", message: "同步完成" };
         invalidateLatestSyncReport();
         qc.invalidateQueries({ queryKey: queryKeys.summary });
         qc.invalidateQueries({ queryKey: queryKeys.connectorSettings("tdcc") });
@@ -687,6 +727,7 @@
         qc.invalidateQueries({ queryKey: queryKeys.bank });
       } else if (status === "failed" || status === "needs_user_action") {
         error = tdccJob?.lastError ?? "集保同步失敗，請重新驗證。";
+        syncNotice = { tone: "error", message: error };
       }
       return;
     }
@@ -718,13 +759,13 @@
       </h2>
       <p class="text-sm text-ink/65">
         {connectorId === "tdcc" && tdccConnectionReady
-          ? "連線已完成；登入狀態會安全保存並供後續同步使用。"
+          ? "已連線，可開始同步。"
           : connectorId === "tdcc" &&
               $settings.data?.configured &&
               !tdccCredentialsComplete
-            ? "舊設定缺少完整的登入資料，請重新輸入身分證字號與 App 密碼。"
+            ? "請補填身分證字號與 App 密碼。"
             : $settings.data?.configured
-              ? `已設定於 ${formatDateTime($settings.data.updatedAt)}。機密資料不會在此顯示；重新填寫欄位即可覆寫。`
+              ? `已設定於 ${formatDateTime($settings.data.updatedAt)}`
               : "尚未設定"}
       </p>
     </div>
@@ -841,6 +882,20 @@
       {/if}
     </div>
   </div>
+  {#if syncNotice && syncNotice.tone !== "error"}
+    <div
+      class={`mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${syncNotice.tone === "success" ? "bg-moss/10 text-moss" : "bg-steel/10 text-steel"}`}
+      role="status"
+      aria-live="polite"
+    >
+      {#if syncNotice.tone === "success"}
+        <CircleCheckBig class="size-4 shrink-0" />
+      {:else}
+        <RefreshCw class="size-4 shrink-0 animate-spin" />
+      {/if}
+      <span>{syncNotice.message}</span>
+    </div>
+  {/if}
   {#if demoMode}<p
       class="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
     >
@@ -1011,14 +1066,15 @@
             <div
               class="flex items-end pb-2 text-sm leading-relaxed text-muted-foreground"
             >
-              從上次同步完成後重新計時。
+              完成後重新計時。
             </div>
           {/if}
         {/if}
       </div>
     {/if}
-    {#if error || ((job?.lastStatus === "failed" || job?.lastStatus === "needs_user_action") && !bankCaptchaImage)}<p
+    {#if (error || ((job?.lastStatus === "failed" || job?.lastStatus === "needs_user_action") && !bankCaptchaImage)) && (!syncNotice || syncNotice.tone === "error")}<p
         class="mt-2 text-sm text-coral"
+        role="alert"
       >
         {error
           ? `本次同步：${error}`
@@ -1037,8 +1093,8 @@
         </h3>
         <p class="mt-0.5 text-sm text-muted-foreground">
           {connectorId === "tdcc"
-            ? "請使用集保 e 存摺 App 的登入資料；不是券商網路下單密碼。"
-            : "已儲存的機密欄位不會顯示內容；留白會維持原值。"}
+            ? "使用集保 e 存摺 App 登入資料。"
+            : "留白欄位會保留原值。"}
         </p>
       </div>
       {#if $save.isSuccess}<span
@@ -1100,7 +1156,7 @@
             ? tdccConnectionReady
               ? "重新填寫任一欄位會清除舊的登入狀態並重新驗證。"
               : "按下後會先登入集保；只有集保要求裝置驗證時才會寄信。"
-            : "儲存完成後，再使用上方的同步按鈕測試連線。"}
+            : "儲存後按同步測試。"}
         </p>
         {#if connectorId === "tdcc"}
           <Button
@@ -1362,6 +1418,6 @@
             ? "排程同步不會在背景寄送驗證碼；登入失效時會標記為需要重新驗證。"
             : connectorId === "cathaybk"
               ? "首次驗證會加入信任裝置；信任失效時需在手動同步中重新取得驗證碼。"
-              : "輸入完帳號密碼後，請先按「儲存設定」，再按「同步」。"}
+              : "先儲存設定，再同步。"}
   </p>
 </Card>

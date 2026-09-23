@@ -252,6 +252,7 @@ describe("ConnectorPanel", () => {
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: ["invoices"],
     });
+    expect(getByRole("status")).toHaveTextContent("同步完成");
     expect(getByRole("button", { name: "已排入同步" })).toBeEnabled();
     vi.useRealTimers();
   });
@@ -276,6 +277,7 @@ describe("ConnectorPanel", () => {
     expect(api.post).toHaveBeenCalledOnce();
     await vi.advanceTimersByTimeAsync(2_000);
 
+    expect(getByRole("alert")).toHaveTextContent("連線失敗");
     expect(getByRole("button", { name: "已排入同步" })).toBeEnabled();
     expect(invalidateQueries).not.toHaveBeenCalledWith({
       queryKey: ["summary"],
