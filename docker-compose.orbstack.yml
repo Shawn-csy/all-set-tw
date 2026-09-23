@@ -11,6 +11,7 @@ services:
       TZ: Asia/Taipei
       X_BROWSER_HEADFUL: "false"
       WRANGLER_DEV_IP: 0.0.0.0
+      SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
     volumes:
       - ./apps/worker/.dev.vars:/workspace/apps/worker/.dev.vars.base:ro
       - ./apps/worker/.wrangler:/workspace/apps/worker/.wrangler
