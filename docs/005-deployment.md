@@ -36,7 +36,8 @@ Deploy to Cloudflare 會建立部署用 repository、D1 並設定 Workers Builds
 
 1. 前往 **Workers & Pages** 並選擇部署完成的 Worker。
 2. 開啟 **Settings → Domains & Routes**。
-3. 在 `workers.dev` 網址旁啟用 Cloudflare Access。
+3. 確認正式設定的 `workers_dev = false` 已生效；正式入口只使用自訂網域。
+4. 在 `finance.shawnup.com` 上啟用 Cloudflare Access。
 
 部分 Dashboard 版本會顯示 **Domains** 頁籤及 **Public／Restricted** 選項，將網址設為 **Restricted** 即可。最新操作方式請參考 [Cloudflare Access for Workers](https://developers.cloudflare.com/changelog/post/2025-10-03-one-click-access-for-workers/)。
 
@@ -69,6 +70,18 @@ Cloudflare Access 預設可能使用 Email OTP。如要限定 Cloudflare 帳號�
 1. Access Application 的 **Session Duration** 為 **1 month**。
 2. **Access controls → Access settings** 的 **Global session duration** 為 **1 month**。
 3. Access Policy 若另有 Session Duration，也設為一個月。
+
+## 單一使用者政策
+
+目前部署是單一租戶、單一使用者。D1 資料表沒有 `user_id` 欄位，`connector_settings` 也以 connector 為唯一設定，因此不可直接把第二位使用者加入 Access Allow policy 或共用此 Worker。
+
+若未來要支援多人，必須先同時完成：
+
+- 從 Cloudflare Access JWT 建立穩定的 user identity（例如 `sub`），並在每次請求傳入資料層。
+- 為所有使用者持有的資料加入 user identity / row ownership 與查詢隔離，包含連接器設定、同步工作、金融資料、同步歷史及通知訂閱。
+- 補上跨使用者授權測試，再把 Access policy 擴大到多人。
+
+在完成上述改造前，新增多人登入只會造成資料互相可見，不屬於支援的設定。
 
 ## 自動更新
 

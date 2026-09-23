@@ -7,6 +7,7 @@ import puppeteer, {
 } from "@cloudflare/puppeteer";
 import { parseHncbData, type HncbConfig } from "@taiwan-fin-hub/connectors";
 import type { SyncResult } from "@taiwan-fin-hub/core";
+import { sanitizeErrorForLog } from "../platform/sensitive-data";
 
 const LOGIN_URL =
   "https://netbank.hncb.com.tw/netbank/servlet/TrxDispatcher?trx=com.lb.wibc.trx.Login&state=prompt&Recognition=private";
@@ -571,7 +572,10 @@ async function fetchDepositOverview(page: Page): Promise<string> {
       state: "result",
     });
   } catch (error) {
-    console.warn("[hncb] fetchDepositOverview failed:", error);
+    console.warn(
+      "[hncb] fetchDepositOverview failed:",
+      sanitizeErrorForLog(error),
+    );
     return "";
   }
 }
@@ -585,7 +589,10 @@ async function fetchCreditCardBill(page: Page, range: string): Promise<string> {
       RANGE: range,
     });
   } catch (error) {
-    console.warn(`[hncb] fetchCreditCardBill range=${range} failed:`, error);
+    console.warn(
+      `[hncb] fetchCreditCardBill range=${range} failed:`,
+      sanitizeErrorForLog(error),
+    );
     return "";
   }
 }

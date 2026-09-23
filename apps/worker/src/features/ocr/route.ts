@@ -3,6 +3,11 @@ import type { AppBindings } from "../../platform/env";
 import { honoFactory } from "../../platform/hono";
 import { jsonError } from "../../platform/http";
 import {
+  MAX_OCR_BODY_BYTES,
+  readRequestBodyWithLimit,
+  RequestBodyTooLargeError,
+} from "../../middleware/request-security";
+import {
   recognizeValidateNumber,
   ValidateNumberEmptyImageError,
   ValidateNumberImageTooLargeError,
@@ -30,7 +35,7 @@ function registerOcrRoutes(api: Hono<AppBindings>) {
       return c.json(
         await recognizeValidateNumber(
           c.env.AI,
-          await c.req.arrayBuffer(),
+          await readRequestBodyWithLimit(c.req.raw, MAX_OCR_BODY_BYTES),
           contentType,
         ),
       );
@@ -38,7 +43,10 @@ function registerOcrRoutes(api: Hono<AppBindings>) {
       if (error instanceof ValidateNumberEmptyImageError) {
         return jsonError("EMPTY_IMAGE", "Request body must include an image.");
       }
-      if (error instanceof ValidateNumberImageTooLargeError) {
+      if (
+        error instanceof ValidateNumberImageTooLargeError ||
+        error instanceof RequestBodyTooLargeError
+      ) {
         return jsonError(
           "IMAGE_TOO_LARGE",
           "Captcha image must be 256 KB or smaller.",

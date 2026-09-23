@@ -8,6 +8,7 @@ import { configEncryptionKey } from "../../platform/config";
 import { decryptJson, encryptJson } from "../../platform/crypto";
 import type { Env } from "../../platform/env";
 import { isDemoMode } from "../../platform/http";
+import { sanitizeErrorMessage } from "../../platform/sensitive-data";
 import {
   countPushSubscriptions,
   getNotificationPreferences,
@@ -154,8 +155,7 @@ export async function safelySendSyncNotification(
         event: "push_notification_failed",
         connectorId: event.connectorId,
         status: event.status,
-        message:
-          safeError instanceof Error ? safeError.message : String(safeError),
+        message: sanitizeErrorMessage(safeError),
       }),
     );
   }
@@ -182,8 +182,7 @@ export async function safelySendScheduledSyncSummary(
         event: "push_notification_failed",
         scheduleMode: "inherit",
         status,
-        message:
-          safeError instanceof Error ? safeError.message : String(safeError),
+        message: sanitizeErrorMessage(safeError),
       }),
     );
   }
@@ -256,7 +255,7 @@ function pushDeliveryFailureDetails(error: unknown, endpoint?: string) {
         "reason" in parsed &&
         typeof parsed.reason === "string"
       ) {
-        reason = parsed.reason.slice(0, 128);
+        reason = sanitizeErrorMessage(parsed.reason).slice(0, 128);
       }
     } catch {
       // Keep the truncated response body below for non-JSON push service errors.
@@ -266,7 +265,9 @@ function pushDeliveryFailureDetails(error: unknown, endpoint?: string) {
   return {
     statusCode: error.statusCode,
     ...(reason ? { reason } : {}),
-    ...(responseBody ? { responseBody: responseBody.slice(0, 512) } : {}),
+    ...(responseBody
+      ? { responseBody: sanitizeErrorMessage(responseBody).slice(0, 512) }
+      : {}),
     ...(error.headers["apns-id"]
       ? { pushServiceRequestId: error.headers["apns-id"] }
       : {}),

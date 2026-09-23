@@ -43,6 +43,15 @@ describe("sync error details", () => {
     expect(safeErrorMessage(new Error("a".repeat(301)))).toHaveLength(300);
   });
 
+  it("masks opaque upstream response values before persistence", () => {
+    const message = safeErrorMessage(
+      new Error("新版電子發票 /mid/v1/login 回應錯誤（代碼 -151）：6AK+WczL2cVd8mCEjXd7EFuS"),
+    );
+
+    expect(message).not.toContain("6AK+WczL2cVd8mCEjXd7EFuS");
+    expect(message).toContain("[redacted]");
+  });
+
   it("redacts sensitive values from structured log diagnostics", () => {
     const error = new Error("request failed");
     error.stack =

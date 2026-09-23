@@ -51,6 +51,9 @@ export const accessMiddleware = honoFactory.createMiddleware(
       );
     }
 
+    // This Worker deliberately remains single-user: the D1 schema has no
+    // user identity columns. Multi-user support must add identity claims and
+    // row-level ownership before this middleware can admit another user.
     await next();
   },
 );

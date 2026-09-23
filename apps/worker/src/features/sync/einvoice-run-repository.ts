@@ -5,6 +5,7 @@ import {
   einvoiceSyncRunItems,
 } from "@taiwan-fin-hub/db";
 import { and, asc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { maskSensitiveData } from "../../platform/sensitive-data";
 
 // 讀取以明確 selection 維持 snake_case DTO；寫入的 claim、JSON merge、
 // 計數及 promotion 保留原生 statement composition 與原子邊界。
@@ -716,7 +717,7 @@ export async function releaseEinvoiceRunItemForRetry(
            AND lease_token = ?`,
       )
       .bind(
-        input.error,
+        maskSensitiveData(input.error),
         now,
         input.runId,
         input.invoiceSourceId,
@@ -751,7 +752,7 @@ export async function releaseEinvoiceRunClaimForRetry(
            AND status = 'processing'
            AND lease_token = ?`,
       )
-      .bind(input.error, now, input.runId, input.claimToken),
+      .bind(maskSensitiveData(input.error), now, input.runId, input.claimToken),
     refreshEinvoiceRunCountsStatement(db, input.runId, now),
   ]);
   return result[0]!.meta.changes;
@@ -972,7 +973,7 @@ export async function completeEinvoiceRun(
     .update(einvoiceSyncRuns)
     .set({
       status: input.status,
-      lastError: input.error ?? null,
+      lastError: input.error ? maskSensitiveData(input.error) : null,
       completedAt: now,
       updatedAt: now,
     })

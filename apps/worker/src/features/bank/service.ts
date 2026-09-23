@@ -24,6 +24,7 @@ import {
   findAutomaticTransferTransactionIds,
   getAutomaticTransferDay,
 } from "./transfer-matching";
+import { sanitizeErrorForLog } from "../../platform/sensitive-data";
 
 export async function getBankPage(
   db: D1Database,
@@ -83,7 +84,10 @@ async function presentBankTransactions(
       })),
     );
   } catch (error) {
-    console.error("[classify] resolveClassifications failed:", error);
+    console.error(
+      "[classify] resolveClassifications failed:",
+      sanitizeErrorForLog(error),
+    );
     classificationMap = new Map();
     classificationsReady = false;
   }
@@ -171,7 +175,10 @@ async function loadTransferCandidates(
       ],
     );
   } catch (error) {
-    console.error("[transfer] load transfer candidates failed:", error);
+    console.error(
+      "[transfer] load transfer candidates failed:",
+      sanitizeErrorForLog(error),
+    );
     return transactions;
   }
 

@@ -16,6 +16,7 @@ import type {
   SyncTrigger,
 } from "@taiwan-fin-hub/db";
 import type { ConnectorId } from "@taiwan-fin-hub/core";
+import { maskSensitiveData } from "../../platform/sensitive-data";
 
 export type DefaultSyncSchedule = {
   intervalMinutes: number;
@@ -107,7 +108,7 @@ export async function saveDefaultSyncSchedule(
 }
 
 export async function listSyncJobs(db: D1Database) {
-  return createDrizzle(db)
+  const rows = await createDrizzle(db)
     .select({
       id: syncJobs.id,
       connectorId: sql<ConnectorId>`${syncJobs.connectorId}`,
@@ -136,6 +137,10 @@ export async function listSyncJobs(db: D1Database) {
     .catch((error) => {
       throw sanitizeDatabaseError(error);
     });
+  return rows.map((row) => ({
+    ...row,
+    lastError: row.lastError ? maskSensitiveData(row.lastError) : row.lastError,
+  }));
 }
 
 export async function findSyncJob(

@@ -17,6 +17,8 @@ import { getConnectorSettings, nextSyncRunAt } from "@taiwan-fin-hub/db";
 import { configEncryptionKey } from "../../platform/config";
 import { decryptJson, encryptJson } from "../../platform/crypto";
 import type { Env } from "../../platform/env";
+import { sanitizeErrorForLog } from "../../platform/sensitive-data";
+import { maskSensitiveData } from "../../platform/sensitive-data";
 import {
   safelySendScheduledSyncSummary,
   safelySendSyncNotification,
@@ -409,6 +411,7 @@ async function finalizeEinvoiceRun(
   status: SyncNotificationStatus,
   error: string | null = null,
 ) {
+  error = error === null ? null : maskSensitiveData(error);
   const job = await findSyncJob(env.DB, "einvoice", "all");
   if (!job) {
     await completeEinvoiceRun(env.DB, {
@@ -429,7 +432,7 @@ async function finalizeEinvoiceRun(
       }).catch((recoveryError) => {
         console.error(
           "[sync] failed to recover latest scheduled report from e-invoice sync",
-          recoveryError,
+          sanitizeErrorForLog(recoveryError),
         );
       });
     }
@@ -539,7 +542,7 @@ async function finalizeEinvoiceRun(
       // Report recovery is best effort and must not change a completed run.
       console.error(
         "[sync] failed to recover latest scheduled report from e-invoice sync",
-        recoveryError,
+        sanitizeErrorForLog(recoveryError),
       );
     });
   }

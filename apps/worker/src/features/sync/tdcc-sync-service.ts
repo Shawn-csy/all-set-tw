@@ -75,6 +75,10 @@ import {
   SYNC_LOCK_LEASE_MS,
 } from "./service";
 import {
+  maskSensitiveData,
+  sanitizeErrorForLog,
+} from "../../platform/sensitive-data";
+import {
   serializePublicConnectorConfig,
   splitConnectorCursorState,
 } from "./connector-state";
@@ -631,7 +635,10 @@ async function finishTdccJobAfterPromotion(
       batchId: await findActivityRunBatchId(env.DB, run.id),
       newRecords,
     }).catch((error) =>
-      console.error("[sync] failed to recover latest TDCC report", error),
+      console.error(
+        "[sync] failed to recover latest TDCC report",
+        sanitizeErrorForLog(error),
+      ),
     );
   }
   if (run.scheduled_batch_id) {
@@ -679,6 +686,7 @@ async function finishTdccJob(
   error: string,
   newRecords: SyncNewRecordCounts,
 ) {
+  error = maskSensitiveData(error);
   const job = await findSyncJob(env.DB, "tdcc", "all");
   if (job) {
     const now = new Date().toISOString();

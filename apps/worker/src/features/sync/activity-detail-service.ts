@@ -1,4 +1,5 @@
 import { sanitizeDatabaseError } from "@taiwan-fin-hub/db";
+import { sanitizeErrorForLog } from "../../platform/sensitive-data";
 import {
   activityDisplayAmount,
   activityDateKey,
@@ -186,7 +187,7 @@ export async function safelyMaterializeActivityReport(
   } catch (error) {
     console.error(
       "[sync] activity report projection pending",
-      sanitizeDatabaseError(error),
+      sanitizeErrorForLog(sanitizeDatabaseError(error)),
     );
   }
 }

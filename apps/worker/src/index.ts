@@ -19,6 +19,7 @@ import {
 } from "./features/sync/scheduler-queue";
 import { accessMiddleware } from "./middleware/access";
 import { connectorContextMiddleware } from "./middleware/connector-context";
+import { requestSecurityMiddleware } from "./middleware/request-security";
 import type { Env, ScheduledSyncQueueMessage } from "./platform/env";
 import { honoFactory } from "./platform/hono";
 import { apiErrorResponse, demoReadOnlyMiddleware } from "./platform/http";
@@ -27,6 +28,7 @@ export const app = honoFactory.createApp();
 export const api = honoFactory.createApp();
 
 api.use("*", accessMiddleware);
+api.use("*", requestSecurityMiddleware);
 api.use("*", demoReadOnlyMiddleware);
 api.use("/connectors/:connectorId/*", connectorContextMiddleware);
 

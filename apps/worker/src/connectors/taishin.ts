@@ -12,6 +12,10 @@ import {
   type TaishinConfig,
 } from "@taiwan-fin-hub/connectors";
 import type { SyncResult } from "@taiwan-fin-hub/core";
+import {
+  maskSensitiveData,
+  sanitizeErrorForLog,
+} from "../platform/sensitive-data";
 
 const RWD_URL = "https://my.taishinbank.com.tw/TIBNetBank/svc/rwd/index.html";
 const API_ROOT = "/TIBNetBank/svc";
@@ -415,9 +419,9 @@ async function fetchCreditCardPayloads(
       OPTIONAL_API_TIMEOUT_MS,
     ).catch((error) => {
       console.warn(
-        `[taishin] current payment overview skipped: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        `[taishin] current payment overview skipped: ${sanitizeErrorForLog(
+          error,
+        )}`,
       );
       return undefined;
     });
@@ -439,7 +443,9 @@ async function fetchCreditCardPayloads(
   } catch (error) {
     if (error instanceof TaishinVerificationRequiredError) throw error;
     if (!(error instanceof TaishinConnectionError)) throw error;
-    console.warn(`[taishin] optional bill sync skipped: ${error.message}`);
+    console.warn(
+      `[taishin] optional bill sync skipped: ${sanitizeErrorForLog(error)}`,
+    );
     return { summary, bills: [], realtime };
   }
 }
@@ -456,9 +462,9 @@ async function fetchRealtimeTransactions(page: BrowserPage) {
       if (!isBusy && !isTransient) throw error;
       if (attempt < REALTIME_RETRY_ATTEMPTS) {
         console.warn(
-          `[taishin] realtime retry ${attempt}/${REALTIME_RETRY_ATTEMPTS}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `[taishin] realtime retry ${attempt}/${REALTIME_RETRY_ATTEMPTS}: ${sanitizeErrorForLog(
+            error,
+          )}`,
         );
         await new Promise((resolve) => setTimeout(resolve, attempt * 250));
       } else if (isBusy) {
@@ -642,11 +648,7 @@ function browserFetchErrorDetail(name: string, message: string) {
 }
 
 function sanitizeBrowserErrorPart(value: string, maxLength: number) {
-  return value
-    .replace(/https?:\/\/\S+/gi, "[URL]")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, maxLength);
+  return maskSensitiveData(value, maxLength);
 }
 
 async function openLoginAndFill(page: Page, config: TaishinConfig) {
@@ -1381,12 +1383,7 @@ function safeTaishinRuntimeMessage(error: unknown) {
       : error === null || error === undefined
         ? ""
         : String(error);
-  return sanitizeBrowserErrorPart(message, 240)
-    .replace(
-      /\b(authorization|cookie|password|passwd|token|secret|session(?:cookies?)?)\s*[:=]\s*([^\s,;]+)/gi,
-      "$1=[redacted]",
-    )
-    .replace(/\b(?:Bearer\s+)?[A-Za-z0-9+/_=-]{24,}\b/g, "[redacted]");
+  return maskSensitiveData(message, 240);
 }
 
 async function configurePage(page: Page) {

@@ -3,6 +3,7 @@ import { sanitizeDatabaseError } from "@taiwan-fin-hub/db";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { AppBindings, Env } from "./env";
+import { maskSensitiveData, sanitizeErrorForLog } from "./sensitive-data";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -10,7 +11,7 @@ export function jsonError(code: string, message: string, status = 400) {
   return Response.json(
     {
       success: false,
-      error: { code, message },
+      error: { code, message: maskSensitiveData(message) },
     },
     { status },
   );
@@ -33,7 +34,10 @@ export function apiErrorResponse(error: Error) {
     );
   }
 
-  console.error("[api] unhandled error:", sanitizeDatabaseError(error));
+  console.error(
+    "[api] unhandled error:",
+    sanitizeErrorForLog(sanitizeDatabaseError(error)),
+  );
   return jsonError("INTERNAL_ERROR", "An unexpected error occurred.", 500);
 }
 

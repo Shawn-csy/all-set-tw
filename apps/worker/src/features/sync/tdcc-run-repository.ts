@@ -5,6 +5,7 @@ import {
   tdccSyncRunItems,
 } from "@taiwan-fin-hub/db";
 import { and, asc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { maskSensitiveData } from "../../platform/sensitive-data";
 
 /**
  * Durable state for TDCC's paginated provider work.
@@ -316,7 +317,7 @@ export async function transitionTdccRun(
     .set({
       status: input.to,
       phase: input.phase ?? undefined,
-      lastError: input.error ?? undefined,
+      lastError: input.error ? maskSensitiveData(input.error) : undefined,
       updatedAt: now,
     })
     .where(
@@ -562,7 +563,7 @@ export async function upsertTdccRunItem(
       taskJson,
       payloadJson,
       status,
-      input.lastError ?? null,
+      input.lastError ? maskSensitiveData(input.lastError) : null,
       now,
       now,
       status === "done" ? now : null,
@@ -752,7 +753,7 @@ export async function updateTdccRunItem(
   }
   if (input.error !== undefined) {
     assignments.push("last_error = ?");
-    values.push(input.error);
+    values.push(input.error === null ? null : maskSensitiveData(input.error));
   }
   if (input.completedAt !== undefined) {
     assignments.push("completed_at = ?");
@@ -858,7 +859,13 @@ export async function releaseTdccRunItemForRetry(
        WHERE run_id = ? AND id = ?
          AND status = 'processing' AND lease_token = ?`,
     )
-    .bind(input.error, now, input.runId, input.itemId, input.claimToken)
+    .bind(
+      maskSensitiveData(input.error),
+      now,
+      input.runId,
+      input.itemId,
+      input.claimToken,
+    )
     .run();
   await refreshTdccRunCounts(db, input.runId, now);
   return result.meta.changes === 1;
@@ -887,7 +894,7 @@ export async function finalizeTdccRun(
     .set({
       status: input.status,
       phase: input.phase ?? undefined,
-      lastError: input.error ?? null,
+      lastError: input.error ? maskSensitiveData(input.error) : null,
       leaseOwner: null,
       leaseExpiresAt: null,
       promotedAt: input.promotedAt ?? undefined,

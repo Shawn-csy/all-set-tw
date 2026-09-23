@@ -3,6 +3,8 @@ export class ValidateNumberEmptyImageError extends Error {}
 export class ValidateNumberOcrError extends Error {}
 export class ValidateNumberOcrUnavailableError extends Error {}
 
+import { sanitizeErrorForLog } from "../../platform/sensitive-data";
+
 export const VALIDATE_NUMBER_MODEL = "@cf/google/gemma-4-26b-a4b-it";
 const TRANSIENT_AI_RETRY_DELAY_MS = 500;
 const TRANSIENT_AI_MAX_ATTEMPTS = 2;
@@ -112,12 +114,15 @@ async function recognizeCaptcha(
       if (transient && attempt < TRANSIENT_AI_MAX_ATTEMPTS) {
         console.warn(
           `[ocr] Workers AI CAPTCHA recognition failed temporarily; retrying (${attempt}/${TRANSIENT_AI_MAX_ATTEMPTS})`,
-          error,
+          sanitizeErrorForLog(error),
         );
         await delay(TRANSIENT_AI_RETRY_DELAY_MS);
         continue;
       }
-      console.error("[ocr] Workers AI CAPTCHA recognition unavailable", error);
+      console.error(
+        "[ocr] Workers AI CAPTCHA recognition unavailable",
+        sanitizeErrorForLog(error),
+      );
       throw new ValidateNumberOcrUnavailableError(
         transient
           ? "驗證碼辨識服務暫時逾時，請稍後重試。"

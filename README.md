@@ -76,8 +76,8 @@ openssl rand -hex 32
 ### 步驟二：啟用登入保護
 
 1. 前往 [Cloudflare Dashboard](https://dash.cloudflare.com/) → **Workers & Pages**，選擇剛建立的 `taiwan-fin-hub`
-2. 開啟 **Domains**，將 Worker URL 的存取模式從 **Public** 改為 **Restricted**
-3. 若沒有 **Domains** 頁籤，請至 **Settings → Domains & Routes**，在 `workers.dev` 網址旁啟用 Cloudflare Access
+2. 確認 `workers.dev` 沒有啟用，正式入口只保留自訂網域 `finance.shawnup.com`
+3. 在 `finance.shawnup.com` 的 Access Application 上啟用 Cloudflare Access，將存取模式設為 **Restricted**
 
 <img src="images/deploy-domains-restricted.png" alt="啟用 Cloudflare Access" width="700">
 
@@ -92,7 +92,7 @@ openssl rand -hex 32
 
 ### 步驟三：確認部署
 
-1. 開啟 Worker 的 `workers.dev` 網址，確認會先要求 Cloudflare Access 登入
+1. 開啟 `https://finance.shawnup.com`，確認會先要求 Cloudflare Access 登入
 2. 登入後前往「設定 → 資料來源」設定連接器
 3. 點擊同步以取得最新資料
 
