@@ -47,16 +47,31 @@ export const BACKUP_TABLES = [
   "tdcc_sync_runs",
 ];
 
+const WRANGLER_METADATA_TABLES = new Set(["d1_migrations", "sqlite_sequence"]);
+
 export function buildBackupClearSql() {
   return [
     "PRAGMA foreign_keys = OFF;",
+    "PRAGMA defer_foreign_keys = ON;",
     ...BACKUP_TABLES.map((table) => `DELETE FROM \"${table}\";`),
+    "PRAGMA defer_foreign_keys = OFF;",
     "PRAGMA foreign_keys = ON;",
   ].join("\n");
 }
 
 export function buildRestoreSql(localExport) {
-  return `${buildBackupClearSql()}\n${localExport.trim()}\n`;
+  const dataSql = localExport
+    .split(/\r?\n/)
+    .filter((line) => {
+      const match = line.trim().match(
+        /^(?:INSERT|REPLACE) INTO [\"`]?([^\"` (]+)[\"`]?/i,
+      );
+      return !match || !WRANGLER_METADATA_TABLES.has(match[1]);
+    })
+    .join("\n")
+    .trim();
+
+  return `${buildBackupClearSql()}\n${dataSql}\n`;
 }
 
 function configPath(name, fallback) {
