@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { chmod, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -74,26 +75,29 @@ if (!address || typeof address === "string") {
 const dashDash = process.argv.indexOf("--");
 const extraWranglerArgs =
   dashDash === -1 ? [] : process.argv.slice(dashDash + 1);
-const wranglerArgs = extraWranglerArgs.length
-  ? extraWranglerArgs
-  : ["dev", "-c", "wrangler.local.toml", "--port", "8787"];
 const wranglerCwd = extraWranglerArgs.length ? projectRoot : workerDirectory;
 
 console.log(`CTBC local relay ready on 127.0.0.1:${address.port}`);
 const localConfigKey = loadLocalConfigKey();
+const runtimeDevVars = extraWranglerArgs.length
+  ? null
+  : await installRuntimeDevVars({
+      relayPort: address.port,
+      relayToken,
+      configKey: localConfigKey,
+    });
+const effectiveWranglerArgs = extraWranglerArgs.length
+  ? [
+      ...extraWranglerArgs,
+      "--var",
+      `CTBC_API_RELAY_URL:http://127.0.0.1:${address.port}/ctbc`,
+      "--var",
+      `CTBC_API_RELAY_TOKEN:${relayToken}`,
+    ]
+  : ["dev", "-c", "wrangler.local.toml", "--port", "8787"];
 const wrangler = spawn(
   "npx",
-  [
-    "wrangler",
-    ...wranglerArgs,
-    "--var",
-    `CTBC_API_RELAY_URL:http://127.0.0.1:${address.port}/ctbc`,
-    "--var",
-    `CTBC_API_RELAY_TOKEN:${relayToken}`,
-    ...(localConfigKey
-      ? ["--var", `CONFIG_ENCRYPTION_KEY:${localConfigKey}`]
-      : []),
-  ],
+  ["wrangler", ...effectiveWranglerArgs],
   {
     cwd: wranglerCwd,
     env: {
@@ -115,7 +119,10 @@ const stop = (signal) => {
 process.once("SIGINT", () => stop("SIGINT"));
 process.once("SIGTERM", () => stop("SIGTERM"));
 wrangler.once("exit", (code, signal) => {
-  relay.close(() => process.exit(signal ? 1 : (code ?? 1)));
+  relay.close(async () => {
+    await restoreRuntimeDevVars(runtimeDevVars);
+    process.exit(signal ? 1 : (code ?? 1));
+  });
 });
 
 async function readRequest(request, limit) {
@@ -160,4 +167,53 @@ function loadLocalConfigKey() {
     { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
   );
   return result.status === 0 ? result.stdout.trim() : "";
+}
+
+async function installRuntimeDevVars({ relayPort, relayToken, configKey }) {
+  const filePath = path.join(workerDirectory, ".dev.vars");
+  let original = "";
+  let originalMode = 0o600;
+  let existed = true;
+  try {
+    original = await readFile(filePath, "utf8");
+    originalMode = (await stat(filePath)).mode & 0o777;
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+    existed = false;
+  }
+
+  const runtimeNames = new Set([
+    "CTBC_API_RELAY_URL",
+    "CTBC_API_RELAY_TOKEN",
+    "CONFIG_ENCRYPTION_KEY",
+  ]);
+  const retainedLines = original
+    .split(/\r?\n/)
+    .filter((line) => !runtimeNames.has(line.split("=", 1)[0]?.trim()))
+    .join("\n")
+    .replace(/\n*$/, "");
+  const runtimeLines = [
+    `CTBC_API_RELAY_URL=http://127.0.0.1:${relayPort}/ctbc`,
+    `CTBC_API_RELAY_TOKEN=${relayToken}`,
+    ...(configKey ? [`CONFIG_ENCRYPTION_KEY=${configKey}`] : []),
+  ];
+  await writeFile(
+    filePath,
+    `${retainedLines}\n${runtimeLines.join("\n")}\n`,
+    "utf8",
+  );
+  await chmod(filePath, 0o600);
+  return { existed, filePath, original, originalMode };
+}
+
+async function restoreRuntimeDevVars(state) {
+  if (!state) return;
+  if (state.existed) {
+    await writeFile(state.filePath, state.original, "utf8");
+    await chmod(state.filePath, state.originalMode);
+  } else {
+    await unlink(state.filePath).catch((error) => {
+      if (error?.code !== "ENOENT") throw error;
+    });
+  }
 }
