@@ -13,10 +13,11 @@ function testApp() {
   return app;
 }
 
-function testEnv(limiter: RateLimit) {
+function testEnv(limiter: RateLimit, appOrigins?: string) {
   return {
     API_RATE_LIMITER: limiter,
     EXPENSIVE_RATE_LIMITER: limiter,
+    APP_ORIGINS: appOrigins,
   } as Env;
 }
 
@@ -70,5 +71,26 @@ describe("request security middleware", () => {
     expect(response.status).toBe(429);
     expect(response.headers.get("Retry-After")).toBe("60");
     expect(limiter.limit).toHaveBeenCalledWith({ key: "single-user:sync" });
+  });
+
+  it("accepts the configured local Tunnel origin", async () => {
+    const limiter = {
+      limit: vi.fn().mockResolvedValue({ success: true }),
+    } as unknown as RateLimit;
+    const response = await testApp().request(
+      "https://finance-local.shawnup.com/api/sync",
+      {
+        method: "POST",
+        headers: {
+          Origin: "https://finance-local.shawnup.com",
+        },
+      },
+      testEnv(
+        limiter,
+        "https://finance-local.shawnup.com https://finance.shawnup.com",
+      ),
+    );
+
+    expect(response.status).toBe(200);
   });
 });

@@ -26,7 +26,7 @@ export const requestSecurityMiddleware: MiddlewareHandler<AppBindings> =
     }
 
     const requestUrl = new URL(c.req.url);
-    if (!isAllowedOrigin(c.req.raw, requestUrl.hostname)) {
+    if (!isAllowedOrigin(c.req.raw, requestUrl.hostname, c.env.APP_ORIGINS)) {
       return jsonError("INVALID_ORIGIN", "Request origin is not allowed.", 403);
     }
 
@@ -131,10 +131,19 @@ export async function readRequestBodyWithLimit(
   return body.buffer;
 }
 
-function isAllowedOrigin(request: Request, hostname: string) {
+function isAllowedOrigin(
+  request: Request,
+  hostname: string,
+  configuredOrigins?: string,
+) {
   const origin = request.headers.get("Origin");
   const referer = request.headers.get("Referer");
-  const allowedOrigins = new Set([PRODUCTION_ORIGIN]);
+  const allowedOrigins = new Set(
+    (configuredOrigins?.trim() || PRODUCTION_ORIGIN)
+      .split(/[\s,]+/)
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
 
   if (LOCAL_HOSTS.has(hostname)) {
     allowedOrigins.add(new URL(request.url).origin);

@@ -45,6 +45,20 @@ npm run dev
 
 再將本地 Worker 的連接埠透過 `cloudflared tunnel` 暴露出去。Tunnel 只負責 HTTP 流量，不會替 D1 做備份或同步。
 
+## 對外入口與安全邊界
+
+建議只建立一個對外 hostname，例如 `finance-local.shawnup.com`，並讓它同時提供 Page 與 API：
+
+```text
+瀏覽器 → Cloudflare Access → Tunnel → 127.0.0.1:8787
+                                      ├─ Page assets
+                                      └─ /api → local D1
+```
+
+範例設定在 [`cloudflared/config.yml.example`](../cloudflared/config.yml.example)。正式切換前可先使用 `finance-local.shawnup.com` 驗證；確認無誤後，再將既有 `finance.shawnup.com` 的流量切到 Tunnel，並移除雲端 Worker 的公開 custom route。
+
+不要新增雲端 Worker → 地端 Worker 的公開 callback API。這個 local-first 版本沒有 Worker 間的資料交換；備份由地端程序直接操作雲端 D1。若要讓 Tunnel hostname 對外提供服務，仍須在該 hostname 上啟用 Cloudflare Access，地端 `.dev.vars` 也要填入相同的 `TEAM_DOMAIN` 與 `POLICY_AUD`，不能用 `LOCAL_DEV_MODE` 對外繞過登入。
+
 ## 上傳雲端備份
 
 執行備份前，確認：

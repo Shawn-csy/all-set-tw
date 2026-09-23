@@ -1,0 +1,11 @@
+# Copy this file to your cloudflared configuration directory and replace the
+# tunnel UUID, credentials path, and hostname with your Cloudflare resources.
+# The local Worker serves both the Page assets and the API on the same origin.
+
+tunnel: <TUNNEL_UUID>
+credentials-file: /Users/<USER>/.cloudflared/<TUNNEL_UUID>.json
+
+ingress:
+  - hostname: finance-local.shawnup.com
+    service: http://127.0.0.1:8787
+  - service: http_status:404

@@ -10,6 +10,9 @@ ai = { binding = "AI", remote = true }
 [vars]
 DEPLOYMENT_MODE = "local-primary"
 LOCAL_DEV_MODE = "true"
+# During parallel validation use the dedicated local hostname. After the
+# final DNS cutover this may be reduced to https://finance.shawnup.com.
+APP_ORIGINS = "https://finance-local.shawnup.com https://finance.shawnup.com"
 
 [triggers]
 crons = ["*/10 * * * *"]
