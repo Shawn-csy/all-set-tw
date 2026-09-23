@@ -15,6 +15,8 @@
 npm run dev:orbstack
 ```
 
+啟動器會以 detached 模式執行，完成建置並啟動健康檢查後就會結束；不需要一直保持終端機開啟。容器名稱是 `taiwan-fin-hub-local-worker`，並設定為 `unless-stopped`，因此 OrbStack 啟動後會自動維持服務。
+
 這個啟動器會：
 
 1. 從 Keychain 讀取加密金鑰，不把金鑰放在 Compose、Dockerfile 或命令列參數。
@@ -24,7 +26,7 @@ npm run dev:orbstack
 5. 將本地 D1 狀態掛載在 `apps/worker/.wrangler`，因此重啟容器不會清空本地資料。
 6. 結束時清除暫時 Secret。
 
-按 `Ctrl-C` 停止。Cloudflare Tunnel 仍使用主機端的 `127.0.0.1:8787`，因此不需要修改 `finance.shawnup.com` 的 Tunnel route。
+若要停止容器，執行 `docker stop taiwan-fin-hub-local-worker`。Cloudflare Tunnel 仍使用主機端的 `127.0.0.1:8787`，因此主機上的 `cloudflared` 與 OrbStack 必須保持執行；不需要修改 `finance.shawnup.com` 的 Tunnel route。
 
 ## 驗證
 

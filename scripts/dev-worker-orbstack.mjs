@@ -47,14 +47,18 @@ const cleanup = async () => {
 };
 
 try {
-  child = spawn("docker", ["compose", "-f", composeFile, "up", "--build"], {
-    cwd: projectRoot,
-    env: {
-      ...process.env,
-      CONFIG_ENCRYPTION_KEY_FILE: secretPath,
+  child = spawn(
+    "docker",
+    ["compose", "-f", composeFile, "up", "--build", "--detach"],
+    {
+      cwd: projectRoot,
+      env: {
+        ...process.env,
+        CONFIG_ENCRYPTION_KEY_FILE: secretPath,
+      },
+      stdio: "inherit",
     },
-    stdio: "inherit",
-  });
+  );
 
   for (const signal of ["SIGINT", "SIGTERM"]) {
     process.once(signal, () => {
@@ -68,6 +72,11 @@ try {
     child.once("error", reject);
     child.once("exit", (code, signal) => resolve(signal ? 1 : (code ?? 1)));
   });
+  if (exitCode === 0) {
+    console.log(
+      "OrbStack local Worker is running detached: taiwan-fin-hub-local-worker",
+    );
+  }
   process.exitCode = exitCode;
 } finally {
   await cleanup();
