@@ -10,16 +10,19 @@ import { listInvoiceTransactionPreferences } from "./repository";
 import {
   keepInvoiceSeparate,
   linkInvoiceToTransaction,
+  markInvoiceAsCashPayment,
   MappingDateMismatchError,
+  MappingInvoiceAlreadyLinkedError,
   MappingInvoiceNotFoundError,
   MappingTransactionNotExpenseError,
   MappingTransactionNotFoundError,
   MappingTransactionUnavailableError,
 } from "./service";
 
-const mappingSchema = z.object({
-  transactionId: z.string().trim().min(1),
-});
+const mappingSchema = z.union([
+  z.object({ transactionId: z.string().trim().min(1) }),
+  z.object({ paymentMethod: z.literal("cash") }),
+]);
 
 export const activityRoutes = honoFactory.createApp();
 registerActivityRoutes(activityRoutes);
@@ -73,14 +76,18 @@ function registerActivityRoutes(api: Hono<AppBindings>) {
       mappingSchema,
       validationHook("INVALID_REQUEST", "Invoice mapping is invalid."),
     ),
-    async (c) =>
-      c.json(
-        await linkInvoiceToTransaction(
-          c.env.DB,
-          c.req.param("invoiceId"),
-          c.req.valid("json").transactionId,
-        ),
-      ),
+    async (c) => {
+      const body = c.req.valid("json");
+      return c.json(
+        "paymentMethod" in body
+          ? await markInvoiceAsCashPayment(c.env.DB, c.req.param("invoiceId"))
+          : await linkInvoiceToTransaction(
+              c.env.DB,
+              c.req.param("invoiceId"),
+              body.transactionId,
+            ),
+      );
+    },
   );
 
   api.delete("/activity/invoice-mappings/:invoiceId", async (c) =>
@@ -91,6 +98,12 @@ function registerActivityRoutes(api: Hono<AppBindings>) {
 function mappingError(error: unknown) {
   if (error instanceof MappingInvoiceNotFoundError)
     return jsonError("INVOICE_NOT_FOUND", "Invoice was not found.", 404);
+  if (error instanceof MappingInvoiceAlreadyLinkedError)
+    return jsonError(
+      "INVOICE_ALREADY_MAPPED",
+      "解除現有銀行／信用卡配對後，才能標記為現金支付。",
+      409,
+    );
   if (error instanceof MappingTransactionNotFoundError)
     return jsonError(
       "BANK_TRANSACTION_NOT_FOUND",

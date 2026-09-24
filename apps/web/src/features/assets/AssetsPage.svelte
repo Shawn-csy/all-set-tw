@@ -1,7 +1,11 @@
 <script lang="ts">
   import { createQuery } from "@tanstack/svelte-query";
   import { ChevronRight } from "@lucide/svelte";
-  import { exchangeRatesQuery, manualAssetsQuery } from "@/data/assets/queries";
+  import {
+    cashWalletQuery,
+    exchangeRatesQuery,
+    manualAssetsQuery,
+  } from "@/data/assets/queries";
   import { bankQuery, creditCardBillsQuery } from "@/data/bank/queries";
   import {
     investmentsQuery,
@@ -13,6 +17,7 @@
   import InstitutionDetails from "./components/InstitutionDetails.svelte";
   import InvestmentWorkspace from "./components/InvestmentWorkspace.svelte";
   import ManualAssets from "./ManualAssets.svelte";
+  import CashWalletPanel from "./CashWalletPanel.svelte";
   import { calculateAssetSummary } from "./model/summary";
   import type { InstitutionAssetGroup } from "./model/summary";
 
@@ -33,6 +38,7 @@
   const investments = createQuery(investmentsQuery(() => api));
   const trades = createQuery(investmentTransactionsQuery(() => api));
   const manual = createQuery(manualAssetsQuery(() => api));
+  const cashWallet = createQuery(cashWalletQuery(() => api));
   const rates = createQuery(exchangeRatesQuery(() => api));
 
   const summary = $derived(
@@ -40,6 +46,7 @@
       bank: $bank.data ?? { accounts: [], transactions: [] },
       investments: $investments.data ?? [],
       manualAssets: $manual.data ?? [],
+      cashWallet: $cashWallet.data,
       rates: $rates.data,
     }),
   );
@@ -47,10 +54,15 @@
     $bank.isPending ||
       $investments.isPending ||
       $manual.isPending ||
+      $cashWallet.isPending ||
       $rates.isPending,
   );
   const failed = $derived(
-    $bank.isError || $investments.isError || $manual.isError || $rates.isError,
+    $bank.isError ||
+      $investments.isError ||
+      $manual.isError ||
+      $cashWallet.isError ||
+      $rates.isError,
   );
   const ledgerItems = $derived<LedgerItem[]>([
     ...summary.institutionGroups.map((group): LedgerItem => ({
@@ -104,6 +116,7 @@
   />
 {:else}
   <div class="grid min-w-0 max-w-full gap-6">
+    <CashWalletPanel {api} />
     {#if summary.missingCurrencies.length > 0}
       <div
         class="rounded-xl border border-coral/25 bg-coral/5 px-4 py-3 text-sm text-ink"
@@ -136,15 +149,15 @@
           <p
             class="mt-2 text-lg font-medium tracking-tight tabular-nums md:hidden"
           >
-            {formatCompactTwd(summary.bankTotal)}
+            {formatCompactTwd(summary.bankTotal + summary.cashTotal)}
           </p>
           <p
             class="mt-2 hidden break-all text-2xl font-semibold tracking-tight tabular-nums md:block"
           >
-            {formatCurrency(summary.bankTotal)}
+            {formatCurrency(summary.bankTotal + summary.cashTotal)}
           </p>
           <p class="mt-1 text-caption text-subtle">
-            {summary.deposits.length} 個帳戶
+            {summary.deposits.length} 個帳戶 · 現金 {formatCompactTwd(summary.cashTotal)}
           </p>
         </div>
         <div class="min-w-0">

@@ -34,7 +34,7 @@ it.each(["valid", "transfer_peer_id", "matched_transaction_id"])(
           "INSERT INTO bank_accounts (id,connector_id,source_id,created_at,updated_at) VALUES ('a','test','a','t','t')",
           "INSERT INTO bank_transactions (id,connector_id,account_id,source_id,amount,status,transfer_peer_id,matched_transaction_id,created_at,updated_at) VALUES ('parent','test','a','parent',1,'posted',NULL,NULL,'t','t'),('pending','test','a','pending',1,'pending',NULL,'parent','t','t'),('deposit','test','a','deposit',-1,'posted','parent',NULL,'t','t'),('self','test','a','self',1,'posted',NULL,'self','t','t')",
           "INSERT INTO invoices (id,connector_id,source_id,invoice_date,amount,created_at,updated_at) VALUES ('linked','test','linked','2026-09-13',1,'t','t'),('separate','test','separate','2026-09-13',1,'t','t')",
-          "INSERT INTO bank_transaction_preferences VALUES ('parent',1,'created','updated')",
+          "INSERT INTO bank_transaction_preferences (transaction_id, excluded_from_calculation, created_at, updated_at) VALUES ('parent',1,'created','updated')",
           "INSERT INTO invoice_transaction_preferences VALUES ('linked','parent','linked','created','updated'),('separate',NULL,'separate','created','updated')",
         ].map((s) => db.prepare(s)),
       );

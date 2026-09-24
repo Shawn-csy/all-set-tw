@@ -175,10 +175,22 @@ export async function prepareSinopacAuthorizationWrite(
       db
         .prepare(
           `INSERT INTO bank_transaction_preferences
-        (transaction_id, excluded_from_calculation, created_at, updated_at)
+        (transaction_id, excluded_from_calculation, cash_withdrawal, created_at, updated_at)
         SELECT json_extract(link.value, '$.matched_transaction_id'), preference.excluded_from_calculation,
+          preference.cash_withdrawal,
           preference.created_at, preference.updated_at
         FROM json_each(?) link JOIN bank_transaction_preferences preference
+          ON preference.transaction_id = json_extract(link.value, '$.id')
+        WHERE true ON CONFLICT(transaction_id) DO NOTHING`,
+        )
+        .bind(newLinksJson),
+      db
+        .prepare(
+          `INSERT INTO cash_withdrawal_preferences
+        (transaction_id, created_at, updated_at)
+        SELECT json_extract(link.value, '$.matched_transaction_id'), preference.created_at,
+          preference.updated_at
+        FROM json_each(?) link JOIN cash_withdrawal_preferences preference
           ON preference.transaction_id = json_extract(link.value, '$.id')
         WHERE true ON CONFLICT(transaction_id) DO NOTHING`,
         )

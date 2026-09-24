@@ -18,6 +18,8 @@ export const BACKUP_TABLES = [
   "bank_balance_snapshots",
   "bank_transaction_preferences",
   "bank_transactions",
+  "cash_wallet_settings",
+  "cash_withdrawal_preferences",
   "classification_categories",
   "classification_overrides",
   "classification_rules",

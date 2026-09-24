@@ -31,15 +31,27 @@
     ),
   );
   const rateValues = $derived(rateMap($rates.data));
-  const total = $derived(
+  const marketValueTotal = $derived(
     ($investments.data ?? []).reduce((s, p) => {
-      const value = (p.marketValue ?? 0) + (p.cashBalance ?? 0);
       return (
         s +
-        (p.currency === "TWD" ? value : value * (rateValues[p.currency] ?? 0))
+        (p.currency === "TWD"
+          ? (p.marketValue ?? 0)
+          : (p.marketValue ?? 0) * (rateValues[p.currency] ?? 0))
       );
     }, 0),
   );
+  const cashTotal = $derived(
+    ($investments.data ?? []).reduce((s, p) => {
+      return (
+        s +
+        (p.currency === "TWD"
+          ? (p.cashBalance ?? 0)
+          : (p.cashBalance ?? 0) * (rateValues[p.currency] ?? 0))
+      );
+    }, 0),
+  );
+  const total = $derived(marketValueTotal + cashTotal);
   const filteredTrades = $derived(
     ($trades.data ?? [])
       .filter(
@@ -70,13 +82,25 @@
 {:else}
   <div class="grid min-w-0 gap-6">
     <section class="min-w-0 pt-3 md:pt-2" aria-label="投資摘要">
-      <p class="text-sm text-subtle">持倉市值</p>
+      <p class="text-sm text-subtle">投資資產總額</p>
       <p
         class="mt-3 break-all text-[clamp(2rem,7vw,2.75rem)] leading-tight font-semibold tracking-tight tabular-nums"
       >
         {formatCurrency(total)}
       </p>
-      <div class="mt-5 grid grid-cols-2 gap-3 md:gap-6">
+      <div class="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-6">
+        <div class="min-w-0">
+          <p class="text-caption text-subtle">持倉市值</p>
+          <p class="mt-2 text-lg font-medium tracking-tight tabular-nums">
+            {formatCurrency(marketValueTotal)}
+          </p>
+        </div>
+        <div class="min-w-0">
+          <p class="text-caption text-subtle">投資帳戶現金</p>
+          <p class="mt-2 text-lg font-medium tracking-tight tabular-nums">
+            {formatCurrency(cashTotal)}
+          </p>
+        </div>
         <div class="min-w-0">
           <p class="text-caption text-subtle">持倉數</p>
           <p class="mt-2 text-lg font-medium tracking-tight tabular-nums">
@@ -118,7 +142,7 @@
                 <th class="py-3 pr-4">名稱</th>
                 <th class="px-4 py-3">類型</th>
                 <th class="px-4 py-3">數量</th>
-                <th class="px-4 py-3 text-right">市值</th>
+                <th class="px-4 py-3 text-right">資產總額</th>
                 <th class="py-3 pl-4">日期</th>
               </tr>
             </thead>

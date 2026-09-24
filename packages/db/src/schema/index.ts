@@ -3,6 +3,8 @@ export * from "./investments";
 export * from "./invoices";
 export * from "./classification";
 export * from "./settings";
+export * from "./cash-wallet";
+export * from "./cash-withdrawal";
 export * from "./notifications";
 export * from "./assets";
 export * from "./exchange-rates";

@@ -19,6 +19,7 @@ export const queryKeys = {
   manualAssets: ["manualAssets"] as const,
   exchangeRates: ["exchange-rates"] as const,
   netWorthHistory: ["netWorthHistory"] as const,
+  cashWallet: ["cash-wallet"] as const,
   syncJobs: ["sync-jobs"] as const,
   latestSyncReport: ["sync-reports", "latest"] as const,
   syncReportActivities: (batchId: string) =>

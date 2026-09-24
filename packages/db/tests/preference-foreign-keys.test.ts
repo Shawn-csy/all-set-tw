@@ -16,7 +16,7 @@ const transaction = (id: string) =>
 const invoice = (id: string) =>
   `INSERT INTO invoices (id, connector_id, source_id, invoice_date, amount, created_at, updated_at) VALUES ('${id}', 'test', '${id}', '2026-09-13', 100, 'created', 'updated')`;
 const bankPreference =
-  "INSERT INTO bank_transaction_preferences VALUES ('transaction', 1, 'created', 'updated')";
+  "INSERT INTO bank_transaction_preferences (transaction_id, excluded_from_calculation, created_at, updated_at) VALUES ('transaction', 1, 'created', 'updated')";
 const linked =
   "INSERT INTO invoice_transaction_preferences VALUES ('linked', 'transaction', 'linked', 'created', 'updated')";
 const separate =
@@ -67,7 +67,7 @@ describe("preference foreign keys on D1", () => {
     await apply(db);
     expect(await preferences(db)).toEqual(before);
     for (const sql of [
-      "INSERT INTO bank_transaction_preferences VALUES ('missing', 0, 't', 't')",
+      "INSERT INTO bank_transaction_preferences (transaction_id, excluded_from_calculation, created_at, updated_at) VALUES ('missing', 0, 't', 't')",
       "INSERT INTO invoice_transaction_preferences VALUES ('missing', NULL, 'separate', 't', 't')",
       "UPDATE invoice_transaction_preferences SET transaction_id = 'missing' WHERE invoice_id = 'linked'",
       "DELETE FROM bank_transactions WHERE id = 'transaction'",

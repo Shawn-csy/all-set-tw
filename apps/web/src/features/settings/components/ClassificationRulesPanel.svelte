@@ -303,6 +303,7 @@
             <option value="contains">包含</option>
             <option value="equals">完全等於</option>
             <option value="starts_with">開頭為</option>
+            <option value="regex">符合正規表示式</option>
           </Select>
         </label>
         <label class="grid gap-1.5 text-sm font-medium">

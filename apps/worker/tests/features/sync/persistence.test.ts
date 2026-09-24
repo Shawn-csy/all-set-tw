@@ -1182,7 +1182,7 @@ describe("staged sync persistence", () => {
     await persistStagedSyncWrite(d1, { records: [nextPending] });
     db.database
       .prepare(
-        "INSERT INTO bank_transaction_preferences VALUES (?, 1, 'now', 'now')",
+        "INSERT INTO bank_transaction_preferences (transaction_id, excluded_from_calculation, created_at, updated_at) VALUES (?, 1, 'now', 'now')",
       )
       .run(nextPending.recordKey);
     db.database

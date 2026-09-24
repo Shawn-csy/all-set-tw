@@ -115,4 +115,38 @@ describe("calculateMonthlyActivityTotals", () => {
       ),
     ).toEqual({ income: 0, expense: 1_200 });
   });
+
+  it("不把投資本金移轉算成消費支出，但保留手續費", () => {
+    const result = calculateMonthlyActivityTotals(
+      {
+        accounts: [
+          {
+            id: "account-1",
+            connectorId: "sinopac",
+            sourceId: "account-1",
+            accountType: "deposit",
+            currency: "TWD",
+          },
+        ],
+        transactions: [
+          transaction({
+            id: "stock-buy",
+            amount: -10_000,
+            description: "定期定額買台股 0050",
+          }),
+          transaction({
+            id: "stock-fee",
+            amount: -20,
+            description: "股票交易手續費",
+          }),
+        ],
+      },
+      [],
+      [],
+      {},
+      [{ symbol: "0050", name: "元大台灣50" }],
+    );
+
+    expect(result).toEqual({ income: 0, expense: 20 });
+  });
 });

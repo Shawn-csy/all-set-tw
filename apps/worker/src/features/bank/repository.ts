@@ -4,6 +4,7 @@ import {
   bankBalanceSnapshots,
   bankTransactionPreferences,
   bankTransactions,
+  cashWithdrawalPreferences,
   creditCardBills,
 } from "@taiwan-fin-hub/db";
 import { and, asc, desc, eq, isNull, ne, sql } from "drizzle-orm";
@@ -14,6 +15,10 @@ import type { MonthDateRange } from "../../platform/month-range";
 const txn = alias(bankTransactions, "txn");
 const account = alias(bankAccounts, "account");
 const preference = alias(bankTransactionPreferences, "preference");
+const cashWithdrawalMarker = alias(
+  cashWithdrawalPreferences,
+  "cash_withdrawal_marker",
+);
 const balance = alias(bankBalanceSnapshots, "balance");
 const bill = alias(creditCardBills, "b");
 const billAccount = alias(bankAccounts, "a");
@@ -57,6 +62,10 @@ const bankTransactionColumns = {
   calculationPreference: sql<
     number | null
   >`${preference.excludedFromCalculation}`.as("calculationPreference"),
+  cashWithdrawalPreference: sql<number | null>`CASE
+    WHEN ${cashWithdrawalMarker.transactionId} IS NOT NULL THEN 1
+    ELSE 0
+  END`.as("cashWithdrawalPreference"),
 };
 
 const creditCardBillColumns = {
@@ -104,6 +113,7 @@ export type BankTransactionPageRow = {
   effectiveDate: string;
   updatedAt: string;
   calculationPreference: number | null;
+  cashWithdrawalPreference?: number | null;
   transferPeerId?: string | null;
 };
 
@@ -134,7 +144,11 @@ function bankTransactionQuery(db: D1Database) {
     .select(bankTransactionColumns)
     .from(txn)
     .innerJoin(account, eq(account.id, txn.accountId))
-    .leftJoin(preference, eq(preference.transactionId, txn.id));
+    .leftJoin(preference, eq(preference.transactionId, txn.id))
+    .leftJoin(
+      cashWithdrawalMarker,
+      eq(cashWithdrawalMarker.transactionId, txn.id),
+    );
 }
 
 export async function listBankAccounts(db: D1Database) {

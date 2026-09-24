@@ -1,3 +1,4 @@
+import { isLikelyInvestmentCashTransfer } from "./activity-flow";
 import type { ActivityItem } from "./activity-types";
 import { compareActivityItems, isActivityDateTime } from "./activity-list";
 import type {
@@ -19,6 +20,7 @@ export interface ActivityTransaction extends MatchingTransaction {
   accountLast4?: string | null;
   status: string;
   excludedFromCalculation?: boolean;
+  cashWithdrawal?: boolean;
   classification?: {
     label: string;
     categoryId: string;
@@ -78,6 +80,10 @@ export function buildActivityItems(
         t.accountName ??
         account?.accountName ??
         (accountLast4 ? `末四碼 ${accountLast4}` : "");
+      const isInvestmentCashTransfer = isLikelyInvestmentCashTransfer(
+        t,
+        trades,
+      );
       return {
         id: t.id,
         source: isCard ? ("card" as const) : ("bank" as const),
@@ -100,6 +106,15 @@ export function buildActivityItems(
         accountName,
         amount: t.amount,
         currency: t.currency,
+        cashFlowType:
+          t.cashWithdrawal || isInvestmentCashTransfer
+            ? ("asset_transfer" as const)
+            : undefined,
+        cashTransferType: t.cashWithdrawal
+          ? ("cash_withdrawal" as const)
+          : isInvestmentCashTransfer
+            ? ("investment" as const)
+            : undefined,
         category: t.classification?.label ?? "未分類",
         categoryId: t.classification?.categoryId ?? "other",
         classificationPattern: t.counterparty ?? t.description ?? undefined,
@@ -128,6 +143,9 @@ export function buildActivityItems(
         category: "發票",
         invoiceId: i.id,
         invoiceAmount: i.amount,
+        invoicePaymentMethod: invoiceMatches.cashInvoiceIds.has(i.id)
+          ? ("cash" as const)
+          : undefined,
         status: "已開立",
       })),
     ...trades.map((t) => {
@@ -149,6 +167,7 @@ export function buildActivityItems(
         accountName,
         amount: t.price === 1 ? undefined : (t.amount ?? undefined),
         currency: t.currency,
+        cashFlowType: "asset_transfer" as const,
         category: "投資",
         status: "已完成",
       };

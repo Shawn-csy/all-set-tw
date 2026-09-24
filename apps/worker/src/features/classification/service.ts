@@ -24,6 +24,18 @@ export function matchesClassificationRule(
   rule: { field: string; operator: string; pattern: string },
   transaction: ClassifiedTransaction,
 ) {
+  // Connectors do not agree on which column contains the merchant memo:
+  // some put it in description, others put it in counterparty. Keep
+  // source_id exact, but let the human-facing fields share their text so a
+  // valid rule does not silently become ineffective after a connector sync.
+  const descriptionText = [transaction.description, transaction.counterparty]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  const counterpartyText = [transaction.counterparty, transaction.description]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
   const anyText = [
     transaction.description,
     transaction.counterparty,
@@ -34,9 +46,9 @@ export function matchesClassificationRule(
     .toLowerCase();
   const text =
     rule.field === "description"
-      ? (transaction.description ?? "").toLowerCase()
+      ? descriptionText
       : rule.field === "counterparty"
-        ? (transaction.counterparty ?? "").toLowerCase()
+        ? counterpartyText
         : rule.field === "source_id"
           ? transaction.sourceId.toLowerCase()
           : anyText;

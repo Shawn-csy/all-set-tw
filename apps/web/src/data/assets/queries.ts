@@ -6,6 +6,7 @@ import type {
   ManualAssetHistoryEntry,
   ManualAssetRow,
   NetWorthHistoryRow,
+  CashWalletRow,
 } from "./types";
 
 type ApiProvider = () => ApiClient;
@@ -40,4 +41,10 @@ export const netWorthHistoryQuery = (getApi: ApiProvider) =>
     queryKey: queryKeys.netWorthHistory,
     queryFn: () =>
       getApi().get<NetWorthHistoryRow[]>("/api/history/net-worth/chart"),
+  });
+
+export const cashWalletQuery = (getApi: ApiProvider) =>
+  queryOptions({
+    queryKey: queryKeys.cashWallet,
+    queryFn: () => getApi().get<CashWalletRow>("/api/cash-wallet"),
   });

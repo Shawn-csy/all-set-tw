@@ -24,6 +24,7 @@ function transaction(
     effectiveDate: "2026-08-22",
     updatedAt: "2026-08-22T12:00:00.000Z",
     calculationPreference: null,
+    cashWithdrawalPreference: null,
     ...input,
   };
 }
@@ -51,6 +52,7 @@ function bankTransactionRawValues(row: BankTransactionPageRow) {
     row.effectiveDate,
     row.updatedAt,
     row.calculationPreference,
+    row.cashWithdrawalPreference ?? null,
   ];
 }
 

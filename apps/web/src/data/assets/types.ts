@@ -26,3 +26,12 @@ export interface ManualAssetHistoryEntry {
   date: string;
   value: number;
 }
+
+export interface CashWalletRow {
+  openingBalance: number;
+  cashWithdrawals: number;
+  cashExpenses: number;
+  balance: number;
+  currency: "TWD";
+  updatedAt: string | null;
+}

@@ -28,6 +28,6 @@ export interface InvoiceRow extends InvoiceSummaryRow {
 export interface InvoiceTransactionPreference {
   invoiceId: string;
   transactionId: string | null;
-  decision: "linked" | "separate";
+  decision: "linked" | "separate" | "cash";
   updatedAt: string;
 }

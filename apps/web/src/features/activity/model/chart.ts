@@ -50,6 +50,7 @@ export function activityCashAmountTwd(
   if (
     item.amount == null ||
     item.excludedFromCalculation ||
+    activityCashFlow(item) == null ||
     (item.source !== "bank" &&
       item.source !== "card" &&
       item.source !== "invoice")

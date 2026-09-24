@@ -25,7 +25,7 @@ const account = alias(bankAccounts, "account");
 export type InvoiceTransactionPreferenceRow = {
   invoiceId: string;
   transactionId: string | null;
-  decision: "linked" | "separate";
+  decision: "linked" | "separate" | "cash";
   createdAt: string;
   updatedAt: string;
 };
@@ -51,7 +51,7 @@ export async function listInvoiceTransactionPreferences(db: D1Database) {
       invoiceId: invoiceTransactionPreferences.invoiceId,
       transactionId: invoiceTransactionPreferences.transactionId,
       decision: sql<
-        "linked" | "separate"
+        "linked" | "separate" | "cash"
       >`${invoiceTransactionPreferences.decision}`,
       createdAt: invoiceTransactionPreferences.createdAt,
       updatedAt: invoiceTransactionPreferences.updatedAt,
@@ -136,12 +136,30 @@ export async function findLinkedInvoiceId(
   return row?.invoiceId;
 }
 
+export async function findInvoiceTransactionPreference(
+  db: D1Database,
+  invoiceId: string,
+) {
+  return (
+    (await createDrizzle(db)
+      .select({
+        transactionId: invoiceTransactionPreferences.transactionId,
+        decision: sql<"linked" | "separate" | "cash">`
+          ${invoiceTransactionPreferences.decision}
+        `,
+      })
+      .from(invoiceTransactionPreferences)
+      .where(eq(invoiceTransactionPreferences.invoiceId, invoiceId))
+      .get()) ?? null
+  );
+}
+
 export async function upsertInvoiceTransactionPreference(
   db: D1Database,
   input: {
     invoiceId: string;
     transactionId: string | null;
-    decision: "linked" | "separate";
+    decision: "linked" | "separate" | "cash";
     now: string;
   },
 ) {

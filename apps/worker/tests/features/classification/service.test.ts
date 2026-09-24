@@ -66,6 +66,26 @@ describe("matchesClassificationRule", () => {
         transaction,
       ),
     ).toBe(true);
+    expect(
+      matchesClassificationRule(
+        { field: "description", operator: "regex", pattern: "\\bstarbucks\\b" },
+        {
+          ...transaction,
+          description: "信用卡消費",
+          counterparty: "STARBUCKS TAIPEI",
+        },
+      ),
+    ).toBe(true);
+    expect(
+      matchesClassificationRule(
+        { field: "counterparty", operator: "contains", pattern: "coffee" },
+        {
+          ...transaction,
+          description: "信用卡消費",
+          counterparty: "Coffee Shop",
+        },
+      ),
+    ).toBe(true);
   });
 
   it("treats invalid regular expressions as non-matches", () => {

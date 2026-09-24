@@ -11,6 +11,9 @@ export interface ActivityItem {
   accountName?: string;
   amount?: number;
   currency: string;
+  /** Cash-flow classification used by reports and charts. */
+  cashFlowType?: ActivityCashFlowType;
+  cashTransferType?: "investment" | "cash_withdrawal";
   category: string;
   categoryId?: string;
   classificationPattern?: string;
@@ -26,5 +29,9 @@ export interface ActivityItem {
   excludedFromCalculation?: boolean;
   invoiceId?: string;
   invoiceAmount?: number;
+  invoicePaymentMethod?: "cash";
   status: string;
 }
+
+export type ActivityCashFlowType =
+  "income" | "expense" | "asset_transfer" | "valuation";

@@ -1,5 +1,6 @@
 import {
   findLinkedInvoiceId,
+  findInvoiceTransactionPreference,
   findMappingInvoice,
   findMappingTransaction,
   upsertInvoiceTransactionPreference,
@@ -10,6 +11,7 @@ export class MappingTransactionNotFoundError extends Error {}
 export class MappingTransactionUnavailableError extends Error {}
 export class MappingDateMismatchError extends Error {}
 export class MappingTransactionNotExpenseError extends Error {}
+export class MappingInvoiceAlreadyLinkedError extends Error {}
 
 const taipeiDayFormatter = new Intl.DateTimeFormat("en", {
   timeZone: "Asia/Taipei",
@@ -90,6 +92,32 @@ export async function keepInvoiceSeparate(db: D1Database, invoiceId: string) {
     invoiceId,
     transactionId: null,
     decision: "separate" as const,
+    updatedAt: now,
+  };
+}
+
+export async function markInvoiceAsCashPayment(
+  db: D1Database,
+  invoiceId: string,
+) {
+  if (!(await findMappingInvoice(db, invoiceId)))
+    throw new MappingInvoiceNotFoundError();
+  const preference = await findInvoiceTransactionPreference(db, invoiceId);
+  if (preference?.decision === "linked" && preference.transactionId) {
+    throw new MappingInvoiceAlreadyLinkedError();
+  }
+
+  const now = new Date().toISOString();
+  await upsertInvoiceTransactionPreference(db, {
+    invoiceId,
+    transactionId: null,
+    decision: "cash",
+    now,
+  });
+  return {
+    invoiceId,
+    transactionId: null,
+    decision: "cash" as const,
     updatedAt: now,
   };
 }

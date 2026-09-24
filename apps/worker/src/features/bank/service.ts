@@ -142,6 +142,7 @@ async function presentBankTransactions(
           classificationExcludedFromCalculation:
             classification?.excludedFromCalculation,
         }),
+        cashWithdrawal: transaction.cashWithdrawalPreference === 1,
         classification,
       };
     },

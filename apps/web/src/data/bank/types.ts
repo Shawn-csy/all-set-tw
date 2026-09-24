@@ -38,6 +38,7 @@ export interface BankTransactionRow {
   counterparty?: string;
   status: "pending" | "posted";
   excludedFromCalculation: boolean;
+  cashWithdrawal?: boolean;
   classification?: {
     categoryId: string;
     label: string;

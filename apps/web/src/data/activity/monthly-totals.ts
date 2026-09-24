@@ -1,4 +1,8 @@
 import type { BankData, BankTransactionRow } from "@/data/bank/types";
+import {
+  isLikelyInvestmentCashTransfer,
+  type InvestmentCashTransferHint,
+} from "@taiwan-fin-hub/core";
 import type {
   InvoiceSummaryRow,
   InvoiceTransactionPreference,
@@ -19,6 +23,7 @@ export function calculateMonthlyActivityTotals(
   invoices: InvoiceSummaryRow[],
   mappings: InvoiceTransactionPreference[],
   rates: Record<string, number>,
+  investmentTrades: readonly InvestmentCashTransferHint[] = [],
 ): MonthlyActivityTotals {
   const accounts = new Map(
     bank.accounts.map((account) => [account.id, account]),
@@ -36,6 +41,9 @@ export function calculateMonthlyActivityTotals(
   const totals = transactions.reduce(
     (result, transaction) => {
       if (transaction.excludedFromCalculation) return result;
+      if (transaction.cashWithdrawal) return result;
+      if (isLikelyInvestmentCashTransfer(transaction, investmentTrades))
+        return result;
       const amount = transactionValueTwd(transaction, rates);
       if (amount > 0) result.income += amount;
       if (amount < 0) result.expense += Math.abs(amount);

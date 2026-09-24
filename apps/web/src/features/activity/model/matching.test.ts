@@ -156,6 +156,25 @@ describe("invoice transaction matching", () => {
     expect(result.transactionToInvoice.size).toBe(0);
   });
 
+  it("keeps a cash-paid invoice separate and marks it for the cash wallet", () => {
+    const result = matchInvoicesToTransactions(
+      [transaction()],
+      [invoice()],
+      [
+        {
+          invoiceId: "invoice-1",
+          transactionId: null,
+          decision: "cash",
+          updatedAt: "2026-07-19T00:00:00.000Z",
+        },
+      ],
+    );
+
+    expect(result.invoiceToTransactionId.size).toBe(0);
+    expect(result.transactionToInvoice.size).toBe(0);
+    expect(result.cashInvoiceIds.has("invoice-1")).toBe(true);
+  });
+
   it("pairs ambiguous same-day amounts deterministically and one-to-one", () => {
     const result = matchInvoicesToTransactions(
       [

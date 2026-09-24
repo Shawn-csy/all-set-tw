@@ -112,6 +112,18 @@ describe("activity category chart", () => {
     ]);
   });
 
+  it("keeps investment principal out of cash-flow charts", () => {
+    const transfer = item({
+      amount: -10_000,
+      cashFlowType: "asset_transfer",
+      category: "投資",
+    });
+
+    expect(activityCashFlow(transfer)).toBeNull();
+    expect(activityCashAmountTwd(transfer, {})).toBe(0);
+    expect(buildActivityCategorySlices([transfer], "expense", {})).toEqual([]);
+  });
+
   it("sorts zero-value excluded categories after counted categories", () => {
     const slices = buildActivityCategorySlices(
       [

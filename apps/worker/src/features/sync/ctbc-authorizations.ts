@@ -240,9 +240,18 @@ export async function prepareCtbcAuthorizationWrite(
         .bind(linksJson),
       db
         .prepare(
-          `INSERT INTO bank_transaction_preferences (transaction_id, excluded_from_calculation, created_at, updated_at)
-        SELECT json_extract(link.value, '$.id'), posted.excluded_from_calculation, posted.created_at, posted.updated_at
+          `INSERT INTO bank_transaction_preferences (transaction_id, excluded_from_calculation, cash_withdrawal, created_at, updated_at)
+        SELECT json_extract(link.value, '$.id'), posted.excluded_from_calculation, posted.cash_withdrawal, posted.created_at, posted.updated_at
         FROM json_each(?) link JOIN bank_transaction_preferences posted ON posted.transaction_id = json_extract(link.value, '$.posted')
+        WHERE true ON CONFLICT(transaction_id) DO NOTHING`,
+        )
+        .bind(linksJson),
+      db
+        .prepare(
+          `INSERT INTO cash_withdrawal_preferences (transaction_id, created_at, updated_at)
+        SELECT json_extract(link.value, '$.id'), posted.created_at, posted.updated_at
+        FROM json_each(?) link JOIN cash_withdrawal_preferences posted
+          ON posted.transaction_id = json_extract(link.value, '$.posted')
         WHERE true ON CONFLICT(transaction_id) DO NOTHING`,
         )
         .bind(linksJson),
@@ -275,6 +284,12 @@ export async function prepareCtbcAuthorizationWrite(
       db
         .prepare(
           `DELETE FROM bank_transaction_preferences
+        WHERE transaction_id IN (SELECT json_extract(value, '$.posted') FROM json_each(?))`,
+        )
+        .bind(linksJson),
+      db
+        .prepare(
+          `DELETE FROM cash_withdrawal_preferences
         WHERE transaction_id IN (SELECT json_extract(value, '$.posted') FROM json_each(?))`,
         )
         .bind(linksJson),

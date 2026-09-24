@@ -1,5 +1,7 @@
 import {
+  bankTransactionIsCashWithdrawalCandidate,
   bankTransactionExists,
+  upsertCashWithdrawalPreference,
   upsertCalculationPreference,
 } from "./calculation-repository";
 
@@ -13,6 +15,7 @@ export type CalculationTransaction = {
 };
 
 export class BankTransactionNotFoundError extends Error {}
+export class BankTransactionNotCashWithdrawalError extends Error {}
 
 function calculationText(transaction: CalculationTransaction) {
   const normalized =
@@ -78,6 +81,25 @@ export async function setCalculationPreference(
     db,
     transactionId,
     excludedFromCalculation,
+    new Date().toISOString(),
+  );
+}
+
+export async function setCashWithdrawalPreference(
+  db: D1Database,
+  transactionId: string,
+  cashWithdrawal: boolean,
+) {
+  if (!(await bankTransactionExists(db, transactionId))) {
+    throw new BankTransactionNotFoundError();
+  }
+  if (!(await bankTransactionIsCashWithdrawalCandidate(db, transactionId))) {
+    throw new BankTransactionNotCashWithdrawalError();
+  }
+  await upsertCashWithdrawalPreference(
+    db,
+    transactionId,
+    cashWithdrawal,
     new Date().toISOString(),
   );
 }

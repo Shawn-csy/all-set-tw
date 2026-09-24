@@ -35,9 +35,14 @@ export function mergeLegacyTransactionStatements(
     )`;
   return [
     `INSERT INTO bank_transaction_preferences
-      (transaction_id, excluded_from_calculation, created_at, updated_at)
-      SELECT m.new_id, p.excluded_from_calculation, p.created_at, p.updated_at
+      (transaction_id, excluded_from_calculation, cash_withdrawal, created_at, updated_at)
+      SELECT m.new_id, p.excluded_from_calculation, p.cash_withdrawal, p.created_at, p.updated_at
       FROM merges m JOIN bank_transaction_preferences p ON p.transaction_id = m.old_id
+      WHERE true ON CONFLICT(transaction_id) DO NOTHING`,
+    `INSERT INTO cash_withdrawal_preferences
+      (transaction_id, created_at, updated_at)
+      SELECT m.new_id, p.created_at, p.updated_at
+      FROM merges m JOIN cash_withdrawal_preferences p ON p.transaction_id = m.old_id
       WHERE true ON CONFLICT(transaction_id) DO NOTHING`,
     `INSERT INTO classification_overrides
       (id, target_type, target_id, category_id, created_at, updated_at)
@@ -54,6 +59,7 @@ export function mergeLegacyTransactionStatements(
       WHERE transfer_peer_id IN (SELECT old_id FROM merges)
         OR matched_transaction_id IN (SELECT old_id FROM merges)`,
     `DELETE FROM bank_transaction_preferences WHERE transaction_id IN (SELECT old_id FROM merges)`,
+    `DELETE FROM cash_withdrawal_preferences WHERE transaction_id IN (SELECT old_id FROM merges)`,
     `DELETE FROM classification_overrides
       WHERE target_type = 'bank_transaction' AND target_id IN (SELECT old_id FROM merges)`,
     `DELETE FROM bank_transactions WHERE id IN (SELECT old_id FROM merges)`,

@@ -143,4 +143,38 @@ describe("default classification rules", () => {
     expect(expected).toHaveLength(3);
     expect(database.prepare(sql).all()).toEqual(expected);
   });
+
+  it("recognizes Taiwanese investment and card-payment descriptions", async () => {
+    const results = await resolveClassifications(asD1(createDatabase("0049")), [
+      {
+        id: "tdcc",
+        sourceId: "tdcc",
+        description: "複委託",
+        amount: -1000,
+      },
+      {
+        id: "recurring-stock",
+        sourceId: "recurring-stock",
+        description: "定期定額買台股",
+        amount: -1000,
+      },
+      {
+        id: "ticker",
+        sourceId: "ticker",
+        description: "0050",
+        amount: -1000,
+      },
+      {
+        id: "card-payment",
+        sourceId: "card-payment",
+        description: "信用卡款",
+        amount: -1000,
+      },
+    ]);
+
+    expect(results.get("tdcc")?.categoryId).toBe("investment");
+    expect(results.get("recurring-stock")?.categoryId).toBe("investment");
+    expect(results.get("ticker")?.categoryId).toBe("investment");
+    expect(results.get("card-payment")?.categoryId).toBe("transfer");
+  });
 });

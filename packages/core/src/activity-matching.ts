@@ -19,7 +19,7 @@ export interface InvoiceTransactionPreference {
   updatedAt?: string;
   invoiceId: string;
   transactionId: string | null;
-  decision: "linked" | "separate";
+  decision: "linked" | "separate" | "cash";
 }
 const TAIPEI_DAY_FORMATTER = new Intl.DateTimeFormat("en", {
   timeZone: "Asia/Taipei",
@@ -33,6 +33,7 @@ export interface InvoiceTransactionMatches<
 > {
   invoiceToTransactionId: Map<string, string>;
   transactionToInvoice: Map<string, I>;
+  cashInvoiceIds: Set<string>;
 }
 
 const ESUN_LIFECYCLE_MARKER = /:(已入帳|未入帳):(?=\d+$)/u;
@@ -75,9 +76,14 @@ export function matchInvoicesToTransactions<I extends MatchingInvoice>(
   );
   const invoiceToTransactionId = new Map<string, string>();
   const transactionToInvoice = new Map<string, I>();
+  const cashInvoiceIds = new Set(
+    preferences
+      .filter(({ decision }) => decision === "cash")
+      .map(({ invoiceId }) => invoiceId),
+  );
   const separateInvoiceIds = new Set(
     preferences
-      .filter(({ decision }) => decision === "separate")
+      .filter(({ decision }) => decision === "separate" || decision === "cash")
       .map(({ invoiceId }) => invoiceId),
   );
 
@@ -106,7 +112,7 @@ export function matchInvoicesToTransactions<I extends MatchingInvoice>(
     transactionToInvoice,
   );
 
-  return { invoiceToTransactionId, transactionToInvoice };
+  return { invoiceToTransactionId, transactionToInvoice, cashInvoiceIds };
 }
 
 export function invoiceTransactionCandidates<T extends MatchingTransaction>(

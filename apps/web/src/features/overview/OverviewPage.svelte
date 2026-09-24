@@ -14,6 +14,7 @@
     exchangeRatesQuery,
     manualAssetsQuery,
     netWorthHistoryQuery,
+    cashWalletQuery,
   } from "@/data/assets/queries";
   import { bankRangeQuery } from "@/data/bank/queries";
   import { syncJobsQuery } from "@/data/connectors/queries";
@@ -25,7 +26,10 @@
     getHealthySyncJobs,
     getPendingSyncJobs,
   } from "@/data/connectors/sync-status";
-  import { investmentsQuery } from "@/data/investments/queries";
+  import {
+    investmentsQuery,
+    investmentTransactionsRangeQuery,
+  } from "@/data/investments/queries";
   import {
     invoiceTransactionMappingsQuery,
     invoicesRangeQuery,
@@ -76,6 +80,10 @@
     ...investmentsQuery(() => api),
     ...overviewCache,
   });
+  const monthlyInvestmentTrades = createQuery({
+    ...investmentTransactionsRangeQuery(() => api, currentMonthRange),
+    ...overviewCache,
+  });
   const monthlyInvoices = createQuery({
     ...invoicesRangeQuery(() => api, currentMonthRange),
     ...overviewCache,
@@ -86,6 +94,10 @@
   });
   const manualAssets = createQuery({
     ...manualAssetsQuery(() => api),
+    ...overviewCache,
+  });
+  const cashWallet = createQuery({
+    ...cashWalletQuery(() => api),
     ...overviewCache,
   });
   const rates = createQuery({
@@ -120,6 +132,8 @@
       0,
     ),
   );
+  const cashBalance = $derived($cashWallet.data?.balance ?? 0);
+  const bankAndCashTotal = $derived(depositTotal + cashBalance);
   const cardDebt = $derived(
     cards.reduce(
       (sum, account) =>
@@ -127,32 +141,37 @@
       0,
     ),
   );
-  const investmentTotal = $derived(
+  const investmentMarketValue = $derived(
     ($investments.data ?? []).reduce(
-      (sum, item) =>
-        sum +
-        toTwd((item.marketValue ?? 0) + (item.cashBalance ?? 0), item.currency),
+      (sum, item) => sum + toTwd(item.marketValue ?? 0, item.currency),
       0,
     ),
   );
+  const investmentCash = $derived(
+    ($investments.data ?? []).reduce(
+      (sum, item) => sum + toTwd(item.cashBalance ?? 0, item.currency),
+      0,
+    ),
+  );
+  const investmentTotal = $derived(investmentMarketValue + investmentCash);
   const manualTotal = $derived(
     ($manualAssets.data ?? []).reduce(
       (sum, item) => sum + toTwd(item.value ?? 0, item.currency),
       0,
     ),
   );
-  const gross = $derived(depositTotal + investmentTotal + manualTotal);
+  const gross = $derived(bankAndCashTotal + investmentTotal + manualTotal);
   const netWorth = $derived(gross - cardDebt);
   const allocation = $derived([
     {
       label: "銀行與現金",
-      value: depositTotal,
-      detail: `${deposits.length} 個帳戶`,
+      value: bankAndCashTotal,
+      detail: `${deposits.length} 個帳戶 · 現金 ${formatCompactTwd(cashBalance)}`,
     },
     {
       label: "投資",
       value: investmentTotal,
-      detail: `${$investments.data?.length ?? 0} 個持倉`,
+      detail: `${$investments.data?.length ?? 0} 個持倉 · 市值 ${formatCompactTwd(investmentMarketValue)}`,
     },
     {
       label: "其他資產",
@@ -166,6 +185,7 @@
       $monthlyInvoices.data ?? [],
       $invoiceMappings.data ?? [],
       rateValues,
+      $monthlyInvestmentTrades.data ?? [],
     ),
   );
   const monthlyIncome = $derived(monthlyTotals.income);
@@ -314,14 +334,18 @@
       $monthlyInvoices.isPending ||
       $invoiceMappings.isPending ||
       $investments.isPending ||
-      $manualAssets.isPending,
+      $monthlyInvestmentTrades.isPending ||
+      $manualAssets.isPending ||
+      $cashWallet.isPending,
   );
   const failed = $derived(
     $monthlyBank.isError ||
       $monthlyInvoices.isError ||
       $invoiceMappings.isError ||
       $investments.isError ||
-      $manualAssets.isError,
+      $monthlyInvestmentTrades.isError ||
+      $manualAssets.isError ||
+      $cashWallet.isError,
   );
 </script>
 
@@ -390,6 +414,26 @@
             </p>
           </div>
         {/each}
+      </div>
+      <div
+        class="mt-5 grid grid-cols-2 gap-3 border-t border-ink/8 pt-4 md:max-w-xl md:gap-6"
+      >
+        <div class="min-w-0">
+          <p class="text-caption text-subtle">持倉市值</p>
+          <p class="mt-1 text-base font-semibold tabular-nums">
+            {formatCurrency(investmentMarketValue)}
+          </p>
+          <p class="mt-1 text-caption text-subtle">
+            目前市場估值，不代表本月支出
+          </p>
+        </div>
+        <div class="min-w-0">
+          <p class="text-caption text-subtle">投資帳戶現金</p>
+          <p class="mt-1 text-base font-semibold tabular-nums">
+            {formatCurrency(investmentCash)}
+          </p>
+          <p class="mt-1 text-caption text-subtle">買賣本金視為資產移轉</p>
+        </div>
       </div>
     </section>
 

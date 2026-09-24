@@ -1,4 +1,8 @@
-import type { ExchangeRateRow, ManualAssetRow } from "@/data/assets/types";
+import type {
+  CashWalletRow,
+  ExchangeRateRow,
+  ManualAssetRow,
+} from "@/data/assets/types";
 import type { BankAccountRow, BankData } from "@/data/bank/types";
 import type { InvestmentRow } from "@/data/investments/types";
 import { missingExchangeRateCurrencies } from "@/shared/format/financial";
@@ -30,6 +34,7 @@ export interface AssetSummary {
   deposits: BankAccountRow[];
   cards: BankAccountRow[];
   bankTotal: number;
+  cashTotal: number;
   investmentTotal: number;
   manualTotal: number;
   cardDebt: number;
@@ -50,11 +55,13 @@ export function calculateAssetSummary({
   bank,
   investments,
   manualAssets,
+  cashWallet,
   rates,
 }: {
   bank: BankData;
   investments: InvestmentRow[];
   manualAssets: ManualAssetRow[];
+  cashWallet?: CashWalletRow;
   rates?: ExchangeRateRow[];
 }): AssetSummary {
   const rateValues = Object.fromEntries(
@@ -103,12 +110,13 @@ export function calculateAssetSummary({
     (sum, item) => sum + toTwd(item.value ?? 0, item.currency),
     0,
   );
+  const cashTotal = cashWallet?.balance ?? 0;
   const cardDebt = cards.reduce(
     (sum, account) =>
       sum + Math.abs(toTwd(account.balance ?? 0, account.currency)),
     0,
   );
-  const grossAssets = bankTotal + investmentTotal + manualTotal;
+  const grossAssets = bankTotal + cashTotal + investmentTotal + manualTotal;
 
   const groups = bank.accounts.reduce<Record<string, BankAccountRow[]>>(
     (result, account) => {
@@ -172,6 +180,7 @@ export function calculateAssetSummary({
     deposits,
     cards,
     bankTotal,
+    cashTotal,
     investmentTotal,
     manualTotal,
     cardDebt,

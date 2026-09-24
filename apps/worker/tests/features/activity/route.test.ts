@@ -7,7 +7,7 @@ import { apiErrorResponse } from "../../../src/platform/http";
 type Preference = {
   invoiceId: string;
   transactionId: string | null;
-  decision: "linked" | "separate";
+  decision: "linked" | "separate" | "cash";
   createdAt: string;
   updatedAt: string;
 };
@@ -106,7 +106,7 @@ function createDb() {
             values as [
               string,
               string | null,
-              "linked" | "separate",
+              "linked" | "separate" | "cash",
               string,
               string,
             ];
@@ -178,6 +178,30 @@ describe("activity invoice transaction mappings", () => {
     expect(preferences.get("invoice-1")).toMatchObject({
       transactionId: null,
       decision: "separate",
+    });
+  });
+
+  it("marks an invoice as cash paid without linking a transaction", async () => {
+    const { db, preferences } = createDb();
+    const response = await activityRoutes.request(
+      "/activity/invoice-mappings/invoice-1",
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentMethod: "cash" }),
+      },
+      { DB: db } as Env,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      invoiceId: "invoice-1",
+      transactionId: null,
+      decision: "cash",
+    });
+    expect(preferences.get("invoice-1")).toMatchObject({
+      transactionId: null,
+      decision: "cash",
     });
   });
 

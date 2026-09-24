@@ -176,6 +176,9 @@ export const bankTransactionPreferences = sqliteTable(
       .default(sql`0`),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
+    cashWithdrawal: integer("cash_withdrawal")
+      .notNull()
+      .default(sql`0`),
   },
   (table) => [
     primaryKey({ columns: [table.transactionId] }),
@@ -189,6 +192,10 @@ export const bankTransactionPreferences = sqliteTable(
     check(
       "bank_transaction_preferences_check_1",
       sql`excluded_from_calculation IN (0, 1)`,
+    ),
+    check(
+      "bank_transaction_preferences_check_2",
+      sql`cash_withdrawal IN (0, 1)`,
     ),
   ],
 );

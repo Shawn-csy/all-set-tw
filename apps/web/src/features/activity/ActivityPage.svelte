@@ -73,6 +73,7 @@
   import {
     buildActivityCategorySlices,
     activityCashAmountTwd,
+    activityCashFlow,
     activityDisplayAmount,
     activityAmountTwd,
   } from "./model/chart";
@@ -321,6 +322,7 @@
     invoice: InvoiceSummaryRow;
     step: "candidates" | "confirm" | "actions";
     transactionId?: string;
+    paymentMethod?: "cash";
   } | null>(null);
   let mappingNotice = $state("");
   let detailKey = $state<string | null>(null);
@@ -444,6 +446,7 @@
             !item.excludedFromCalculation &&
             item.amount != null &&
             ["bank", "card", "invoice"].includes(item.source) &&
+            activityCashFlow(item) != null &&
             activityAmountTwd(item, rateValues) == null,
         )
         .map((item) => item.currency),
@@ -589,6 +592,20 @@
       qc.invalidateQueries({ queryKey: queryKeys.bank });
     },
   });
+  const cashWithdrawalMutation = createMutation({
+    mutationFn: (payload: { transactionId: string; cashWithdrawal: boolean }) =>
+      api.patch(
+        `/api/bank/transactions/${encodeURIComponent(payload.transactionId)}/calculation`,
+        { cashWithdrawal: payload.cashWithdrawal },
+      ),
+    onSuccess: (_result, payload) => {
+      updateCashWithdrawalCache(payload.transactionId, payload.cashWithdrawal);
+      qc.invalidateQueries({ queryKey: queryKeys.bank });
+      showMappingNotice(
+        payload.cashWithdrawal ? "已標記為提款至現金" : "已取消提款至現金標記",
+      );
+    },
+  });
   const calculationUpdateMutation = createMutation({
     mutationFn: async (payload: CalculationUpdateInput) => {
       await api.patch(
@@ -650,6 +667,19 @@
       mappingDialog = null;
       closeDetail();
       showMappingNotice("已完成配對，活動只顯示一筆");
+    },
+  });
+  const cashPaymentMutation = createMutation({
+    mutationFn: (invoiceId: string) =>
+      api.put<InvoiceTransactionPreference>(
+        `/api/activity/invoice-mappings/${encodeURIComponent(invoiceId)}`,
+        { paymentMethod: "cash" },
+      ),
+    onSuccess: (preference) => {
+      updateMappingPreference(preference);
+      mappingDialog = null;
+      closeDetail();
+      showMappingNotice("已標記為現金支付，現金餘額會扣除這筆發票");
     },
   });
   const separationMutation = createMutation({
@@ -772,6 +802,23 @@
         : current,
     );
   }
+  function updateCashWithdrawalCache(
+    transactionId: string,
+    cashWithdrawal: boolean,
+  ) {
+    qc.setQueriesData<BankData>({ queryKey: queryKeys.bank }, (current) =>
+      current
+        ? {
+            ...current,
+            transactions: current.transactions.map((transaction) =>
+              transaction.id === transactionId
+                ? { ...transaction, cashWithdrawal }
+                : transaction,
+            ),
+          }
+        : current,
+    );
+  }
   function updateMappingPreference(preference: InvoiceTransactionPreference) {
     qc.setQueryData<InvoiceTransactionPreference[]>(
       queryKeys.invoiceTransactionMappings,
@@ -782,6 +829,7 @@
     );
     qc.invalidateQueries({ queryKey: queryKeys.invoiceTransactionMappings });
     qc.invalidateQueries({ queryKey: queryKeys.bank });
+    qc.invalidateQueries({ queryKey: queryKeys.cashWallet });
   }
   function showMappingNotice(message: string) {
     mappingNotice = message;
@@ -797,8 +845,12 @@
     if (!invoice) return;
     mappingDialog = {
       invoice,
-      step: item.transactionId ? "actions" : "candidates",
+      step:
+        item.invoicePaymentMethod === "cash" || item.transactionId
+          ? "actions"
+          : "candidates",
       transactionId: item.transactionId,
+      paymentMethod: item.invoicePaymentMethod,
     };
   }
   function chooseMappingTransaction(transactionId: string) {
@@ -831,6 +883,18 @@
   function itemMappingDifference(item: ActivityItem) {
     if (item.invoiceAmount == null || item.amount == null) return 0;
     return Math.abs(item.invoiceAmount - Math.abs(item.amount));
+  }
+  function cashTransferLabel(item: ActivityItem) {
+    return item.cashTransferType === "cash_withdrawal"
+      ? "提款至現金 · 不列入收支"
+      : "資產移轉 · 不列入收支";
+  }
+  function toggleCashWithdrawal(item: ActivityItem) {
+    if (!item.transactionId || item.invoiceId) return;
+    $cashWithdrawalMutation.mutate({
+      transactionId: item.transactionId,
+      cashWithdrawal: item.cashTransferType !== "cash_withdrawal",
+    });
   }
   function countMatches(update: {
     pattern: string;
@@ -1219,6 +1283,11 @@
                           .filter(Boolean)
                           .join(" · ")}
                       </p>
+                      {#if item.cashFlowType === "asset_transfer"}<Badge
+                          variant="secondary"
+                          class="mt-1 bg-steel/10 text-steel"
+                          >{cashTransferLabel(item)}</Badge
+                        >{/if}
                     </div>
                     <div class="flex shrink-0 items-center gap-1.5">
                       <div class="max-w-[40vw] text-right">
@@ -1341,7 +1410,14 @@
                             {item.accountName}
                           </p>{/if}</td
                       ><td class="px-4 py-3.5"
-                        ><Badge variant="secondary">{item.category}</Badge></td
+                        ><div class="flex flex-wrap gap-1.5">
+                          <Badge variant="secondary">{item.category}</Badge>
+                          {#if item.cashFlowType === "asset_transfer"}<Badge
+                              variant="secondary"
+                              class="bg-steel/10 text-steel"
+                              >{cashTransferLabel(item)}</Badge
+                            >{/if}
+                        </div></td
                       ><td class="py-3.5 pl-4"
                         ><div class="flex items-center justify-end gap-2">
                           <div class="min-w-0 text-right">
@@ -1461,6 +1537,16 @@
               <Badge variant="secondary" class="mt-3"
                 >{detailItem.category}</Badge
               >
+              {#if detailItem.cashFlowType === "asset_transfer"}<Badge
+                  variant="secondary"
+                  class="ml-2 mt-3 bg-steel/10 text-steel"
+                  >{cashTransferLabel(detailItem)}</Badge
+                >{/if}
+              {#if detailItem.invoicePaymentMethod === "cash"}<Badge
+                  variant="secondary"
+                  class="ml-2 mt-3 bg-amber-50 text-amber-800"
+                  >現金支付 · 會扣除現金餘額</Badge
+                >{/if}
               {#if detailItem.excludedFromCalculation}<Badge
                   variant="secondary"
                   class="ml-2 mt-3">已排除計算</Badge
@@ -1511,9 +1597,15 @@
                 {#if !transaction && invoice}<div
                     class="rounded-xl bg-amber-50 p-4 text-amber-900"
                   >
-                    <p class="font-semibold">尚未找到銀行／信用卡交易</p>
+                    <p class="font-semibold">
+                      {detailItem.invoicePaymentMethod === "cash"
+                        ? "已標記為現金支付"
+                        : "尚未找到銀行／信用卡交易"}
+                    </p>
                     <p class="mt-1 text-caption text-subtle">
-                      仍會列入當月支出；你可以在下方手動配對。
+                      {detailItem.invoicePaymentMethod === "cash"
+                        ? "會列入當月支出，並從現金錢包扣除；不會配對銀行／信用卡。"
+                        : "仍會列入當月支出；你可以在下方手動配對或標記為現金支付。"}
                     </p>
                   </div>{/if}
                 {#if !transaction && !invoice}<div
@@ -1618,6 +1710,33 @@
                     />
                   </label>{/if}
 
+                {#if detailItem.transactionId && detailItem.source === "bank"}
+                  <div class="flex items-center justify-between gap-4 py-4">
+                    <div class="min-w-0">
+                      <p class="font-semibold">現金流向</p>
+                      <p class="mt-1 text-caption text-subtle">
+                        {detailItem.invoiceId
+                          ? "已配對發票；請先解除配對再標記提款"
+                          : detailItem.cashTransferType === "cash_withdrawal"
+                            ? "提款至現金，不列入消費支出"
+                            : "一般銀行／信用卡活動"}
+                      </p>
+                    </div>
+                    <Button
+                      class="h-11 shrink-0 whitespace-nowrap"
+                      variant={detailItem.cashTransferType === "cash_withdrawal"
+                        ? "outline"
+                        : "secondary"}
+                      disabled={Boolean(detailItem.invoiceId) ||
+                        $cashWithdrawalMutation.isPending}
+                      onclick={() => toggleCashWithdrawal(detailItem)}
+                      >{detailItem.cashTransferType === "cash_withdrawal"
+                        ? "取消提款標記"
+                        : "標記為提款至現金"}</Button
+                    >
+                  </div>
+                {/if}
+
                 {#if invoice}<div
                     class="flex items-center justify-between gap-4 py-4"
                   >
@@ -1626,14 +1745,24 @@
                       <p
                         class={`mt-1 text-caption ${transaction ? "text-moss" : "text-coral"}`}
                       >
-                        {transaction ? "已配對，可變更或解除" : "尚未配對"}
+                        {detailItem.invoicePaymentMethod === "cash"
+                          ? "現金支付，會扣除現金餘額"
+                          : transaction
+                            ? "已配對，可變更或解除"
+                            : "尚未配對"}
                       </p>
                     </div>
                     <Button
                       class="h-11 shrink-0 whitespace-nowrap"
-                      variant={transaction ? "outline" : "default"}
+                      variant={transaction ||
+                      detailItem.invoicePaymentMethod === "cash"
+                        ? "outline"
+                        : "default"}
                       onclick={() => openMapping(detailItem)}
-                      >{transaction ? "管理配對" : "配對交易"}</Button
+                      >{transaction ||
+                      detailItem.invoicePaymentMethod === "cash"
+                        ? "管理支付方式"
+                        : "配對交易"}</Button
                     >
                   </div>{/if}
               </div>
@@ -1679,7 +1808,9 @@
             <div class="min-w-0">
               <h2 class="text-xl font-semibold">
                 {mappingDialog.step === "actions"
-                  ? "管理配對"
+                  ? mappingDialog.paymentMethod === "cash"
+                    ? "管理支付方式"
+                    : "管理配對"
                   : mappingDialog.step === "confirm"
                     ? "確認合併這兩筆？"
                     : "選擇同日候選交易"}
@@ -1737,6 +1868,22 @@
                 onclick={() => (mappingDialog!.step = "candidates")}
                 ><Link2 class="size-4 text-steel" />變更配對</Button
               >
+              {#if !mappingDialog.transactionId}<Button
+                  class="h-12 justify-start gap-3"
+                  variant="outline"
+                  disabled={$cashPaymentMutation.isPending}
+                  onclick={() =>
+                    $cashPaymentMutation.mutate(mappingDialog!.invoice.id)}
+                  >{$cashPaymentMutation.isPending
+                    ? "更新中…"
+                    : mappingDialog.paymentMethod === "cash"
+                      ? "維持現金支付"
+                      : "標記為現金支付（不配對銀行／信用卡）"}</Button
+                >{:else}<p
+                  class="rounded-xl bg-amber-50 p-4 text-sm text-amber-900"
+                >
+                  這張發票已配對銀行／信用卡；請先解除配對並確認原交易的處理方式，再標記為現金支付，避免重複記帳。
+                </p>{/if}
               <Button
                 class="h-12 justify-start gap-3 text-coral"
                 disabled={$separationMutation.isPending}
@@ -1745,7 +1892,9 @@
                   $separationMutation.mutate(mappingDialog!.invoice.id)}
                 ><Unlink2 class="size-4" />{$separationMutation.isPending
                   ? "解除中…"
-                  : "解除並保持分開"}</Button
+                  : mappingDialog.paymentMethod === "cash"
+                    ? "取消現金標記"
+                    : "解除並保持分開"}</Button
               >
             </div>
           {:else if mappingDialog.step === "candidates"}
@@ -1797,6 +1946,16 @@
                     </span>
                   </button>{/each}{/if}
             </div>
+            <Button
+              class="mt-4 h-12 w-full"
+              variant="outline"
+              disabled={$cashPaymentMutation.isPending}
+              onclick={() =>
+                $cashPaymentMutation.mutate(mappingDialog!.invoice.id)}
+              >{$cashPaymentMutation.isPending
+                ? "標記中…"
+                : "現金支付（不配對銀行／信用卡）"}</Button
+            >
             <p class="mt-4 text-caption text-subtle">
               依同一天與金額接近排序；商家名稱可能因支付工具而不同，最後由你決定。
             </p>
@@ -1881,7 +2040,7 @@
               </p>{/if}
           {/if}
 
-          {#if $mappingMutation.isError || $separationMutation.isError}<p
+          {#if $mappingMutation.isError || $separationMutation.isError || $cashPaymentMutation.isError}<p
               class="mt-4 text-sm font-medium text-coral"
             >
               無法更新配對，資料可能已變更，請重新整理後再試。

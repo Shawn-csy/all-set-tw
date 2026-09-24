@@ -100,13 +100,13 @@ export const invoiceTransactionPreferences = sqliteTable(
       .where(sql`decision = 'linked'`),
     check(
       "invoice_transaction_preferences_check_1",
-      sql`decision IN ('linked', 'separate')`,
+      sql`decision IN ('linked', 'separate', 'cash')`,
     ),
     check(
       "invoice_transaction_preferences_check_2",
       sql`
     (decision = 'linked' AND transaction_id IS NOT NULL)
-    OR decision = 'separate'
+    OR decision IN ('separate', 'cash')
   `,
     ),
   ],
