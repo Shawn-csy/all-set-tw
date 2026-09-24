@@ -1,6 +1,5 @@
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { spawn, spawnSync } from "node:child_process";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -30,9 +29,16 @@ if (!configKey) {
   );
 }
 
-const secretDirectory = await mkdtemp(
-  path.join(os.tmpdir(), "taiwan-fin-hub-orbstack-"),
+// Compose bind-mounts this file into the detached container. It must remain
+// present after this launcher exits so `restart: unless-stopped` can start the
+// container again. The directory is ignored by Git and the file is mode 600.
+const secretDirectory = path.join(
+  projectRoot,
+  ".wrangler-config",
+  "orbstack-secrets",
 );
+await mkdir(secretDirectory, { recursive: true, mode: 0o700 });
+await chmod(secretDirectory, 0o700);
 const secretPath = path.join(secretDirectory, "config-encryption-key");
 await writeFile(secretPath, `${configKey}\n`, {
   encoding: "utf8",
@@ -42,42 +48,32 @@ await chmod(secretPath, 0o600);
 
 let child;
 let stopping = false;
-const cleanup = async () => {
-  await rm(secretDirectory, { recursive: true, force: true });
-};
-
-try {
-  child = spawn(
-    "docker",
-    ["compose", "-f", composeFile, "up", "--build", "--detach"],
-    {
-      cwd: projectRoot,
-      env: {
-        ...process.env,
-        CONFIG_ENCRYPTION_KEY_FILE: secretPath,
-      },
-      stdio: "inherit",
+child = spawn(
+  "docker",
+  ["compose", "-f", composeFile, "up", "--build", "--detach"],
+  {
+    cwd: projectRoot,
+    env: {
+      ...process.env,
+      CONFIG_ENCRYPTION_KEY_FILE: secretPath,
     },
-  );
+    stdio: "inherit",
+  },
+);
 
-  for (const signal of ["SIGINT", "SIGTERM"]) {
-    process.once(signal, () => {
-      if (stopping) return;
-      stopping = true;
-      child.kill(signal);
-    });
-  }
-
-  const exitCode = await new Promise((resolve, reject) => {
-    child.once("error", reject);
-    child.once("exit", (code, signal) => resolve(signal ? 1 : (code ?? 1)));
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.once(signal, () => {
+    if (stopping) return;
+    stopping = true;
+    child.kill(signal);
   });
-  if (exitCode === 0) {
-    console.log(
-      "OrbStack local Worker is running detached: finance",
-    );
-  }
-  process.exitCode = exitCode;
-} finally {
-  await cleanup();
 }
+
+const exitCode = await new Promise((resolve, reject) => {
+  child.once("error", reject);
+  child.once("exit", (code, signal) => resolve(signal ? 1 : (code ?? 1)));
+});
+if (exitCode === 0) {
+  console.log("OrbStack local Worker is running detached: finance");
+}
+process.exitCode = exitCode;

@@ -3,6 +3,10 @@ services:
     build:
       context: .
       dockerfile: docker/orbstack/worker.Dockerfile
+    # Wrangler's local Browser Rendering runtime currently launches an
+    # x86_64 browser. Keep the container amd64 so OrbStack can translate it
+    # correctly on Apple Silicon hosts.
+    platform: linux/amd64
     container_name: finance
     init: true
     ports:
