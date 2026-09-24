@@ -13,6 +13,10 @@ services:
       - "127.0.0.1:8787:8787"
     environment:
       TZ: Asia/Taipei
+      # Miniflare's local Browser Rendering adds --no-sandbox in CI mode.
+      # OrbStack's VM does not expose a usable Chrome SUID/user-namespace
+      # sandbox, so keep this isolated local container in the supported mode.
+      CI: "true"
       X_BROWSER_HEADFUL: "false"
       WRANGLER_DEV_IP: 0.0.0.0
       SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt

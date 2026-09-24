@@ -4,6 +4,8 @@
 
 OrbStack 容器固定使用 `linux/amd64`。Wrangler 的本地 Browser Rendering 目前會啟動 x86_64 瀏覽器；Apple Silicon 主機由 OrbStack 做架構轉譯，才能使用需要圖形瀏覽器的銀行連接器。這不會改變本地 D1，也不會改用 Cloudflare 遠端 Browser Rendering。
 
+OrbStack 的 VM 不提供 Chrome 可使用的 SUID/user-namespace sandbox，因此 Compose 只在這個隔離的本地 Worker 容器設定 `CI=true`，讓 Miniflare 以 `--no-sandbox` 啟動本地瀏覽器。容器仍只綁定主機 `127.0.0.1:8787`，外部請求經由 Cloudflare Tunnel 與 Access 進入。
+
 ## 啟動
 
 先確認 macOS Keychain 已有以下項目：
