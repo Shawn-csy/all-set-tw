@@ -93,6 +93,9 @@
   let tdccSyncPolling = $state<"awaiting-active" | "active" | null>(null);
   let tdccSyncPreviousLastRunAt = $state<string | null>(null);
   let tdccSyncPollingTimer: ReturnType<typeof setTimeout> | undefined;
+  let syncProgressStartedAt = $state<number | null>(null);
+  let syncProgressClock = $state(Date.now());
+  let syncProgressTimer: ReturnType<typeof setInterval> | undefined;
   let destroyed = false;
   const job = $derived(
     ($jobs.data ?? []).find(
@@ -133,6 +136,40 @@
               cathayVerificationStep === "email"
             ? "email"
             : "credentials",
+  );
+  const syncProgressActive = $derived(syncProgressStartedAt !== null);
+  const syncProgressElapsedSeconds = $derived(
+    syncProgressStartedAt === null
+      ? 0
+      : Math.max(
+          0,
+          Math.floor((syncProgressClock - syncProgressStartedAt) / 1_000),
+        ),
+  );
+  const syncProgressDefinition = $derived(
+    getSyncProgressDefinition(connectorId, browserBank),
+  );
+  const syncProgressStage = $derived(
+    getSyncProgressStage(syncProgressDefinition, syncProgressElapsedSeconds),
+  );
+  const syncProgressRemainingSeconds = $derived(
+    Math.max(
+      0,
+      syncProgressDefinition.estimatedSeconds - syncProgressElapsedSeconds,
+    ),
+  );
+  const syncProgressPercent = $derived(
+    Math.min(
+      94,
+      Math.max(
+        8,
+        Math.round(
+          (syncProgressElapsedSeconds /
+            syncProgressDefinition.estimatedSeconds) *
+            100,
+        ),
+      ),
+    ),
   );
   const intervalOptions = [
     { label: "每小時", minutes: 60 },
@@ -190,6 +227,7 @@
     stopEinvoiceSyncPolling();
     clearTimeout(tdccSyncQueuedTimer);
     stopTdccSyncPolling();
+    stopSyncProgress();
   });
 
   const save = createMutation({
@@ -219,6 +257,7 @@
   const sync = createMutation({
     mutationFn: async (target: SyncTarget) => {
       if (demoMode) throw new Error("Demo site 已停用連接器同步。");
+      startSyncProgress();
       syncNotice = { tone: "info", message: "同步中…" };
       const path =
         connectorId === "tdcc" && target !== "default"
@@ -264,6 +303,7 @@
         tdccSetupStep = "complete";
         return;
       }
+      stopSyncProgress();
       syncNotice = { tone: "success", message: "同步完成" };
       invalidateLatestSyncReport();
       qc.invalidateQueries({ queryKey: queryKeys.syncJobs });
@@ -296,6 +336,7 @@
       }
     },
     onError: (e) => {
+      stopSyncProgress();
       if (handleTdccVerificationRequired(e)) return;
       if (handleCathayVerificationRequired(e)) return;
       error = e instanceof Error ? e.message : "同步失敗";
@@ -358,6 +399,7 @@
   const verifyBrowserBank = createMutation({
     mutationFn: () => {
       if (demoMode) throw new Error("Demo site 已停用連接器同步。");
+      startSyncProgress();
       syncNotice = { tone: "info", message: "驗證並同步中…" };
       const pattern =
         bankCaptchaKind === "alphanumeric"
@@ -372,6 +414,7 @@
       });
     },
     onSuccess: () => {
+      stopSyncProgress();
       error = "";
       syncNotice = { tone: "success", message: "同步完成" };
       bankCaptcha = "";
@@ -387,6 +430,7 @@
       enableScheduleAfterSuccessfulSync();
     },
     onError: (e) => {
+      stopSyncProgress();
       const failure = browserCaptchaFailure(e);
       error = failure.message;
       syncNotice = { tone: "error", message: failure.message };
@@ -402,6 +446,7 @@
   const verifyOtp = createMutation({
     mutationFn: () => {
       if (demoMode) throw new Error("Demo site 已停用連接器同步。");
+      startSyncProgress();
       syncNotice = { tone: "info", message: "驗證中…" };
       if (!otp.trim()) throw new Error("請先輸入驗證碼。");
       const path =
@@ -415,6 +460,7 @@
     },
     onSuccess: () => finishTdccConnection(),
     onError: (e) => {
+      stopSyncProgress();
       if (handleTdccVerificationRequired(e)) {
         otp = "";
         return;
@@ -448,6 +494,7 @@
   const verifyCathayOtp = createMutation({
     mutationFn: () => {
       if (demoMode) throw new Error("Demo site 已停用連接器同步。");
+      startSyncProgress();
       syncNotice = { tone: "info", message: "驗證並同步中…" };
       if (!otp.trim()) throw new Error("請先輸入驗證碼。");
       if (!cathayOtpChannel) throw new Error("請先選擇驗證方式。");
@@ -458,6 +505,7 @@
     },
     onSuccess: () => finishCathayVerification(),
     onError: (e) => {
+      stopSyncProgress();
       if (handleCathayVerificationRequired(e)) {
         otp = "";
         return;
@@ -542,6 +590,7 @@
   }
 
   function finishCathayVerification() {
+    stopSyncProgress();
     error = "";
     syncNotice = { tone: "success", message: "同步完成" };
     resetCathayVerification();
@@ -591,6 +640,7 @@
   }
 
   function finishTdccConnection() {
+    stopSyncProgress();
     error = "";
     syncNotice = { tone: "info", message: "已送出，等待同步…" };
     otp = "";
@@ -626,6 +676,145 @@
       if (Number.isFinite(number)) entries.push([field.key, number]);
     }
     return Object.fromEntries(entries);
+  }
+  function startSyncProgress() {
+    syncProgressStartedAt = Date.now();
+    syncProgressClock = syncProgressStartedAt;
+    clearInterval(syncProgressTimer);
+    syncProgressTimer = setInterval(() => {
+      syncProgressClock = Date.now();
+    }, 1_000);
+  }
+  function stopSyncProgress() {
+    clearInterval(syncProgressTimer);
+    syncProgressTimer = undefined;
+    syncProgressStartedAt = null;
+  }
+  function formatElapsedSeconds(seconds: number) {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return minutes > 0
+      ? `${minutes} 分 ${String(remainingSeconds).padStart(2, "0")} 秒`
+      : `${remainingSeconds} 秒`;
+  }
+  function formatRemainingSeconds(seconds: number) {
+    if (seconds <= 0) return "已超過一般預估，仍在處理";
+    if (seconds < 60) return `約 ${seconds} 秒`;
+    return `約 ${Math.ceil(seconds / 60)} 分鐘`;
+  }
+  function getSyncProgressDefinition(id: ConnectorId, isBrowserBank: boolean) {
+    if (id === "einvoice") {
+      return {
+        estimatedSeconds: 180,
+        stages: [
+          {
+            afterSeconds: 0,
+            label: "準備電子發票連線",
+            detail: "確認設定與同步工作。",
+          },
+          {
+            afterSeconds: 8,
+            label: "登入財政部電子發票平台",
+            detail: "建立安全連線並取得發票清單。",
+          },
+          {
+            afterSeconds: 60,
+            label: "讀取發票與品項明細",
+            detail: "逐筆整理發票資料，這個階段可能較久。",
+          },
+          {
+            afterSeconds: 135,
+            label: "寫入本地資料",
+            detail: "去重並更新本地 D1 與同步紀錄。",
+          },
+        ],
+      };
+    }
+    if (id === "tdcc") {
+      return {
+        estimatedSeconds: 180,
+        stages: [
+          {
+            afterSeconds: 0,
+            label: "準備集保連線",
+            detail: "確認登入工作階段與同步範圍。",
+          },
+          {
+            afterSeconds: 15,
+            label: "登入集保 App 服務",
+            detail: "建立安全連線並驗證裝置狀態。",
+          },
+          {
+            afterSeconds: 70,
+            label: "讀取投資與交易資料",
+            detail: "依同步範圍分批取得資料。",
+          },
+          {
+            afterSeconds: 140,
+            label: "寫入本地資料",
+            detail: "整理並更新本地 D1。",
+          },
+        ],
+      };
+    }
+    if (id === "cathaybk") {
+      return {
+        estimatedSeconds: 120,
+        stages: [
+          {
+            afterSeconds: 0,
+            label: "準備國泰世華連線",
+            detail: "確認登入工作階段與同步鎖。",
+          },
+          {
+            afterSeconds: 12,
+            label: "登入國泰世華網銀",
+            detail: "建立瀏覽器工作階段並驗證登入狀態。",
+          },
+          {
+            afterSeconds: 55,
+            label: "讀取帳戶與交易資料",
+            detail: "取得帳戶、餘額、交易與帳單資料。",
+          },
+          {
+            afterSeconds: 95,
+            label: "寫入本地資料",
+            detail: "去重並更新本地 D1 與同步紀錄。",
+          },
+        ],
+      };
+    }
+    return {
+      estimatedSeconds: isBrowserBank ? 120 : 90,
+      stages: [
+        { afterSeconds: 0, label: "準備同步", detail: "確認設定與同步工作。" },
+        {
+          afterSeconds: 12,
+          label: "登入資料來源",
+          detail: "建立安全連線並確認登入狀態。",
+        },
+        {
+          afterSeconds: isBrowserBank ? 55 : 40,
+          label: "讀取最新資料",
+          detail: "從資料來源取得帳戶、交易或帳單。",
+        },
+        {
+          afterSeconds: isBrowserBank ? 95 : 70,
+          label: "寫入本地資料",
+          detail: "去重並更新本地 D1 與同步紀錄。",
+        },
+      ],
+    };
+  }
+  function getSyncProgressStage(
+    definition: ReturnType<typeof getSyncProgressDefinition>,
+    elapsedSeconds: number,
+  ) {
+    return definition.stages.reduce(
+      (current, stage) =>
+        elapsedSeconds >= stage.afterSeconds ? stage : current,
+      definition.stages[0],
+    );
   }
   function showEinvoiceSyncQueued() {
     einvoiceSyncQueued = true;
@@ -672,6 +861,7 @@
     ) {
       const completedSuccessfully = einvoiceJob?.lastStatus === "success";
       stopEinvoiceSyncPolling();
+      stopSyncProgress();
       if (completedSuccessfully) {
         syncNotice = { tone: "success", message: "同步完成" };
         invalidateLatestSyncReport();
@@ -717,6 +907,7 @@
     ) {
       const status = tdccJob?.lastStatus;
       stopTdccSyncPolling();
+      stopSyncProgress();
       if (status === "success") {
         syncNotice = { tone: "success", message: "同步完成" };
         invalidateLatestSyncReport();
@@ -882,7 +1073,7 @@
       {/if}
     </div>
   </div>
-  {#if syncNotice && syncNotice.tone !== "error"}
+  {#if syncNotice && syncNotice.tone !== "error" && (!syncProgressActive || syncNotice.tone === "success")}
     <div
       class={`mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${syncNotice.tone === "success" ? "bg-moss/10 text-moss" : "bg-steel/10 text-steel"}`}
       role="status"
@@ -894,6 +1085,48 @@
         <RefreshCw class="size-4 shrink-0 animate-spin" />
       {/if}
       <span>{syncNotice.message}</span>
+    </div>
+  {/if}
+  {#if syncProgressActive}
+    <div
+      class="mt-3 overflow-hidden rounded-xl border border-steel/20 bg-steel/[0.055]"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <div class="flex items-start gap-3 px-4 py-3">
+        <span
+          class="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-steel/10 text-steel"
+        >
+          <RefreshCw class="size-4 animate-spin" />
+        </span>
+        <div class="min-w-0 flex-1">
+          <div
+            class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1"
+          >
+            <p class="text-sm font-semibold text-ink">
+              同步中：{syncProgressStage.label}
+            </p>
+            <p class="text-xs font-semibold tabular-nums text-steel">
+              已耗時 {formatElapsedSeconds(syncProgressElapsedSeconds)}
+            </p>
+          </div>
+          <p class="mt-1 text-sm leading-relaxed text-ink/65">
+            {syncProgressStage.detail}
+          </p>
+          <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-steel/15">
+            <div
+              class="h-full rounded-full bg-steel transition-[width] duration-700"
+              style={`width: ${syncProgressPercent}%`}
+            ></div>
+          </div>
+          <p class="mt-2 text-xs text-ink/55">
+            預估還有：{formatRemainingSeconds(
+              syncProgressRemainingSeconds,
+            )}（依一般流程估算）
+          </p>
+        </div>
+      </div>
     </div>
   {/if}
   {#if demoMode}<p

@@ -1347,6 +1347,15 @@ interface MonthDetail {
   sections: BillDetailSection[];
 }
 
+export function resolveCathayCardBalance(
+  overview: { unpaidAmount: number; noPaymentNeeded: boolean },
+  latestStatementAmount?: number | null,
+) {
+  if (overview.noPaymentNeeded) return 0;
+  if (overview.unpaidAmount > 0) return overview.unpaidAmount;
+  return Math.max(0, latestStatementAmount ?? 0);
+}
+
 export async function scrapeCreditCards(page: Page): Promise<Scraped> {
   const bankAccounts: Scraped["bankAccounts"] = [];
   const bankBalanceSnapshots: Scraped["bankBalanceSnapshots"] = [];
@@ -1428,18 +1437,6 @@ export async function scrapeCreditCards(page: Page): Promise<Scraped> {
     accountType: "credit",
     currency: "TWD",
     creditLimit: cardOverview.creditLimit || undefined,
-    raw: cardOverview,
-  });
-
-  bankBalanceSnapshots.push({
-    accountId: sourceId,
-    sourceId: `${sourceId}:${asOfAt}`,
-    balance: -cardOverview.unpaidAmount,
-    availableBalance: cardOverview.availableCredit || undefined,
-    paymentDueDate: cardOverview.paymentDueDate ?? undefined,
-    noPaymentNeeded: cardOverview.noPaymentNeeded,
-    currency: "TWD",
-    asOfAt,
     raw: cardOverview,
   });
 
@@ -1547,6 +1544,17 @@ export async function scrapeCreditCards(page: Page): Promise<Scraped> {
 
   if (!apiResult) {
     console.log("[cathaybk] credit card API failed — no bill data");
+    bankBalanceSnapshots.push({
+      accountId: sourceId,
+      sourceId: `${sourceId}:${asOfAt}`,
+      balance: -resolveCathayCardBalance(cardOverview),
+      availableBalance: cardOverview.availableCredit || undefined,
+      paymentDueDate: cardOverview.paymentDueDate ?? undefined,
+      noPaymentNeeded: cardOverview.noPaymentNeeded,
+      currency: "TWD",
+      asOfAt,
+      raw: cardOverview,
+    });
     return {
       bankAccounts,
       bankBalanceSnapshots,
@@ -1561,6 +1569,32 @@ export async function scrapeCreditCards(page: Page): Promise<Scraped> {
 
   // Build creditCardBills from history list
   const latestBillDate = apiResult.allBills[0]?.billDate;
+  const latestStatementAmount = apiResult.allBills.find(
+    (bill) => bill.billDate === latestBillDate,
+  )?.twdAmount;
+  const cardBalance = resolveCathayCardBalance(
+    cardOverview,
+    latestStatementAmount,
+  );
+  bankBalanceSnapshots.push({
+    accountId: sourceId,
+    sourceId: `${sourceId}:${asOfAt}`,
+    balance: -cardBalance,
+    availableBalance: cardOverview.availableCredit || undefined,
+    paymentDueDate: cardOverview.paymentDueDate ?? undefined,
+    noPaymentNeeded: cardOverview.noPaymentNeeded,
+    currency: "TWD",
+    asOfAt,
+    raw: {
+      ...cardOverview,
+      balanceSource:
+        cardOverview.unpaidAmount > 0
+          ? "overview"
+          : latestStatementAmount != null
+            ? "latest_bill"
+            : "overview_fallback",
+    },
+  });
   for (const bill of apiResult.allBills) {
     const period = bill.billDate.slice(0, 7); // "YYYY-MM"
     const isLatest = bill.billDate === latestBillDate;

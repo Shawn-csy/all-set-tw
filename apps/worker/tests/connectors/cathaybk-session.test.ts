@@ -21,6 +21,7 @@ import {
   loginCathay,
   normalizeCathayAuthorizedAt,
   restoreCathayTrustedState,
+  resolveCathayCardBalance,
   sendCathayOtp,
   scrapeCreditCards,
   submitCathayLoginForm,
@@ -476,6 +477,24 @@ describe("Cathay additional verification", () => {
 });
 
 describe("Cathay credit cards", () => {
+  it("uses the latest bill amount when the overview omits the unpaid amount", () => {
+    expect(
+      resolveCathayCardBalance(
+        { unpaidAmount: 0, noPaymentNeeded: false },
+        17_392,
+      ),
+    ).toBe(17_392);
+  });
+
+  it("keeps a confirmed no-payment-needed card at zero", () => {
+    expect(
+      resolveCathayCardBalance(
+        { unpaidAmount: 0, noPaymentNeeded: true },
+        17_392,
+      ),
+    ).toBe(0);
+  });
+
   it("returns no card data when the overview has no card number", async () => {
     vi.useFakeTimers();
     const page = {
