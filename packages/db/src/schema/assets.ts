@@ -3,6 +3,7 @@ import {
   sqliteTable,
   text,
   integer,
+  real,
   primaryKey,
   unique,
   index,
@@ -17,6 +18,8 @@ export const manualAssets = sqliteTable(
     name: text("name").notNull(),
     category: text("category").notNull(),
     note: text("note"),
+    symbol: text("symbol"),
+    quantity: real("quantity"),
     createdAt: text("created_at").notNull(),
     currency: text("currency")
       .notNull()

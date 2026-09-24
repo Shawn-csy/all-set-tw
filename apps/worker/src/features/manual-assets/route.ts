@@ -17,10 +17,20 @@ import {
 
 const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const currencySchema = z.enum(["TWD", "USD", "JPY", "EUR"]);
+const symbolSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(16)
+  .regex(/^[A-Za-z0-9._-]+$/)
+  .transform((value) => value.toUpperCase());
+const quantitySchema = z.number().finite().nonnegative();
 const createSchema = z.object({
   name: z.string().trim().min(1).max(120),
   category: z.string().trim().min(1).max(64),
   note: z.string().max(1_000).optional(),
+  symbol: symbolSchema.nullable().optional(),
+  quantity: quantitySchema.nullable().optional(),
   currency: currencySchema.default("TWD"),
   value: z.number().finite(),
   date: isoDateSchema,
@@ -30,6 +40,8 @@ const updateSchema = z
     name: z.string().trim().min(1).max(120).optional(),
     category: z.string().trim().min(1).max(64).optional(),
     note: z.string().max(1_000).nullable().optional(),
+    symbol: symbolSchema.nullable().optional(),
+    quantity: quantitySchema.nullable().optional(),
     currency: currencySchema.optional(),
     value: z.number().finite().optional(),
     date: isoDateSchema.optional(),

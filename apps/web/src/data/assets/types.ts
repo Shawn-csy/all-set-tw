@@ -16,6 +16,8 @@ export interface ManualAssetRow {
   name: string;
   category: string;
   note: string | null;
+  symbol?: string | null;
+  quantity?: number | null;
   currency: string;
   createdAt: string;
   value?: number;

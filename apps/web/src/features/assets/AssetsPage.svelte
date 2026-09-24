@@ -87,7 +87,7 @@
 
   let selectedKey = $state<string>();
   let expandedKey = $state<string | null>(null);
-  let otherAssets = $state<{ openAdd: () => void }>();
+  let otherAssets = $state<unknown>();
   const activeKey = $derived(
     selectedKey && ledgerItems.some((item) => item.key === selectedKey)
       ? selectedKey
@@ -445,7 +445,8 @@
               <button
                 type="button"
                 class="mt-1 block w-full text-sm font-medium text-steel hover:text-steel/80"
-                onclick={() => otherAssets?.openAdd()}
+                onclick={() =>
+                  (otherAssets as { openAdd: () => void } | null)?.openAdd()}
               >
                 新增資產
               </button>

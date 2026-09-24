@@ -61,6 +61,8 @@
   let form = $state({
     name: "",
     category: "real_estate",
+    symbol: "",
+    quantity: "",
     currency: "TWD",
     value: "",
     date: todayStr(),
@@ -70,6 +72,7 @@
     real_estate: "不動產",
     insurance: "保險",
     vehicle: "交通工具",
+    us_stock: "美股",
     other: "其他",
   };
   const currencies = ["TWD", "USD", "JPY", "EUR"] as const;
@@ -91,6 +94,8 @@
     mutationFn: () =>
       api.post<{ id: string }>("/api/manual-assets", {
         ...form,
+        symbol: form.symbol.trim() || null,
+        quantity: form.quantity ? Number(form.quantity) : null,
         value: Number(form.value),
       }),
     onSuccess: () => {
@@ -104,6 +109,8 @@
       api.put(`/api/manual-assets/${editing!.id}`, {
         name: form.name,
         category: form.category,
+        symbol: form.symbol.trim() || null,
+        quantity: form.quantity ? Number(form.quantity) : null,
         currency: form.currency,
         note: form.note || null,
         value: Number(form.value),
@@ -172,6 +179,8 @@
     form = {
       name: "",
       category: "real_estate",
+      symbol: "",
+      quantity: "",
       currency: "TWD",
       value: "",
       date: todayStr(),
@@ -220,6 +229,8 @@
     form = {
       name: asset.name,
       category: asset.category,
+      symbol: asset.symbol ?? "",
+      quantity: asset.quantity == null ? "" : String(asset.quantity),
       currency: asset.currency,
       value: String(asset.value ?? ""),
       date: asset.date ?? todayStr(),
@@ -369,7 +380,9 @@
                           asset.category as keyof typeof categories
                         ] ?? asset.category} · {asset.currency} · {asset.date
                           ? formatDate(asset.date)
-                          : "尚未估值"}{asset.note ? ` · ${asset.note}` : ""}
+                          : "尚未估值"}{asset.symbol ? ` · ${asset.symbol}` : ""}{asset.quantity != null
+                          ? ` · ${asset.quantity} 股`
+                          : ""}{asset.note ? ` · ${asset.note}` : ""}
                       </small>
                     </span>
                     <strong class="text-sm font-medium tabular-nums">
@@ -528,6 +541,28 @@
                     value={key}>{label}</option
                   >{/each}</Select
               ></label
+            >{#if form.category === "us_stock"}<div
+                class="grid gap-3 rounded-lg bg-paper/70 p-3"
+              >
+                <p class="text-xs leading-5 text-subtle">
+                  先手動輸入持倉資料；接上行情 API 後可用股票代號與股數更新估值。
+                </p>
+                <label class="grid gap-1 text-sm">
+                  股票代號<Input
+                    maxlength="16"
+                    placeholder="例如 AAPL、VOO"
+                    bind:value={form.symbol}
+                  />
+                </label>
+                <label class="grid gap-1 text-sm">
+                  持有股數<Input
+                    min="0"
+                    step="any"
+                    type="number"
+                    bind:value={form.quantity}
+                  />
+                </label>
+              </div>{/if}
             ><label class="grid gap-1 text-sm"
               >幣別<Select bind:value={form.currency}
                 >{#each currencies as currency (currency)}<option

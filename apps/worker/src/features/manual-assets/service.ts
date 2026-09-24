@@ -26,6 +26,8 @@ export async function addManualAsset(
     name: string;
     category: string;
     note?: string;
+    symbol?: string | null;
+    quantity?: number | null;
     currency: string;
     value: number;
     date: string;
@@ -48,6 +50,8 @@ export function editManualAsset(
     name?: string;
     category?: string;
     note?: string | null;
+    symbol?: string | null;
+    quantity?: number | null;
     currency?: string;
     value?: number;
     date?: string;

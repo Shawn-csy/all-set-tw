@@ -11,6 +11,8 @@ export type ManualAssetRow = {
   name: string;
   category: string;
   note: string | null;
+  symbol: string | null;
+  quantity: number | null;
   currency: string;
   createdAt: string;
 };
@@ -28,6 +30,8 @@ export async function listManualAssets(db: D1Database) {
       name: manualAssets.name,
       category: manualAssets.category,
       note: manualAssets.note,
+      symbol: manualAssets.symbol,
+      quantity: manualAssets.quantity,
       currency: manualAssets.currency,
       createdAt: manualAssets.createdAt,
     })
@@ -57,6 +61,8 @@ export async function createManualAsset(
     name: string;
     category: string;
     note: string | null;
+    symbol?: string | null;
+    quantity?: number | null;
     currency: string;
     value: number;
     date: string;
@@ -70,6 +76,8 @@ export async function createManualAsset(
       name: input.name,
       category: input.category,
       note: input.note,
+      symbol: input.symbol ?? null,
+      quantity: input.quantity ?? null,
       currency: input.currency,
       createdAt: input.now,
     }),
@@ -90,6 +98,8 @@ export async function updateManualAsset(
     name?: string;
     category?: string;
     note?: string | null;
+    symbol?: string | null;
+    quantity?: number | null;
     currency?: string;
     value?: number;
     date?: string;
@@ -100,11 +110,15 @@ export async function updateManualAsset(
     name?: string;
     category?: string;
     note?: string | null;
+    symbol?: string | null;
+    quantity?: number | null;
     currency?: string;
   } = {};
   if (input.name) patch.name = input.name;
   if (input.category) patch.category = input.category;
   if ("note" in input) patch.note = input.note ?? null;
+  if ("symbol" in input) patch.symbol = input.symbol ?? null;
+  if ("quantity" in input) patch.quantity = input.quantity ?? null;
   if (input.currency) patch.currency = input.currency;
 
   const database = createDrizzle(db);

@@ -73,6 +73,8 @@ describe("manual asset repository", () => {
         name: "房子",
         category: "real_estate",
         note: "備註",
+        symbol: null,
+        quantity: null,
         currency: "TWD",
         createdAt: "2026-08-01T00:00:00.000Z",
       },
@@ -113,6 +115,8 @@ describe("manual asset repository", () => {
         name: "新名稱",
         category: "real_estate",
         note: null,
+        symbol: null,
+        quantity: null,
         currency: "USD",
         createdAt: "2026-08-01T00:00:00.000Z",
       },
@@ -125,6 +129,34 @@ describe("manual asset repository", () => {
     ).resolves.toEqual([
       { date: "2026-08-01", value: 100 },
       { date: "2026-08-03", value: 125 },
+    ]);
+  });
+
+  it("persists market metadata for a manually entered US stock", async () => {
+    await createManualAsset(harness.binding, {
+      id: "manual:aapl",
+      name: "Apple",
+      category: "us_stock",
+      note: null,
+      symbol: "AAPL",
+      quantity: 2.5,
+      currency: "USD",
+      value: 500,
+      date: "2026-08-03",
+      now: "2026-08-03T00:00:00.000Z",
+    });
+
+    await expect(listManualAssets(harness.binding)).resolves.toEqual([
+      {
+        id: "manual:aapl",
+        name: "Apple",
+        category: "us_stock",
+        note: null,
+        symbol: "AAPL",
+        quantity: 2.5,
+        currency: "USD",
+        createdAt: "2026-08-03T00:00:00.000Z",
+      },
     ]);
   });
 
@@ -168,6 +200,8 @@ describe("manual asset repository", () => {
         name: "舊名稱",
         category: "real_estate",
         note: "舊備註",
+        symbol: null,
+        quantity: null,
         currency: "TWD",
         createdAt: "2026-08-01T00:00:00.000Z",
       },
