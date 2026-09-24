@@ -45,8 +45,8 @@
       }
     },
     "bank_transaction_preferences": {
-      "description": "使用者對銀行交易計算方式的個別偏好。",
-      "notes": "目前主要用來記錄交易是否排除於資產或支出計算之外；沒有偏好的交易不會建立記錄。 transaction_id 以 FK 參照 bank_transactions；NO ACTION 禁止刪除仍有偏好引用的交易，合併時須先移轉偏好。",
+      "description": "舊版銀行交易計算偏好的相容資料表。",
+      "notes": "目前的分類行為由 classification_categories.behavior 決定；此表只為舊同步資料與既有 schema 相容保留，應用程式不再以它作為讀取來源。 transaction_id 以 FK 參照 bank_transactions。",
       "columns": {
         "transaction_id": "套用偏好的 bank_transactions 記錄識別碼。",
         "excluded_from_calculation": "是否將此交易排除於計算，0 表示納入、1 表示排除。",
@@ -85,7 +85,8 @@
         "sort_order": "分類在介面中的排序順序。",
         "is_system": "是否為系統內建分類；1 表示不可視為一般使用者資料刪除。",
         "created_at": "分類建立的時間。",
-        "updated_at": "分類最後更新的時間。"
+        "updated_at": "分類最後更新的時間。",
+        "behavior": "分類套用後的財務行為：normal 一般收支、asset_transfer 資產轉換、cash_withdrawal 提款至現金、excluded 不列入統計。"
       }
     },
     "classification_overrides": {
@@ -117,7 +118,7 @@
         "description": "規則用途的可讀說明。",
         "created_at": "規則建立的時間。",
         "updated_at": "規則最後更新的時間。",
-        "excluded_from_calculation": "符合規則的交易是否預設排除於計算，0 表示納入、1 表示排除。"
+        "excluded_from_calculation": "舊版相容欄位；新的排除與現金流向行為由 category_id 對應分類的 behavior 決定。"
       }
     },
     "connector_settings": {

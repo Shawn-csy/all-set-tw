@@ -50,6 +50,7 @@ export interface BankTransactionRow {
       | "auto_offset"
       | "fallback";
     ruleId?: string;
+    behavior?: "normal" | "asset_transfer" | "cash_withdrawal" | "excluded";
     excludedFromCalculation?: boolean;
   };
 }

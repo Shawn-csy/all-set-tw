@@ -23,6 +23,7 @@ export async function listClassificationOverrides(
         target_id: overrides.targetId,
         category_id: overrides.categoryId,
         label: categories.label,
+        behavior: categories.behavior,
       })
       .from(overrides)
       .innerJoin(categories, eq(categories.id, overrides.categoryId))
@@ -47,6 +48,7 @@ export async function listEnabledClassificationRules(db: D1Database) {
       field: rules.field,
       operator: rules.operator,
       pattern: rules.pattern,
+      behavior: categories.behavior,
       is_system: rules.isSystem,
       excluded_from_calculation: rules.excludedFromCalculation,
     })
@@ -64,6 +66,7 @@ export async function listClassificationCategories(db: D1Database) {
       label: categories.label,
       sortOrder: categories.sortOrder,
       isSystem: categories.isSystem,
+      behavior: categories.behavior,
     })
     .from(categories)
     .orderBy(categories.sortOrder, categories.id)
@@ -122,9 +125,11 @@ export async function listClassificationRules(db: D1Database) {
       isSystem: rules.isSystem,
       source: rules.source,
       description: rules.description,
+      behavior: categories.behavior,
       excludedFromCalculation: rules.excludedFromCalculation,
     })
     .from(rules)
+    .innerJoin(categories, eq(categories.id, rules.categoryId))
     .orderBy(desc(rules.priority), desc(rules.updatedAt), rules.id)
     .all();
 }
@@ -197,6 +202,25 @@ export async function deleteClassificationOverride(
     .run();
 }
 
+export async function findClassificationOverride(
+  db: D1Database,
+  targetType: string,
+  targetId: string,
+) {
+  return (
+    (await createDrizzle(db)
+      .select({ categoryId: overrides.categoryId })
+      .from(overrides)
+      .where(
+        and(
+          eq(overrides.targetType, targetType),
+          eq(overrides.targetId, targetId),
+        ),
+      )
+      .get()) ?? null
+  );
+}
+
 export async function classificationCategoryExists(
   db: D1Database,
   categoryId: string,
@@ -221,7 +245,6 @@ export async function insertClassificationRule(
     pattern: string;
     priority: number;
     description: string | null;
-    excludedFromCalculation: boolean;
     now: string;
   },
 ) {
@@ -239,7 +262,9 @@ export async function insertClassificationRule(
       isSystem: 0,
       source: "user",
       description: input.description,
-      excludedFromCalculation: input.excludedFromCalculation ? 1 : 0,
+      // Kept at the schema boundary for migration compatibility. The
+      // category behavior is the source of truth for new rules.
+      excludedFromCalculation: 0,
       createdAt: input.now,
       updatedAt: input.now,
     })
@@ -256,7 +281,6 @@ export async function updateClassificationRule(
     priority?: number;
     enabled?: boolean;
     description?: string | null;
-    excludedFromCalculation?: boolean;
   },
   now: string,
 ) {
@@ -269,12 +293,6 @@ export async function updateClassificationRule(
       priority: input.priority,
       enabled: input.enabled === undefined ? undefined : input.enabled ? 1 : 0,
       description: input.description,
-      excludedFromCalculation:
-        input.excludedFromCalculation === undefined
-          ? undefined
-          : input.excludedFromCalculation
-            ? 1
-            : 0,
       updatedAt: now,
     })
     .where(and(eq(rules.id, ruleId), eq(rules.isSystem, 0)))

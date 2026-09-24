@@ -13,7 +13,6 @@
   import Checkbox from "@/shared/ui/Checkbox.svelte";
   import Input from "@/shared/ui/Input.svelte";
   import Select from "@/shared/ui/Select.svelte";
-  import Switch from "@/shared/ui/Switch.svelte";
   import type { ApiClient } from "@/shared/api/client";
   import { messageFromError } from "@/shared/api/client";
   import { queryKeys } from "@/shared/api/query-keys";
@@ -32,7 +31,6 @@
     categoryId: string;
     pattern: string;
     operator: RuleOperator;
-    excludedFromCalculation: boolean;
   };
 
   let { api }: { api: ApiClient } = $props();
@@ -43,6 +41,16 @@
     starts_with: "開頭為",
     regex: "符合正規表示式",
   };
+  function behaviorLabel(behavior?: string) {
+    return (
+      {
+        normal: "一般收支",
+        asset_transfer: "資產轉換",
+        cash_withdrawal: "提款至現金",
+        excluded: "不列入統計",
+      }[behavior ?? "normal"] ?? "一般收支"
+    );
+  }
   const systemAutoRules = [
     {
       title: "帳戶互轉",
@@ -72,7 +80,6 @@
     categoryId: "food",
     pattern: "",
     operator: "contains",
-    excludedFromCalculation: false,
   });
   let showCategoryForm = $state(false);
   let categoryName = $state("");
@@ -84,7 +91,6 @@
       categoryId: rule.categoryId,
       pattern: rule.pattern,
       operator: rule.operator as RuleOperator,
-      excludedFromCalculation: rule.excludedFromCalculation,
     };
   }
 
@@ -126,7 +132,6 @@
     onSuccess: () => {
       invalidateRuleResults();
       newRule.pattern = "";
-      newRule.excludedFromCalculation = false;
     },
   });
   const toggle = createMutation({
@@ -142,7 +147,6 @@
         categoryId: rule.categoryId,
         pattern: rule.pattern,
         operator: rule.operator,
-        excludedFromCalculation: rule.excludedFromCalculation,
       }),
     onSuccess: () => {
       invalidateRuleResults();
@@ -186,7 +190,7 @@
     <div>
       <h2 class="text-lg font-semibold">分類規則</h2>
       <p class="text-sm text-muted-foreground">
-        管理自訂分類規則；系統也會自動處理帳戶互轉、信用卡年費減免與電子發票配對
+        管理自訂分類規則；現金流向與統計行為由所選分類決定
       </p>
     </div>
   </CardHeader>
@@ -201,7 +205,7 @@
             <Badge variant="secondary">內建 3 項</Badge>
           </div>
           <p class="mt-1 text-sm text-muted-foreground">
-            查看帳戶互轉、信用卡年費減免與電子發票配對的判斷方式。
+            查看系統分類，以及「投資」、「提款至現金」和「不列入統計」等特殊分類的行為。
           </p>
         </div>
         <ChevronDown
@@ -219,7 +223,7 @@
         {/each}
       </div>
       <p class="mt-3 text-sm leading-relaxed text-muted-foreground">
-        已手動分類或自行設定計算方式的交易，以你的設定為準；發票配對可在活動明細中管理或解除。
+        活動套用分類後，該分類會同時決定它是否列入收支、是否為資產轉換，以及是否增加現金錢包。
       </p>
     </details>
 
@@ -296,6 +300,13 @@
               <option value={category.id}>{category.label}</option>
             {/each}
           </Select>
+          <span class="text-xs font-normal text-muted-foreground">
+            行為：{behaviorLabel(
+              $categories.data?.find(
+                (category) => category.id === newRule.categoryId,
+              )?.behavior,
+            )}
+          </span>
         </label>
         <label class="grid gap-1.5 text-sm font-medium">
           條件
@@ -311,21 +322,14 @@
           <Input placeholder="例如：卡費" bind:value={newRule.pattern} />
         </label>
       </div>
+      <p class="border-t border-border px-4 py-3 text-xs text-muted-foreground">
+        例：選擇「提款至現金」並使用正則表示式
+        <code>ATM|提款|現金提領|自動櫃員機</code
+        >，符合的銀行扣款會增加現金錢包；選擇「不列入統計」則只排除統計。
+      </p>
       <div
-        class="flex flex-col gap-3 border-t border-border bg-background px-4 py-3 sm:flex-row sm:items-center"
+        class="flex justify-end border-t border-border bg-background px-4 py-3"
       >
-        <div class="flex min-w-0 flex-1 items-center gap-3">
-          <Switch
-            aria-label="符合規則時不計入收支"
-            bind:checked={newRule.excludedFromCalculation}
-          />
-          <div class="min-w-0">
-            <p class="text-sm font-semibold">符合時不計入收支</p>
-            <p class="text-sm text-muted-foreground">
-              仍保留所選分類，只排除圖表與收支加總。
-            </p>
-          </div>
-        </div>
         <Button
           class="w-full sm:w-auto"
           variant="primary"
@@ -385,17 +389,12 @@
                 <div
                   class="mt-4 flex flex-col gap-3 border-t border-border pt-3 sm:flex-row sm:items-center"
                 >
-                  <div class="flex min-w-0 flex-1 items-center gap-3">
-                    <Switch
-                      aria-label="編輯規則是否不計入收支"
-                      bind:checked={editingRule.excludedFromCalculation}
-                    />
-                    <div class="min-w-0">
-                      <p class="font-semibold">符合時不計入收支</p>
-                      <p class="text-sm text-muted-foreground">
-                        仍保留所選分類，只排除圖表與收支加總。
-                      </p>
-                    </div>
+                  <div class="min-w-0 flex-1 text-sm text-muted-foreground">
+                    分類行為：{behaviorLabel(
+                      $categories.data?.find(
+                        (category) => category.id === editingRule?.categoryId,
+                      )?.behavior,
+                    )}
                   </div>
                   <div class="flex justify-end gap-2">
                     <Button
@@ -433,11 +432,15 @@
                     <Badge class="text-sm" variant="outline">
                       {categoryLabels[rule.categoryId] ?? rule.categoryId}
                     </Badge>
-                    {#if rule.excludedFromCalculation}
+                    {#if rule.behavior !== "normal"}
                       <Badge
                         class="border-transparent bg-coral/10 text-coral text-sm"
                       >
-                        不計入收支
+                        {rule.behavior === "cash_withdrawal"
+                          ? "提款至現金"
+                          : rule.behavior === "asset_transfer"
+                            ? "資產轉換"
+                            : "不列入統計"}
                       </Badge>
                     {/if}
                     {#if rule.isSystem}

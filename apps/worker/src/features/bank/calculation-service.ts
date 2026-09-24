@@ -1,9 +1,13 @@
 import {
   bankTransactionIsCashWithdrawalCandidate,
   bankTransactionExists,
-  upsertCashWithdrawalPreference,
-  upsertCalculationPreference,
 } from "./calculation-repository";
+import {
+  deleteClassificationOverride,
+  findClassificationOverride,
+  upsertClassificationOverride,
+} from "../classification/repository";
+import type { ClassificationBehavior } from "../classification/service";
 
 export type CalculationTransaction = {
   transferPeerId?: string | null;
@@ -12,6 +16,15 @@ export type CalculationTransaction = {
   counterparty?: string | null;
   calculationPreference?: number | null;
   classificationExcludedFromCalculation?: boolean | null;
+  classificationBehavior?: ClassificationBehavior | null;
+  classificationSource?:
+    | "override"
+    | "user_rule"
+    | "system_rule"
+    | "auto_transfer"
+    | "auto_offset"
+    | "fallback"
+    | null;
 };
 
 export class BankTransactionNotFoundError extends Error {}
@@ -66,6 +79,18 @@ export function resolveCalculationExclusion(
     return transaction.calculationPreference === 1;
   }
   if (transaction.classificationExcludedFromCalculation) return true;
+  if (
+    transaction.classificationSource === "override" ||
+    transaction.classificationSource === "user_rule"
+  ) {
+    return transaction.classificationBehavior !== "normal";
+  }
+  if (
+    transaction.classificationBehavior === "excluded" ||
+    transaction.classificationBehavior === "asset_transfer" ||
+    transaction.classificationBehavior === "cash_withdrawal"
+  )
+    return true;
   return isDefaultCalculationExcluded(transaction);
 }
 
@@ -77,12 +102,25 @@ export async function setCalculationPreference(
   if (!(await bankTransactionExists(db, transactionId))) {
     throw new BankTransactionNotFoundError();
   }
-  await upsertCalculationPreference(
+  const now = new Date().toISOString();
+  if (excludedFromCalculation) {
+    await upsertClassificationOverride(db, {
+      targetType: "bank_transaction",
+      targetId: transactionId,
+      categoryId: "excluded",
+      now,
+    });
+    return;
+  }
+
+  const current = await findClassificationOverride(
     db,
+    "bank_transaction",
     transactionId,
-    excludedFromCalculation,
-    new Date().toISOString(),
   );
+  if (current?.categoryId === "excluded") {
+    await deleteClassificationOverride(db, "bank_transaction", transactionId);
+  }
 }
 
 export async function setCashWithdrawalPreference(
@@ -96,10 +134,23 @@ export async function setCashWithdrawalPreference(
   if (!(await bankTransactionIsCashWithdrawalCandidate(db, transactionId))) {
     throw new BankTransactionNotCashWithdrawalError();
   }
-  await upsertCashWithdrawalPreference(
+  const now = new Date().toISOString();
+  if (cashWithdrawal) {
+    await upsertClassificationOverride(db, {
+      targetType: "bank_transaction",
+      targetId: transactionId,
+      categoryId: "cash-withdrawal",
+      now,
+    });
+    return;
+  }
+
+  const current = await findClassificationOverride(
     db,
+    "bank_transaction",
     transactionId,
-    cashWithdrawal,
-    new Date().toISOString(),
   );
+  if (current?.categoryId === "cash-withdrawal") {
+    await deleteClassificationOverride(db, "bank_transaction", transactionId);
+  }
 }

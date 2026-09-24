@@ -40,7 +40,6 @@ describe("classification repository", () => {
       pattern: "coffee",
       priority,
       description: "test",
-      excludedFromCalculation: true,
       now: timestamp,
     });
   }
@@ -105,7 +104,6 @@ describe("classification repository", () => {
           priority: 0,
           enabled: false,
           description: null,
-          excludedFromCalculation: false,
         },
         later,
       ),
@@ -232,7 +230,12 @@ describe("classification repository", () => {
         Array.from({ length: 300 }, (_, i) => "tx:" + i),
       ),
     ).resolves.toEqual([
-      { target_id: "tx:299", category_id: "travel", label: "travel" },
+      {
+        target_id: "tx:299",
+        category_id: "travel",
+        label: "travel",
+        behavior: "normal",
+      },
     ]);
     await expect(
       repository.listClassificationOverrides(db, []),

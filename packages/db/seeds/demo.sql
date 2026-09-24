@@ -41,6 +41,19 @@ INSERT INTO classification_categories
   ('other-income',  '其他收入', 16, 1, '2026-09-06T00:00:00.000Z', '2026-09-06T00:00:00.000Z'),
   ('other',         '未分類', 17, 1, '2026-06-22T00:00:00.000Z', '2026-09-06T00:00:00.000Z');
 
+INSERT INTO classification_categories
+  (id, label, sort_order, is_system, behavior, created_at, updated_at) VALUES
+  ('cash-withdrawal', '提款至現金', 90, 1, 'cash_withdrawal', '2026-09-24T00:00:00.000Z', '2026-09-24T00:00:00.000Z'),
+  ('excluded', '不列入統計', 91, 1, 'excluded', '2026-09-24T00:00:00.000Z', '2026-09-24T00:00:00.000Z');
+
+UPDATE classification_categories
+SET behavior = 'asset_transfer'
+WHERE id IN ('transfer', 'investment');
+
+UPDATE classification_categories
+SET behavior = 'excluded'
+WHERE id = 'fee';
+
 INSERT INTO classification_rules
   (id, category_id, target_type, field, operator, pattern, priority, enabled, is_system, source, description, created_at, updated_at) VALUES
   ('system:bank:salary-keywords',      'salary',     'bank_transaction', 'any_text', 'regex', '薪|salary|payroll|工資|獎金|bonus',                                          110, 1, 1, 'system', '薪資相關關鍵字',   '2026-06-22T00:00:00.000Z', '2026-06-22T00:00:00.000Z'),

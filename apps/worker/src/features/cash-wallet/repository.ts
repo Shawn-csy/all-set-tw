@@ -1,16 +1,16 @@
 import {
   bankTransactions,
-  cashWithdrawalPreferences,
   cashWalletSettings,
   createDrizzle,
   invoiceTransactionPreferences,
   invoices,
 } from "@taiwan-fin-hub/db";
 import { eq, sql } from "drizzle-orm";
+import { resolveClassifications } from "../classification/service";
 
 export async function getCashWallet(db: D1Database) {
   const database = createDrizzle(db);
-  const [settings, withdrawal, expense] = await Promise.all([
+  const [settings, transactions, expense] = await Promise.all([
     database
       .select({
         openingBalance: cashWalletSettings.openingBalance,
@@ -22,14 +22,19 @@ export async function getCashWallet(db: D1Database) {
       .get(),
     database
       .select({
-        total: sql<number>`COALESCE(SUM(ABS(${bankTransactions.amount})), 0)`,
+        id: bankTransactions.id,
+        sourceId: bankTransactions.sourceId,
+        description: bankTransactions.description,
+        counterparty: bankTransactions.counterparty,
+        amount: bankTransactions.amount,
+        accountType: sql<string | null>`(
+          SELECT account_type FROM bank_accounts
+          WHERE bank_accounts.id = ${bankTransactions.accountId}
+        )`,
       })
-      .from(cashWithdrawalPreferences)
-      .innerJoin(
-        bankTransactions,
-        eq(bankTransactions.id, cashWithdrawalPreferences.transactionId),
-      )
-      .get(),
+      .from(bankTransactions)
+      .where(eq(bankTransactions.status, "posted"))
+      .all(),
     database
       .select({ total: sql<number>`COALESCE(SUM(ABS(${invoices.amount})), 0)` })
       .from(invoiceTransactionPreferences)
@@ -41,7 +46,27 @@ export async function getCashWallet(db: D1Database) {
       .get(),
   ]);
   const openingBalance = settings?.openingBalance ?? 0;
-  const cashWithdrawals = Number(withdrawal?.total ?? 0);
+  const classificationMap = await resolveClassifications(
+    db,
+    transactions.map((transaction) => ({
+      id: transaction.id,
+      sourceId: transaction.sourceId,
+      description: transaction.description,
+      counterparty: transaction.counterparty,
+      amount: transaction.amount,
+      accountType: transaction.accountType,
+    })),
+  );
+  const cashWithdrawals = transactions.reduce((total, transaction) => {
+    const classification = classificationMap.get(transaction.id);
+    if (
+      classification?.behavior !== "cash_withdrawal" ||
+      transaction.accountType === "credit" ||
+      transaction.amount >= 0
+    )
+      return total;
+    return total + Math.abs(transaction.amount);
+  }, 0);
   const cashExpenses = Number(expense?.total ?? 0);
   return {
     openingBalance,

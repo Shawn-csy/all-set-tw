@@ -25,6 +25,7 @@ export interface ActivityItem {
     | "auto_offset"
     | "fallback";
   classificationRuleId?: string;
+  classificationBehavior?: ClassificationBehavior;
   transactionId?: string;
   excludedFromCalculation?: boolean;
   invoiceId?: string;
@@ -32,6 +33,9 @@ export interface ActivityItem {
   invoicePaymentMethod?: "cash";
   status: string;
 }
+
+export type ClassificationBehavior =
+  "normal" | "asset_transfer" | "cash_withdrawal" | "excluded";
 
 export type ActivityCashFlowType =
   "income" | "expense" | "asset_transfer" | "valuation";

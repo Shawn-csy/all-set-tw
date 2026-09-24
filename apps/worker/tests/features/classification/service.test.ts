@@ -19,6 +19,7 @@ const otherIncomeRule = {
   field: "any_text",
   operator: "contains",
   pattern: "利息",
+  behavior: "normal",
   is_system: 1,
   excluded_from_calculation: 0,
 };
@@ -121,7 +122,9 @@ describe("resolveClassifications", () => {
     expect(result.get(transaction.id)).toEqual({
       categoryId: "other",
       label: "未分類",
+      behavior: "normal",
       source: "fallback",
+      excludedFromCalculation: false,
     });
   });
 
@@ -152,6 +155,7 @@ describe("resolveClassifications", () => {
                   field: "any_text",
                   operator: "contains",
                   pattern: "卡費",
+                  behavior: "asset_transfer",
                   is_system: 0,
                   excluded_from_calculation: 1,
                 },
@@ -172,6 +176,7 @@ describe("resolveClassifications", () => {
 
     expect(result.get("tx-card-payment")).toMatchObject({
       categoryId: "transfer",
+      behavior: "asset_transfer",
       excludedFromCalculation: true,
     });
     const overrideQuery = calls.find(({ sql }) =>
@@ -182,6 +187,47 @@ describe("resolveClassifications", () => {
       "bank_transaction",
       JSON.stringify(["tx-card-payment"]),
     ]);
+  });
+
+  it("uses a cash-withdrawal category for negative non-credit transactions", async () => {
+    const db = createClassificationDb([
+      {
+        id: "user:cash-withdrawal",
+        category_id: "cash-withdrawal",
+        label: "提款至現金",
+        target_type: "bank_transaction",
+        field: "any_text",
+        operator: "regex",
+        pattern: "ATM|提款|自動櫃員機",
+        behavior: "cash_withdrawal",
+        is_system: 0,
+        excluded_from_calculation: 0,
+      },
+    ]);
+
+    const result = await resolveClassifications(db, [
+      {
+        ...transaction,
+        id: "cash-tx",
+        description: "ATM 現金提款",
+        amount: -800,
+        accountType: "savings",
+      },
+      {
+        ...transaction,
+        id: "card-tx",
+        description: "ATM 現金提款",
+        amount: -800,
+        accountType: "credit",
+      },
+    ]);
+
+    expect(result.get("cash-tx")).toMatchObject({
+      categoryId: "cash-withdrawal",
+      behavior: "cash_withdrawal",
+      excludedFromCalculation: true,
+    });
+    expect(result.get("card-tx")?.categoryId).toBe("other");
   });
 
   it("applies the other-income system rule only to positive amounts", async () => {
@@ -197,6 +243,7 @@ describe("resolveClassifications", () => {
     expect(result.get("tx-interest-positive")).toMatchObject({
       categoryId: "other-income",
       label: "其他收入",
+      behavior: "normal",
       source: "system_rule",
       ruleId: "system:bank:other-income-keywords",
     });
@@ -222,7 +269,9 @@ describe("resolveClassifications", () => {
       expect(result.get(input.id), input.id).toEqual({
         categoryId: "other",
         label: "未分類",
+        behavior: "normal",
         source: "fallback",
+        excludedFromCalculation: false,
       });
     }
   });

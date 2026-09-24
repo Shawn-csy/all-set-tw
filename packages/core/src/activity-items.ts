@@ -1,5 +1,6 @@
 import { isLikelyInvestmentCashTransfer } from "./activity-flow";
 import type { ActivityItem } from "./activity-types";
+import type { ClassificationBehavior } from "./activity-types";
 import { compareActivityItems, isActivityDateTime } from "./activity-list";
 import type {
   MatchingTransaction,
@@ -24,6 +25,7 @@ export interface ActivityTransaction extends MatchingTransaction {
   classification?: {
     label: string;
     categoryId: string;
+    behavior?: ClassificationBehavior;
     source: ActivityItem["classificationSource"];
     ruleId?: string;
   };
@@ -84,6 +86,10 @@ export function buildActivityItems(
         t,
         trades,
       );
+      const classificationBehavior = t.classification?.behavior;
+      const isCashWithdrawal = classificationBehavior === "cash_withdrawal";
+      const isClassificationAssetTransfer =
+        classificationBehavior === "asset_transfer";
       return {
         id: t.id,
         source: isCard ? ("card" as const) : ("bank" as const),
@@ -107,10 +113,12 @@ export function buildActivityItems(
         amount: t.amount,
         currency: t.currency,
         cashFlowType:
-          t.cashWithdrawal || isInvestmentCashTransfer
+          isCashWithdrawal ||
+          isClassificationAssetTransfer ||
+          isInvestmentCashTransfer
             ? ("asset_transfer" as const)
             : undefined,
-        cashTransferType: t.cashWithdrawal
+        cashTransferType: isCashWithdrawal
           ? ("cash_withdrawal" as const)
           : isInvestmentCashTransfer
             ? ("investment" as const)
@@ -120,10 +128,15 @@ export function buildActivityItems(
         classificationPattern: t.counterparty ?? t.description ?? undefined,
         classificationSource: t.classification?.source ?? "fallback",
         classificationRuleId: t.classification?.ruleId,
+        classificationBehavior,
         transactionId: t.id,
         invoiceId: matchedInvoice?.id,
         invoiceAmount: matchedInvoice?.amount,
-        excludedFromCalculation: t.excludedFromCalculation,
+        excludedFromCalculation:
+          t.excludedFromCalculation ||
+          classificationBehavior === "excluded" ||
+          classificationBehavior === "asset_transfer" ||
+          classificationBehavior === "cash_withdrawal",
         status: t.status,
       };
     }),

@@ -26,11 +26,19 @@ export const classificationCategories = sqliteTable(
       .default(sql`1`),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
+    behavior: text("behavior")
+      .notNull()
+      .default(sql`'normal'`),
   },
   (table) => [
     primaryKey({ columns: [table.id] }),
+    index("idx_classification_categories_behavior").on(table.behavior),
     uniqueIndex("idx_classification_categories_label_nocase").on(
       sql`label COLLATE NOCASE`,
+    ),
+    check(
+      "classification_categories_check_behavior",
+      sql`behavior IN ('normal', 'asset_transfer', 'cash_withdrawal', 'excluded')`,
     ),
   ],
 );

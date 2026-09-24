@@ -109,7 +109,7 @@ describe("classification categories", () => {
 });
 
 describe("classification rule actions", () => {
-  it("persists the calculation exclusion action with a new rule", async () => {
+  it("uses the selected category as the calculation behavior for a new rule", async () => {
     const { calls, db } = createDb();
     const response = await classificationRoutes.request(
       "/classification/rules",
@@ -117,12 +117,11 @@ describe("classification rule actions", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          categoryId: "transfer",
+          categoryId: "excluded",
           targetType: "bank_transaction",
           field: "any_text",
           operator: "contains",
           pattern: "卡費",
-          excludedFromCalculation: true,
         }),
       },
       { DB: db } as Env,
@@ -132,11 +131,11 @@ describe("classification rule actions", () => {
     const insert = calls.find(({ sql }) =>
       sql.includes("INSERT INTO CLASSIFICATION_RULES"),
     );
-    expect(insert?.sql).toContain("EXCLUDED_FROM_CALCULATION");
-    expect(insert?.values.at(-1)).toBe(1);
+    expect(insert?.values).toContain("excluded");
+    expect(insert?.values.at(-1)).toBe(0);
   });
 
-  it("updates an editable rule's category, condition, keyword, and calculation action", async () => {
+  it("updates an editable rule's category and matching condition", async () => {
     const { calls, db } = createDb();
     const response = await classificationRoutes.request(
       "/classification/rules/user:rule-1",
@@ -147,7 +146,6 @@ describe("classification rule actions", () => {
           categoryId: "investment",
           operator: "equals",
           pattern: "定期買股",
-          excludedFromCalculation: false,
         }),
       },
       { DB: db } as Env,
@@ -160,10 +158,10 @@ describe("classification rule actions", () => {
     expect(update?.sql).toContain("CATEGORY_ID = ?");
     expect(update?.sql).toContain("OPERATOR = ?");
     expect(update?.sql).toContain("PATTERN = ?");
-    expect(update?.sql).toContain("EXCLUDED_FROM_CALCULATION = ?");
     expect(update?.sql).toContain("IS_SYSTEM = ?");
     expect(update?.values).toContain("equals");
-    expect(update?.values).toContain(0);
+    expect(update?.values).not.toContain(true);
+    expect(update?.values).not.toContain(false);
   });
 
   it("persists the order of editable rules", async () => {

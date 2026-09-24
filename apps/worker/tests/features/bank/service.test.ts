@@ -212,12 +212,11 @@ describe("bank transaction presentation", () => {
     });
   });
 
-  it("does not exclude a transaction with an explicit include preference", async () => {
+  it("does not auto-transfer a transaction with a normal classification override", async () => {
     const outgoing = transaction({
       id: "outgoing",
       accountId: "account-a",
       amount: -20_000,
-      calculationPreference: 0,
     });
     const incoming = transaction({
       id: "incoming",
@@ -226,13 +225,20 @@ describe("bank transaction presentation", () => {
     });
 
     const result = await getBankRange(
-      createDb([outgoing], [outgoing, incoming]),
+      createDb(
+        [outgoing],
+        [outgoing, incoming],
+        [{ target_id: "outgoing", category_id: "other", label: "未分類" }],
+      ),
       { from: "2026-08-01", to: "2026-09-01" },
     );
 
     expect(result.transactions[0]).toMatchObject({
       excludedFromCalculation: false,
-      classification: { source: "fallback" },
+      classification: {
+        categoryId: "other",
+        source: "override",
+      },
     });
   });
 });
@@ -261,7 +267,14 @@ it("keeps derived deposit principal excluded when the demand leg is manually cla
   expect(result.transactions[0].excludedFromCalculation).toBe(true);
   const included = { ...deposit, calculationPreference: 0 };
   const explicit = await getBankRange(
-    createDb([included], [included, demand], overrides),
+    createDb(
+      [included],
+      [included, demand],
+      [
+        ...overrides,
+        { target_id: "deposit", category_id: "other", label: "未分類" },
+      ],
+    ),
     range,
   );
   expect(explicit.transactions[0].excludedFromCalculation).toBe(false);

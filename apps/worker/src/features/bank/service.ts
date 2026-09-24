@@ -81,6 +81,7 @@ async function presentBankTransactions(
         counterparty: transaction.counterparty,
         sourceId: transaction.sourceId,
         amount: transaction.amount,
+        accountType: transaction.accountType,
       })),
     );
   } catch (error) {
@@ -96,8 +97,7 @@ async function presentBankTransactions(
     (transaction) => {
       const classification = classificationMap.get(transaction.id);
       return (
-        // An explicit include preference or user classification wins.
-        transaction.calculationPreference !== 0 &&
+        // A normal category override or rule wins over automatic heuristics.
         classification?.source !== "override" &&
         classification?.source !== "user_rule"
       );
@@ -120,6 +120,7 @@ async function presentBankTransactions(
         ? {
             categoryId: "fee",
             label: "手續費",
+            behavior: "excluded" as const,
             source: "auto_offset" as const,
             excludedFromCalculation: true,
           }
@@ -127,6 +128,7 @@ async function presentBankTransactions(
           ? {
               categoryId: "transfer",
               label: "轉帳",
+              behavior: "asset_transfer" as const,
               source: "auto_transfer" as const,
               excludedFromCalculation: true,
             }
@@ -139,10 +141,10 @@ async function presentBankTransactions(
           description: transaction.description,
           counterparty: transaction.counterparty,
           calculationPreference: transaction.calculationPreference,
-          classificationExcludedFromCalculation:
-            classification?.excludedFromCalculation,
+          classificationBehavior: classification?.behavior,
+          classificationSource: classification?.source,
         }),
-        cashWithdrawal: transaction.cashWithdrawalPreference === 1,
+        cashWithdrawal: classification?.behavior === "cash_withdrawal",
         classification,
       };
     },

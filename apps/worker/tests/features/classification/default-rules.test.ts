@@ -16,7 +16,7 @@ afterEach(() => {
   for (const database of databases.splice(0)) database.close();
 });
 
-function createDatabase(before = "0040") {
+function createDatabase(before = "0053") {
   const database = new DatabaseSync(":memory:");
   databases.push(database);
   database.exec("PRAGMA foreign_keys = ON");
@@ -145,7 +145,7 @@ describe("default classification rules", () => {
   });
 
   it("recognizes Taiwanese investment and card-payment descriptions", async () => {
-    const results = await resolveClassifications(asD1(createDatabase("0049")), [
+    const results = await resolveClassifications(asD1(createDatabase("0053")), [
       {
         id: "tdcc",
         sourceId: "tdcc",

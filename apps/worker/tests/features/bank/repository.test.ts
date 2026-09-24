@@ -221,7 +221,7 @@ describe("bank list and detail queries", () => {
     });
   });
 
-  it("hides matched pending rows and keeps unmatched pending plus user prefs", async () => {
+  it("hides matched pending rows and keeps unmatched pending", async () => {
     const db = createDb();
     db.database.exec(`
       UPDATE bank_transactions SET matched_transaction_id = 'out' WHERE id = 'pending';
@@ -245,11 +245,9 @@ describe("bank list and detail queries", () => {
     ]);
     expect(rows.find((row) => row.id === "out")).toMatchObject({
       status: "posted",
-      calculationPreference: 1,
     });
     expect(rows.find((row) => row.id === "open-pending")).toMatchObject({
       status: "pending",
-      calculationPreference: null,
     });
     expect(rows.some((row) => row.id === "pending")).toBe(false);
     const next = await listBankTransactions(db as unknown as D1Database, 2, {

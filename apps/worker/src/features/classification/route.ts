@@ -35,7 +35,6 @@ const createRuleSchema = z.object({
   pattern: z.string().min(1).max(300),
   priority: z.number().int().min(0).max(10_000).optional(),
   description: z.string().max(500).optional(),
-  excludedFromCalculation: z.boolean().optional(),
 });
 const updateRuleSchema = z
   .object({
@@ -45,7 +44,6 @@ const updateRuleSchema = z
     priority: z.number().int().min(0).max(10_000).optional(),
     enabled: z.boolean().optional(),
     description: z.string().max(500).nullable().optional(),
-    excludedFromCalculation: z.boolean().optional(),
   })
   .refine((body) => Object.keys(body).length > 0);
 const reorderRulesSchema = z.object({

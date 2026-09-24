@@ -35,7 +35,7 @@ function createDb(transactionExists = true) {
 }
 
 describe("bank transaction calculation preferences", () => {
-  it("persists an excluded transaction independently from synced data", async () => {
+  it("stores an excluded classification override", async () => {
     const { calls, db } = createDb();
     const response = await bankCalculationRoutes.request(
       "/bank/transactions/txn-1/calculation",
@@ -53,12 +53,12 @@ describe("bank transaction calculation preferences", () => {
     });
     expect(
       calls.some(({ sql }) =>
-        sql.includes("INSERT INTO BANK_TRANSACTION_PREFERENCES"),
+        sql.includes("INSERT INTO CLASSIFICATION_OVERRIDES"),
       ),
     ).toBe(true);
   });
 
-  it("persists an include override when default calculation is restored", async () => {
+  it("does not write the legacy preference table when restoring the default", async () => {
     const { calls, db } = createDb();
     const response = await bankCalculationRoutes.request(
       "/bank/transactions/txn-1/calculation",
@@ -71,10 +71,9 @@ describe("bank transaction calculation preferences", () => {
     );
 
     expect(response.status).toBe(200);
-    const preferenceWrite = calls.find(({ sql }) =>
-      sql.includes("INSERT INTO BANK_TRANSACTION_PREFERENCES"),
-    );
-    expect(preferenceWrite?.values[1]).toBe(0);
+    expect(
+      calls.some(({ sql }) => sql.includes("BANK_TRANSACTION_PREFERENCES")),
+    ).toBe(false);
   });
 
   it("rejects invalid bodies and unknown transactions", async () => {

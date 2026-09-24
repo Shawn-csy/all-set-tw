@@ -41,7 +41,12 @@ export function calculateMonthlyActivityTotals(
   const totals = transactions.reduce(
     (result, transaction) => {
       if (transaction.excludedFromCalculation) return result;
-      if (transaction.cashWithdrawal) return result;
+      if (
+        transaction.classification?.behavior === "excluded" ||
+        transaction.classification?.behavior === "asset_transfer" ||
+        transaction.classification?.behavior === "cash_withdrawal"
+      )
+        return result;
       if (isLikelyInvestmentCashTransfer(transaction, investmentTrades))
         return result;
       const amount = transactionValueTwd(transaction, rates);

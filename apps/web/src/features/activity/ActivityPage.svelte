@@ -19,7 +19,6 @@
     X,
   } from "@lucide/svelte";
   import Button from "@/shared/ui/Button.svelte";
-  import Checkbox from "@/shared/ui/Checkbox.svelte";
   import EmptyState from "@/shared/ui/EmptyState.svelte";
   import Badge from "@/shared/ui/Badge.svelte";
   import Input from "@/shared/ui/Input.svelte";
@@ -31,13 +30,12 @@
   import SearchHighlight from "./components/SearchHighlight.svelte";
   import ActivityAmount from "./components/ActivityAmount.svelte";
   import ActivityCategoryChart from "./components/ActivityCategoryChart.svelte";
-  import CalculationUpdateDialog from "./components/CalculationUpdateDialog.svelte";
   import CategoryUpdateDialog from "./components/CategoryUpdateDialog.svelte";
   import type { ApiClient } from "@/shared/api/client";
   import { queryKeys } from "@/shared/api/query-keys";
   import { exchangeRatesQuery } from "@/data/assets/queries";
   import { bankRangeQuery } from "@/data/bank/queries";
-  import type { BankData, BankTransactionRow } from "@/data/bank/types";
+  import type { BankTransactionRow } from "@/data/bank/types";
   import { classificationCategoriesQuery } from "@/data/classification/queries";
   import { investmentTransactionsRangeQuery } from "@/data/investments/queries";
   import {
@@ -49,12 +47,7 @@
     InvoiceSummaryRow,
     InvoiceTransactionPreference,
   } from "@/data/invoices/types";
-  import type {
-    ActivityItem,
-    CalculationUpdateInput,
-    PendingCalculationUpdate,
-    PendingCategoryUpdate,
-  } from "./model/types";
+  import type { ActivityItem, PendingCategoryUpdate } from "./model/types";
   import {
     activityDateKey,
     activityStatusLabel,
@@ -317,7 +310,6 @@
   });
   let selectedCategory = $state<ActivityCategoryFilter | null>(null);
   let pending = $state<PendingCategoryUpdate | null>(null);
-  let pendingCalculation = $state<PendingCalculationUpdate | null>(null);
   let mappingDialog = $state<{
     invoice: InvoiceSummaryRow;
     step: "candidates" | "confirm" | "actions";
@@ -328,7 +320,7 @@
   let detailKey = $state<string | null>(null);
   const fallbackCategories = [
     { id: "salary", label: "薪資" },
-    { id: "transfer", label: "轉帳" },
+    { id: "transfer", label: "轉帳", behavior: "asset_transfer" as const },
     { id: "food", label: "餐飲" },
     { id: "transport", label: "交通" },
     { id: "shopping", label: "購物" },
@@ -336,14 +328,16 @@
     { id: "health", label: "醫療" },
     { id: "education", label: "教育" },
     { id: "entertainment", label: "娛樂" },
-    { id: "investment", label: "投資" },
+    { id: "investment", label: "投資", behavior: "asset_transfer" as const },
     { id: "insurance", label: "保險" },
-    { id: "fee", label: "手續費" },
+    { id: "fee", label: "手續費", behavior: "excluded" as const },
     { id: "tax", label: "稅務" },
     { id: "software", label: "軟體服務" },
     { id: "utilities", label: "生活繳費" },
     { id: "other-income", label: "其他收入" },
     { id: "other", label: "未分類" },
+    { id: "cash-withdrawal", label: "提款至現金", behavior: "cash_withdrawal" },
+    { id: "excluded", label: "不列入統計", behavior: "excluded" },
   ];
   const categoryOptions = $derived(
     $categoryRows.data?.length ? $categoryRows.data : fallbackCategories,
@@ -575,87 +569,6 @@
       pending = null;
     },
   });
-  const calculationMutation = createMutation({
-    mutationFn: (payload: {
-      transactionId: string;
-      excludedFromCalculation: boolean;
-    }) =>
-      api.patch(
-        `/api/bank/transactions/${encodeURIComponent(payload.transactionId)}/calculation`,
-        { excludedFromCalculation: payload.excludedFromCalculation },
-      ),
-    onSuccess: (_result, payload) => {
-      updateCalculationCache(
-        payload.transactionId,
-        payload.excludedFromCalculation,
-      );
-      qc.invalidateQueries({ queryKey: queryKeys.bank });
-    },
-  });
-  const cashWithdrawalMutation = createMutation({
-    mutationFn: (payload: { transactionId: string; cashWithdrawal: boolean }) =>
-      api.patch(
-        `/api/bank/transactions/${encodeURIComponent(payload.transactionId)}/calculation`,
-        { cashWithdrawal: payload.cashWithdrawal },
-      ),
-    onSuccess: (_result, payload) => {
-      updateCashWithdrawalCache(payload.transactionId, payload.cashWithdrawal);
-      qc.invalidateQueries({ queryKey: queryKeys.bank });
-      showMappingNotice(
-        payload.cashWithdrawal ? "已標記為提款至現金" : "已取消提款至現金標記",
-      );
-    },
-  });
-  const calculationUpdateMutation = createMutation({
-    mutationFn: async (payload: CalculationUpdateInput) => {
-      await api.patch(
-        `/api/bank/transactions/${encodeURIComponent(payload.transactionId)}/calculation`,
-        { excludedFromCalculation: true },
-      );
-
-      if (payload.applyRule && payload.ruleId) {
-        await api.put(
-          `/api/classification/rules/${encodeURIComponent(payload.ruleId)}`,
-          {
-            categoryId: payload.categoryId,
-            excludedFromCalculation: true,
-          },
-        );
-        return;
-      }
-
-      if (payload.categoryId !== payload.originalCategoryId) {
-        await api.put(
-          `/api/classification/overrides/bank_transaction/${payload.transactionId}`,
-          { categoryId: payload.categoryId },
-        );
-      }
-
-      if (payload.applyRule) {
-        await api.post("/api/classification/rules", {
-          categoryId: payload.categoryId,
-          targetType: "bank_transaction",
-          field: "any_text",
-          operator: payload.operator,
-          pattern: payload.pattern.trim(),
-          priority: 200,
-          description: "由活動頁排除計算時建立",
-          excludedFromCalculation: true,
-        });
-      }
-    },
-    onSuccess: (_result, payload) => {
-      updateCalculationCache(payload.transactionId, true);
-      qc.invalidateQueries({ queryKey: queryKeys.bank });
-      if (payload.applyRule)
-        qc.invalidateQueries({ queryKey: queryKeys.classificationRules });
-      pendingCalculation = null;
-    },
-    onError: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.bank });
-      qc.invalidateQueries({ queryKey: queryKeys.classificationRules });
-    },
-  });
   const mappingMutation = createMutation({
     mutationFn: (payload: { invoiceId: string; transactionId: string }) =>
       api.put<InvoiceTransactionPreference>(
@@ -762,63 +675,6 @@
       (transaction) => transaction.id === item.transactionId,
     );
   }
-  function toggleCalculation(item: ActivityItem) {
-    if (!item.transactionId) return;
-    if (!item.excludedFromCalculation) {
-      pendingCalculation = {
-        item,
-        categoryId: item.categoryId ?? "other",
-        applyRule: false,
-        pattern: item.classificationPattern ?? item.title,
-        operator: "contains",
-      };
-      return;
-    }
-    $calculationMutation.mutate({
-      transactionId: item.transactionId,
-      excludedFromCalculation: false,
-    });
-  }
-  function handleCalculationChange(item: ActivityItem, event: Event) {
-    (event.currentTarget as HTMLInputElement).checked = Boolean(
-      item.excludedFromCalculation,
-    );
-    toggleCalculation(item);
-  }
-  function updateCalculationCache(
-    transactionId: string,
-    excludedFromCalculation: boolean,
-  ) {
-    qc.setQueryData<BankData>(queryKeys.bank, (current) =>
-      current
-        ? {
-            ...current,
-            transactions: current.transactions.map((transaction) =>
-              transaction.id === transactionId
-                ? { ...transaction, excludedFromCalculation }
-                : transaction,
-            ),
-          }
-        : current,
-    );
-  }
-  function updateCashWithdrawalCache(
-    transactionId: string,
-    cashWithdrawal: boolean,
-  ) {
-    qc.setQueriesData<BankData>({ queryKey: queryKeys.bank }, (current) =>
-      current
-        ? {
-            ...current,
-            transactions: current.transactions.map((transaction) =>
-              transaction.id === transactionId
-                ? { ...transaction, cashWithdrawal }
-                : transaction,
-            ),
-          }
-        : current,
-    );
-  }
   function updateMappingPreference(preference: InvoiceTransactionPreference) {
     qc.setQueryData<InvoiceTransactionPreference[]>(
       queryKeys.invoiceTransactionMappings,
@@ -888,13 +744,6 @@
     return item.cashTransferType === "cash_withdrawal"
       ? "提款至現金 · 不列入收支"
       : "資產移轉 · 不列入收支";
-  }
-  function toggleCashWithdrawal(item: ActivityItem) {
-    if (!item.transactionId || item.invoiceId) return;
-    $cashWithdrawalMutation.mutate({
-      transactionId: item.transactionId,
-      cashWithdrawal: item.cashTransferType !== "cash_withdrawal",
-    });
   }
   function countMatches(update: {
     pattern: string;
@@ -1212,11 +1061,6 @@
             >
           </div>
         {/if}
-        {#if $calculationMutation.isError}<p
-            class="text-sm font-medium text-coral"
-          >
-            無法更新計算設定，請稍後再試。
-          </p>{/if}
       </header>
       <div class="min-w-0">
         <div class="min-w-0 md:hidden">
@@ -1689,54 +1533,6 @@
                     >{/if}
                 </div>
 
-                {#if detailItem.transactionId}<label
-                    class="flex cursor-pointer items-center justify-between gap-4 py-4"
-                  >
-                    <span>
-                      <span class="block font-semibold">排除統計計算</span>
-                      <span class="mt-1 block text-caption text-subtle"
-                        >保留活動，但不計入收支</span
-                      >
-                    </span>
-                    <Checkbox
-                      aria-label={`${detailItem.excludedFromCalculation ? "恢復" : "排除"} ${detailItem.title} 的統計計算`}
-                      checked={detailItem.excludedFromCalculation}
-                      disabled={($calculationMutation.isPending &&
-                        $calculationMutation.variables?.transactionId ===
-                          detailItem.transactionId) ||
-                        $calculationUpdateMutation.isPending}
-                      onchange={(event: Event) =>
-                        handleCalculationChange(detailItem, event)}
-                    />
-                  </label>{/if}
-
-                {#if detailItem.transactionId && detailItem.source === "bank"}
-                  <div class="flex items-center justify-between gap-4 py-4">
-                    <div class="min-w-0">
-                      <p class="font-semibold">現金流向</p>
-                      <p class="mt-1 text-caption text-subtle">
-                        {detailItem.invoiceId
-                          ? "已配對發票；請先解除配對再標記提款"
-                          : detailItem.cashTransferType === "cash_withdrawal"
-                            ? "提款至現金，不列入消費支出"
-                            : "一般銀行／信用卡活動"}
-                      </p>
-                    </div>
-                    <Button
-                      class="h-11 shrink-0 whitespace-nowrap"
-                      variant={detailItem.cashTransferType === "cash_withdrawal"
-                        ? "outline"
-                        : "secondary"}
-                      disabled={Boolean(detailItem.invoiceId) ||
-                        $cashWithdrawalMutation.isPending}
-                      onclick={() => toggleCashWithdrawal(detailItem)}
-                      >{detailItem.cashTransferType === "cash_withdrawal"
-                        ? "取消提款標記"
-                        : "標記為提款至現金"}</Button
-                    >
-                  </div>
-                {/if}
-
                 {#if invoice}<div
                     class="flex items-center justify-between gap-4 py-4"
                   >
@@ -1780,17 +1576,6 @@
         failed={$categoryMutation.isError}
         onCancel={() => (pending = null)}
         onSubmit={(input) => $categoryMutation.mutate(input)}
-      />
-    {/if}
-    {#if pendingCalculation}
-      <CalculationUpdateDialog
-        bind:update={pendingCalculation}
-        {categoryOptions}
-        matchCount={countMatches(pendingCalculation)}
-        submitting={$calculationUpdateMutation.isPending}
-        failed={$calculationUpdateMutation.isError}
-        onCancel={() => (pendingCalculation = null)}
-        onSubmit={(input) => $calculationUpdateMutation.mutate(input)}
       />
     {/if}
     {#if mappingDialog}<div

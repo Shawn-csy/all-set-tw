@@ -1,6 +1,7 @@
 export type ClassificationResult = {
   categoryId: string;
   label: string;
+  behavior: ClassificationBehavior;
   source:
     | "override"
     | "user_rule"
@@ -9,8 +10,12 @@ export type ClassificationResult = {
     | "auto_offset"
     | "fallback";
   ruleId?: string;
+  /** @deprecated Derived from behavior for older API consumers. */
   excludedFromCalculation?: boolean;
 };
+
+export type ClassificationBehavior =
+  "normal" | "asset_transfer" | "cash_withdrawal" | "excluded";
 
 export type ClassifiedTransaction = {
   id: string;
@@ -18,6 +23,7 @@ export type ClassifiedTransaction = {
   counterparty?: string | null;
   sourceId: string;
   amount?: number;
+  accountType?: string | null;
 };
 
 export function matchesClassificationRule(
@@ -96,11 +102,20 @@ export async function resolveClassifications(
 
   for (const transaction of transactions) {
     const override = overrideMap.get(normalizeId(transaction.id));
-    if (override) {
+    const overrideIsValidCashWithdrawal =
+      override?.behavior !== "cash_withdrawal" ||
+      (typeof transaction.amount === "number" &&
+        transaction.amount < 0 &&
+        transaction.accountType !== "credit");
+    if (override && overrideIsValidCashWithdrawal) {
+      const behavior = (override.behavior ??
+        "normal") as ClassificationBehavior;
       result.set(transaction.id, {
         categoryId: override.category_id,
         label: override.label,
+        behavior,
         source: "override",
+        excludedFromCalculation: behavior !== "normal",
       });
       continue;
     }
@@ -118,18 +133,35 @@ export async function resolveClassifications(
       )
         continue;
       if (!matchesClassificationRule(rule, transaction)) continue;
+      if (
+        rule.behavior === "cash_withdrawal" &&
+        (!(typeof transaction.amount === "number" && transaction.amount < 0) ||
+          transaction.accountType === "credit")
+      )
+        continue;
+      const behavior = (rule.behavior ??
+        (rule.excluded_from_calculation === 1
+          ? "excluded"
+          : "normal")) as ClassificationBehavior;
       matched = {
         categoryId: rule.category_id,
         label: rule.label,
+        behavior,
         source: rule.is_system ? "system_rule" : "user_rule",
         ruleId: rule.id,
-        excludedFromCalculation: rule.excluded_from_calculation === 1,
+        excludedFromCalculation: behavior !== "normal",
       };
       break;
     }
     result.set(
       transaction.id,
-      matched ?? { categoryId: "other", label: "未分類", source: "fallback" },
+      matched ?? {
+        categoryId: "other",
+        label: "未分類",
+        behavior: "normal",
+        source: "fallback",
+        excludedFromCalculation: false,
+      },
     );
   }
 
@@ -160,7 +192,7 @@ export async function createClassificationCategory(
     sortOrder,
     now: new Date().toISOString(),
   });
-  return { id, label, sortOrder, isSystem: false };
+  return { id, label, sortOrder, isSystem: false, behavior: "normal" as const };
 }
 
 export async function getClassificationRules(db: D1Database) {
@@ -169,7 +201,7 @@ export async function getClassificationRules(db: D1Database) {
     ...row,
     enabled: Boolean(row.enabled),
     isSystem: Boolean(row.isSystem),
-    excludedFromCalculation: Boolean(row.excludedFromCalculation),
+    excludedFromCalculation: row.behavior !== "normal",
   }));
 }
 
@@ -220,7 +252,6 @@ export type CreateClassificationRuleInput = {
   pattern: string;
   priority?: number;
   description?: string;
-  excludedFromCalculation?: boolean;
 };
 
 export async function createClassificationRule(
@@ -240,7 +271,6 @@ export async function createClassificationRule(
     pattern: input.pattern,
     priority: input.priority ?? 200,
     description: input.description ?? null,
-    excludedFromCalculation: input.excludedFromCalculation ?? false,
     now: new Date().toISOString(),
   });
   return id;
