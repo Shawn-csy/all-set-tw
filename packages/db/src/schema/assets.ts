@@ -20,6 +20,9 @@ export const manualAssets = sqliteTable(
     note: text("note"),
     symbol: text("symbol"),
     quantity: real("quantity"),
+    marketPrice: real("market_price"),
+    marketPriceAsOf: text("market_price_as_of"),
+    marketPriceProvider: text("market_price_provider"),
     createdAt: text("created_at").notNull(),
     currency: text("currency")
       .notNull()

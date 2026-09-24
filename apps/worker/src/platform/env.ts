@@ -26,6 +26,7 @@ export interface Env {
   EXPENSIVE_RATE_LIMITER?: RateLimit;
   CTBC_API_RELAY_URL?: string;
   CTBC_API_RELAY_TOKEN?: string;
+  TWELVE_DATA_API_KEY?: string;
 }
 
 export type Variables = {

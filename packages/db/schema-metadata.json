@@ -317,6 +317,9 @@
         "note": "使用者補充的備註。",
         "symbol": "可選的市場代號，例如美股 AAPL 或 ETF VOO。",
         "quantity": "可選的持有數量，供未來以市場價格更新估值。",
+        "market_price": "行情提供者最近回傳的單股價格。",
+        "market_price_as_of": "最近一次行情價格的擷取時間。",
+        "market_price_provider": "行情價格來源，例如 twelve-data。",
         "currency": "資產估值使用的幣別，預設為 TWD。",
         "created_at": "手動資產建立的時間。"
       }

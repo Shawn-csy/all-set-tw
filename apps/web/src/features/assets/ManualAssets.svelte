@@ -6,7 +6,13 @@
     createQuery,
     useQueryClient,
   } from "@tanstack/svelte-query";
-  import { ChevronRight, Pencil, Plus, Trash2 } from "@lucide/svelte";
+  import {
+    ChevronRight,
+    Pencil,
+    Plus,
+    RefreshCw,
+    Trash2,
+  } from "@lucide/svelte";
   import Card from "@/shared/ui/Card.svelte";
   import CardHeader from "@/shared/ui/CardHeader.svelte";
   import CardContent from "@/shared/ui/CardContent.svelte";
@@ -55,6 +61,7 @@
     date: string;
   } | null>(null);
   let formError = $state("");
+  let quoteMessage = $state("");
   let editorDialog = $state<HTMLDivElement>();
   let deleteDialog = $state<HTMLDivElement>();
   let returnFocus: HTMLElement | null = null;
@@ -76,6 +83,9 @@
     other: "其他",
   };
   const currencies = ["TWD", "USD", "JPY", "EUR"] as const;
+  const hasQuotedAssets = $derived(
+    ($assets.data ?? []).some((asset) => Boolean(asset.symbol)),
+  );
   const rateValues = $derived(
     Object.fromEntries(
       ($rates.data ?? []).map((rate) => [rate.currency, rate.rateTwd]),
@@ -128,6 +138,28 @@
       qc.invalidateQueries({ queryKey: queryKeys.manualAssets });
       qc.invalidateQueries({ queryKey: queryKeys.netWorthHistory });
       closeDeleteConfirmation();
+    },
+  });
+  const refreshQuotes = createMutation({
+    mutationFn: () =>
+      api.post<{
+        status: string;
+        updated: number;
+        skipped: number;
+        failed: number;
+      }>("/api/manual-assets/quotes/refresh"),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: queryKeys.manualAssets });
+      qc.invalidateQueries({ queryKey: queryKeys.netWorthHistory });
+      quoteMessage =
+        result.failed > 0
+          ? `行情更新 ${result.updated} 筆，${result.failed} 筆失敗。`
+          : result.updated > 0
+            ? `行情已更新 ${result.updated} 筆。`
+            : "目前沒有需要更新的行情。";
+    },
+    onError: (error) => {
+      quoteMessage = error instanceof Error ? error.message : "行情更新失敗。";
     },
   });
   const history = createQuery(
@@ -186,6 +218,9 @@
       date: todayStr(),
       note: "",
     };
+  }
+  function handleCategoryChange() {
+    if (form.category === "us_stock") form.currency = "USD";
   }
   function rememberFocus() {
     returnFocus =
@@ -331,6 +366,14 @@
           </p>
         </div>
         <div class="flex flex-wrap gap-2">
+          {#if hasQuotedAssets}<Button
+              variant="secondary"
+              disabled={$refreshQuotes.isPending}
+              onclick={() => $refreshQuotes.mutate()}
+            >{#if $refreshQuotes.isPending}<RefreshCw
+                  class="size-4 animate-spin"
+                />更新中…{:else}<RefreshCw class="size-4" />更新行情{/if}</Button
+            >{/if}
           {#if variant === "embedded"}
             <Button
               class="hidden md:inline-flex"
@@ -347,6 +390,10 @@
         </div>
       </div>
     {/if}
+    {#if quoteMessage}<p
+        class={`px-4 text-sm ${quoteMessage.includes("失敗") ? "text-coral" : "text-subtle"}`}
+        role="status"
+      >{quoteMessage}</p>{/if}
     <Card class="border-0 bg-transparent shadow-none">
       {#if !hideSummary}
         <CardHeader class={variant === "embedded" ? "px-4" : ""}
@@ -378,10 +425,12 @@
                       >
                         {categories[
                           asset.category as keyof typeof categories
-                        ] ?? asset.category} · {asset.currency} · {asset.date
+                      ] ?? asset.category} · {asset.currency} · {asset.date
                           ? formatDate(asset.date)
                           : "尚未估值"}{asset.symbol ? ` · ${asset.symbol}` : ""}{asset.quantity != null
                           ? ` · ${asset.quantity} 股`
+                          : ""}{asset.marketPrice != null
+                          ? ` · 最新價 ${formatCurrency(asset.marketPrice, asset.currency)}`
                           : ""}{asset.note ? ` · ${asset.note}` : ""}
                       </small>
                     </span>
@@ -536,7 +585,9 @@
             <label class="grid gap-1 text-sm"
               >名稱<Input required bind:value={form.name} /></label
             ><label class="grid gap-1 text-sm"
-              >類別<Select bind:value={form.category}
+              >類別<Select
+                bind:value={form.category}
+                onchange={handleCategoryChange}
                 >{#each Object.entries(categories) as [key, label] (key)}<option
                     value={key}>{label}</option
                   >{/each}</Select

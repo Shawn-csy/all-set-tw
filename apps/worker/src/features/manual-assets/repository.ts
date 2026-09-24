@@ -13,6 +13,9 @@ export type ManualAssetRow = {
   note: string | null;
   symbol: string | null;
   quantity: number | null;
+  marketPrice: number | null;
+  marketPriceAsOf: string | null;
+  marketPriceProvider: string | null;
   currency: string;
   createdAt: string;
 };
@@ -32,6 +35,9 @@ export async function listManualAssets(db: D1Database) {
       note: manualAssets.note,
       symbol: manualAssets.symbol,
       quantity: manualAssets.quantity,
+      marketPrice: manualAssets.marketPrice,
+      marketPriceAsOf: manualAssets.marketPriceAsOf,
+      marketPriceProvider: manualAssets.marketPriceProvider,
       currency: manualAssets.currency,
       createdAt: manualAssets.createdAt,
     })
@@ -137,6 +143,43 @@ export async function updateManualAsset(
   } else if (historyUpsert) {
     await historyUpsert;
   }
+}
+
+export async function updateManualAssetQuote(
+  db: D1Database,
+  input: {
+    id: string;
+    price: number;
+    priceAsOf: string;
+    provider: string;
+    value?: number;
+    date?: string;
+    now: string;
+  },
+) {
+  const database = createDrizzle(db);
+  const assetUpdate = database
+    .update(manualAssets)
+    .set({
+      marketPrice: input.price,
+      marketPriceAsOf: input.priceAsOf,
+      marketPriceProvider: input.provider,
+    })
+    .where(eq(manualAssets.id, input.id));
+  if (input.value !== undefined && input.date !== undefined) {
+    await database.batch([
+      assetUpdate,
+      manualAssetHistoryUpsert(
+        database,
+        input.id,
+        input.date,
+        input.value,
+        input.now,
+      ),
+    ]);
+    return;
+  }
+  await assetUpdate;
 }
 
 export async function deleteManualAsset(db: D1Database, id: string) {

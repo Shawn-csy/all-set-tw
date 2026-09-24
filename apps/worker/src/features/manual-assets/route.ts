@@ -12,6 +12,7 @@ import {
   getManualAssets,
   removeManualAsset,
   removeManualAssetHistory,
+  refreshManualAssetQuotes,
   setManualAssetHistory,
 } from "./service";
 
@@ -97,6 +98,23 @@ function registerManualAssetRoutes(api: Hono<AppBindings>) {
   api.delete("/manual-assets/:id", async (c) => {
     await removeManualAsset(c.env.DB, c.req.param("id"));
     return c.json({ success: true });
+  });
+
+  api.post("/manual-assets/quotes/refresh", async (c) => {
+    const result = await refreshManualAssetQuotes(
+      c.env.DB,
+      c.env.TWELVE_DATA_API_KEY,
+      fetch,
+      { force: true },
+    );
+    if (result.status === "not_configured") {
+      return jsonError(
+        "TWELVE_DATA_NOT_CONFIGURED",
+        "尚未設定 Twelve Data API key。",
+        503,
+      );
+    }
+    return c.json(result);
   });
 
   api.get("/manual-assets/:id/history", async (c) =>

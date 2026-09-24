@@ -6,6 +6,8 @@ POLICY_AUDS=temporary-placeholder
 DEMO_MODE=false
 # Only bypass Cloudflare Access for localhost/127.0.0.1 during development.
 LOCAL_DEV_MODE=true
+# Optional: Twelve Data API key for local US-stock price updates.
+# TWELVE_DATA_API_KEY=replace-with-twelve-data-api-key
 # Production deploys generate and persist the VAPID key pair automatically.
 # For local push testing, uncomment and provide a matching key pair.
 # VAPID_PUBLIC_KEY=replace-with-web-push-public-key

@@ -18,6 +18,9 @@ export interface ManualAssetRow {
   note: string | null;
   symbol?: string | null;
   quantity?: number | null;
+  marketPrice?: number | null;
+  marketPriceAsOf?: string | null;
+  marketPriceProvider?: string | null;
   currency: string;
   createdAt: string;
   value?: number;

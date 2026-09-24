@@ -245,6 +245,7 @@ function requestResource(pathname: string) {
   if (pathname.startsWith("/api/ocr/")) return "ocr";
   if (pathname.includes("/sync") || pathname.includes("/captcha"))
     return "sync";
+  if (pathname.startsWith("/api/manual-assets/quotes")) return "sync";
   if (pathname.startsWith("/api/notifications/test")) return "notifications";
   return "api";
 }

@@ -14,6 +14,7 @@ import { notificationRoutes } from "./features/notifications/route";
 import { ocrRoutes } from "./features/ocr/route";
 import { syncRoutes } from "./features/sync/route";
 import { syncScheduleRoutes } from "./features/sync/schedule-route";
+import { refreshScheduledManualAssetQuotes } from "./features/manual-assets/service";
 import {
   consumeScheduledSyncQueue,
   enqueueScheduledSync,
@@ -65,6 +66,7 @@ export default {
   async scheduled(_controller, env, ctx) {
     if (isCloudBackupMode(env)) return;
     ctx.waitUntil(enqueueScheduledSync(env));
+    ctx.waitUntil(refreshScheduledManualAssetQuotes(env.DB, env.TWELVE_DATA_API_KEY));
   },
   async queue(batch: MessageBatch<ScheduledSyncQueueMessage>, env) {
     if (isCloudBackupMode(env)) {
