@@ -1,24 +1,21 @@
 services:
   worker:
+    image: finance-worker-dev:latest
     build:
       context: .
-      dockerfile: docker/orbstack/worker.Dockerfile
-    # Wrangler's local Browser Rendering runtime currently launches an
-    # x86_64 browser. Keep the container amd64 so OrbStack can translate it
-    # correctly on Apple Silicon hosts.
+      dockerfile: docker/orbstack/worker.dev.Dockerfile
     platform: linux/amd64
-    container_name: finance
+    container_name: finance-dev
     init: true
     ports:
-      - "127.0.0.1:8787:8787"
+      - "127.0.0.1:8788:8788"
     environment:
       TZ: Asia/Taipei
-      # Miniflare's local Browser Rendering adds --no-sandbox in CI mode.
-      # OrbStack's VM does not expose a usable Chrome SUID/user-namespace
-      # sandbox, so keep this isolated local container in the supported mode.
       CI: "true"
       X_BROWSER_HEADFUL: "false"
       WRANGLER_DEV_IP: 0.0.0.0
+      WRANGLER_DEV_PORT: 8788
+      WRANGLER_CONFIG: wrangler.local.toml
       SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
     volumes:
       - ./apps/worker/.dev.vars:/workspace/apps/worker/.dev.vars.base:ro
@@ -32,12 +29,11 @@ services:
         - node
         - -e
         - >-
-          fetch('http://127.0.0.1:8787/api/runtime')
-          .then((response) => process.exit(response.ok ? 0 : 1))
-          .catch(() => process.exit(1))
-      interval: 10s
+          fetch('http://127.0.0.1:8788/api/runtime').then((response) => {
+          if (!response.ok) process.exit(1); }).catch(() => process.exit(1))
+      interval: 15s
       timeout: 5s
-      retries: 12
+      retries: 10
       start_period: 30s
     restart: unless-stopped
 

@@ -11,6 +11,17 @@ export default defineConfig({
     },
   },
   server: {
+    // These directories are generated outputs/cache, not source files. Keeping
+    // them out of chokidar prevents build/typecheck output from retriggering
+    // the dev server and creating unnecessary writes on the external volume.
+    watch: {
+      ignored: [
+        "**/dist/**",
+        "**/.svelte-check/**",
+        "**/.wrangler/**",
+        "**/.wrangler-config/**",
+      ],
+    },
     proxy: {
       "/api": "http://localhost:8787",
     },

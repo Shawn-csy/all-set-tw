@@ -12,6 +12,8 @@ const projectRoot = path.resolve(
   "..",
 );
 const workerDirectory = path.join(projectRoot, "apps", "worker");
+const wranglerConfig = process.env.WRANGLER_CONFIG ?? "wrangler.local.toml";
+const wranglerDevPort = process.env.WRANGLER_DEV_PORT ?? "8787";
 const relayToken = randomBytes(32).toString("hex");
 const LOCAL_CONFIG_KEYCHAIN_SERVICE = "taiwan-fin-hub/config-encryption-key";
 
@@ -98,11 +100,11 @@ const effectiveWranglerArgs = extraWranglerArgs.length
   : [
       "dev",
       "-c",
-      "wrangler.local.toml",
+      wranglerConfig,
       "--ip",
       wranglerDevIp,
       "--port",
-      "8787",
+      wranglerDevPort,
     ];
 const wrangler = spawn("npx", ["wrangler", ...effectiveWranglerArgs], {
   cwd: wranglerCwd,

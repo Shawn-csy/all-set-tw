@@ -1,12 +1,15 @@
-# OrbStack 本地 Worker
+# OrbStack 本機開發 Worker
 
-`local-first-backup` 的本地主服務可以在 OrbStack 中執行。容器內使用 Wrangler/Workerd，D1 仍是 Wrangler 的本地 SQLite；雲端 D1 不會被本地頁面讀取。
+OrbStack 的本機開發環境與正式環境是兩個獨立的 Compose stack：
 
-OrbStack 容器固定使用 `linux/amd64`。Wrangler 的本地 Browser Rendering 目前會啟動 x86_64 瀏覽器；Apple Silicon 主機由 OrbStack 做架構轉譯，才能使用需要圖形瀏覽器的銀行連接器。這不會改變本地 D1，也不會改用 Cloudflare 遠端 Browser Rendering。
+| 用途 | 容器          | 主機連接埠       | 狀態資料                                | image                         |
+| ---- | ------------- | ---------------- | --------------------------------------- | ----------------------------- |
+| 開發 | `finance-dev` | `127.0.0.1:8788` | repository 內的 `apps/worker/.wrangler` | 完整 dev toolchain            |
+| 正式 | `finance`     | `127.0.0.1:8787` | repository 外的 production root         | runtime-only production image |
 
-OrbStack 的 VM 不提供 Chrome 可使用的 SUID/user-namespace sandbox，因此 Compose 只在這個隔離的本地 Worker 容器設定 `CI=true`，讓 Miniflare 以 `--no-sandbox` 啟動本地瀏覽器。容器仍只綁定主機 `127.0.0.1:8787`，外部請求經由 Cloudflare Tunnel 與 Access 進入。
+本文件只描述開發 stack；正式部署與資料保存請看[本機開發／正式分離](008-local-development-production.md)。
 
-## 啟動
+## 啟動開發環境
 
 先確認 macOS Keychain 已有以下項目：
 
@@ -19,27 +22,28 @@ OrbStack 的 VM 不提供 Chrome 可使用的 SUID/user-namespace sandbox，因�
 npm run dev:orbstack
 ```
 
-啟動器會以 detached 模式執行，完成建置並啟動健康檢查後就會結束；不需要一直保持終端機開啟。容器名稱是 `finance`，並設定為 `unless-stopped`，因此 OrbStack 啟動後會自動維持服務。
+啟動器會使用 `docker-compose.dev.yml` 建立或更新 `finance-dev`，並在 detached 模式等待健康檢查完成。開發 Worker 使用 `wrangler.local.toml`、開發用本地 D1，以及 repository 內的 `.wrangler` 狀態目錄。
 
-這個啟動器會：
+Apple Silicon 主機上的容器固定使用 `linux/amd64`，因為本地 Browser Rendering 的銀行連接器需要 x86_64 瀏覽器。OrbStack VM 不提供 Chrome 可用的 SUID/user-namespace sandbox，因此開發容器設定 `CI=true`，讓本地瀏覽器以 `--no-sandbox` 啟動。
 
-1. 從 Keychain 讀取加密金鑰，不把金鑰放在 Compose、Dockerfile 或命令列參數。
-2. 將金鑰寫入 Git 忽略的 `.wrangler-config/orbstack-secrets/config-encryption-key`（權限 600），供 detached container 的 Docker Secret 綁定使用。
-3. 建立或更新 `finance` 容器。
-4. 將容器的 `127.0.0.1:8787` 映射到主機的 `127.0.0.1:8787`。
-5. 將本地 D1 狀態掛載在 `apps/worker/.wrangler`，因此重啟容器不會清空本地資料。
+開發容器只綁定主機 `127.0.0.1:8788`，不應該由正式 Tunnel 指向它。正式流量仍指向 `127.0.0.1:8787` 的 `finance` 容器。
 
-啟動器會保留上述被忽略的本地 secret 檔，因為 Docker Compose 的 detached container 在重啟時仍需要讀取綁定來源；它不會進入 Git，也不會寫入映像。若停止並移除本地環境，可手動刪除 `.wrangler-config/orbstack-secrets/`。
-
-若要停止容器，執行 `docker stop finance`。Cloudflare Tunnel 仍使用主機端的 `127.0.0.1:8787`，因此主機上的 `cloudflared` 與 OrbStack 必須保持執行；不需要修改 `finance.shawnup.com` 的 Tunnel route。
-
-## 驗證
+## 常用操作
 
 ```bash
-curl http://127.0.0.1:8787/api/runtime
-docker ps --filter name=finance
+curl http://127.0.0.1:8788/api/runtime
+docker ps --filter name=finance-dev
+docker stop finance-dev
+docker start finance-dev
 ```
 
-`/api/runtime` 應回報 `deploymentMode: "local-primary"` 與 `cloudBackup: false`。
+如果要連容器與開發狀態一起清除：
 
-若要重建映像，重新執行 `npm run dev:orbstack` 即可。不要把 `CONFIG_ENCRYPTION_KEY` 寫入 Dockerfile、Compose、Git 或公開 log。
+```bash
+docker rm -f finance-dev
+rm -rf apps/worker/.wrangler .wrangler-config/orbstack-secrets
+```
+
+這些操作只會影響開發環境，不會刪除正式容器 `finance` 或 production root。
+
+不要直接執行 `docker compose up`，因為 `npm run dev:orbstack` 會先從 macOS Keychain 準備 Docker Secret。不要把 `CONFIG_ENCRYPTION_KEY` 寫入 Dockerfile、Compose、Git 或公開 log。

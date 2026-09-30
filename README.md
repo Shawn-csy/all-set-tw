@@ -158,7 +158,7 @@ npx wrangler login
 npm run dev
 ```
 
-範例設定的 D1 與 Workers AI 會連到 Cloudflare remote binding，請勿使用正式資料庫。常用驗證指令：
+範例設定的 D1 使用本地模擬資源，Workers AI 使用 Cloudflare remote binding；請勿在 dev 設定中指向正式資料庫。常用驗證指令：
 
 ```bash
 npm run format:check
@@ -172,14 +172,13 @@ npm run build
 
 ### 使用 OrbStack 容器執行
 
-macOS 也可以用 OrbStack 執行完整的本地 Worker；容器會保留本地 D1 狀態，並只將
-`127.0.0.1:8787` 提供給主機上的 Cloudflare Tunnel：
+macOS 的 OrbStack 本機環境分成開發與正式兩個 stack。開發容器使用完整工具鏈與 local dev D1，正式容器使用 runtime-only image 並連線既有的 Cloudflare D1：
 
 ```bash
 npm run dev:orbstack
 ```
 
-此指令會從 macOS Keychain 取得 `CONFIG_ENCRYPTION_KEY`，以暫時 Docker Secret 傳入容器，停止後自動清除。請不要直接執行 `docker compose up`，因為它不會自動準備金鑰 Secret。完整說明請參考[OrbStack 本地 Worker](docs/007-orbstack-local-worker.md)。
+這會啟動 `finance-dev`，提供 `127.0.0.1:8788`；正式服務 `finance` 固定使用 `127.0.0.1:8787`。push 到 `main` 後，GitHub Actions 在同一台主機的 self-hosted runner 上建置並更新正式容器。完整說明請參考[OrbStack 本機開發 Worker](docs/007-orbstack-local-worker.md)與[本機開發／正式分離](docs/008-local-development-production.md)。
 
 ## 地端優先版本
 

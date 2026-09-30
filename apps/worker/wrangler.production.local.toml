@@ -1,0 +1,32 @@
+name = "taiwan-fin-hub-production-local"
+main = "src/index.ts"
+compatibility_date = "2026-06-01"
+compatibility_flags = ["nodejs_compat"]
+assets = { directory = "../web/dist", binding = "ASSETS" }
+browser = { binding = "BROWSER" }
+ai = { binding = "AI", remote = true }
+
+[vars]
+DEPLOYMENT_MODE = "local-primary"
+# This only bypasses Access for loopback healthchecks; public Tunnel hosts still require Access.
+LOCAL_DEV_MODE = "true"
+APP_ORIGINS = "https://finance.shawnup.com https://www.finance.shawnup.com"
+
+[triggers]
+crons = ["*/10 * * * *"]
+
+[[queues.producers]]
+queue = "taiwan-fin-hub-sync-production-local"
+binding = "SYNC_QUEUE"
+
+[[queues.consumers]]
+queue = "taiwan-fin-hub-sync-production-local"
+max_batch_size = 1
+max_concurrency = 1
+
+[[d1_databases]]
+binding = "DB"
+database_name = "taiwan-fin-hub"
+database_id = "b69c2606-92c2-449d-a96f-5754f552433b"
+remote = true
+migrations_dir = "../../packages/db/migrations"

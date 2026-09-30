@@ -7,7 +7,7 @@ const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
-const composeFile = path.join(projectRoot, "docker-compose.orbstack.yml");
+const composeFile = path.join(projectRoot, "docker-compose.dev.yml");
 const keychainService = "taiwan-fin-hub/config-encryption-key";
 
 const keyResult = spawnSync(
@@ -50,7 +50,16 @@ let child;
 let stopping = false;
 child = spawn(
   "docker",
-  ["compose", "-f", composeFile, "up", "--build", "--detach"],
+  [
+    "compose",
+    "--project-name",
+    "finance-dev",
+    "-f",
+    composeFile,
+    "up",
+    "--build",
+    "--detach",
+  ],
   {
     cwd: projectRoot,
     env: {
@@ -74,6 +83,6 @@ const exitCode = await new Promise((resolve, reject) => {
   child.once("exit", (code, signal) => resolve(signal ? 1 : (code ?? 1)));
 });
 if (exitCode === 0) {
-  console.log("OrbStack local Worker is running detached: finance");
+  console.log("OrbStack development Worker is running detached: finance-dev");
 }
 process.exitCode = exitCode;

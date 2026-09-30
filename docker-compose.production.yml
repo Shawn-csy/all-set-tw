@@ -1,0 +1,41 @@
+services:
+  worker:
+    image: finance-worker-production:${FINANCE_PRODUCTION_TAG:-latest}
+    platform: linux/amd64
+    container_name: finance
+    init: true
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      TZ: Asia/Taipei
+      CI: "true"
+      X_BROWSER_HEADFUL: "false"
+      WRANGLER_DEV_IP: 0.0.0.0
+      WRANGLER_DEV_PORT: 8787
+      WRANGLER_CONFIG: wrangler.production.local.toml
+      XDG_CONFIG_HOME: /workspace/.wrangler-config
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:?Set CLOUDFLARE_API_TOKEN for the remote D1}
+      SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+    volumes:
+      - ${FINANCE_PRODUCTION_ROOT:?Set FINANCE_PRODUCTION_ROOT}/state:/workspace/apps/worker/.wrangler
+      - ${FINANCE_PRODUCTION_ROOT:?Set FINANCE_PRODUCTION_ROOT}/wrangler-config:/workspace/.wrangler-config
+      - ${FINANCE_PRODUCTION_ROOT:?Set FINANCE_PRODUCTION_ROOT}/vars/.dev.vars:/workspace/apps/worker/.dev.vars.base:ro
+    secrets:
+      - config_encryption_key
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:8787/api/runtime').then((response) => {
+          if (!response.ok) process.exit(1); }).catch(() => process.exit(1))
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+    restart: unless-stopped
+
+secrets:
+  config_encryption_key:
+    file: ${FINANCE_PRODUCTION_ROOT:?Set FINANCE_PRODUCTION_ROOT}/secrets/config_encryption_key

@@ -141,7 +141,7 @@ npx wrangler login
 npm run dev
 ```
 
-範例設定中的 D1 與 Workers AI 使用 remote binding，會連到 Cloudflare 資源。請使用獨立的開發 D1，不要直接操作正式資料。
+範例設定中的 D1 使用 local simulation，Workers AI 使用 remote binding。請讓開發 Worker 只操作 local dev D1，不要直接碰正式 Cloudflare D1。
 
 常用資料庫遷移指令：
 
@@ -151,6 +151,8 @@ npm run db:migrate:remote
 ```
 
 中信行動銀行的 TLS endpoint 無法由 local workerd 直接連線，因此 `npm run dev` 會自動啟動只監聽 `127.0.0.1`、限制目的端點並使用單次隨機 token 的 Node relay；正式 Worker 不使用此 relay。
+
+若正式服務也執行在同一台 macOS／OrbStack 主機，請使用獨立的正式 image 與 production root，但讓正式 Worker 透過 remote binding 連線既有的 Cloudflare D1；不要讓正式容器依賴開發 checkout 或 local dev D1。完整的 dev／production 分離、push 後部署與清理方式請參閱 [`docs/008-local-development-production.md`](008-local-development-production.md)。
 
 ## 部署至既有 D1
 
