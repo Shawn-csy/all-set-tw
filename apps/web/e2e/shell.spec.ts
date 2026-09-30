@@ -38,6 +38,19 @@ test.beforeEach(async ({ page }) => {
     else if (path === "/api/investment-transactions") body = [];
     else if (path === "/api/invoices") body = [];
     else if (path === "/api/activity/invoice-mappings") body = [];
+    else if (path === "/api/activity/invoice-payment-rules") body = [];
+    else if (path === "/api/activity/invoice-payment-accounts") body = [];
+    else if (path === "/api/classification/merchants")
+      body = { merchants: [], merchantRules: [], productRules: [] };
+    else if (path === "/api/cash-wallet")
+      body = {
+        openingBalance: 0,
+        cashWithdrawals: 0,
+        cashExpenses: 0,
+        balance: 0,
+        currency: "TWD",
+        updatedAt: null,
+      };
     else if (path === "/api/manual-assets") body = [];
     else if (path === "/api/exchange-rates") body = [];
     else if (path === "/api/history/net-worth/chart") body = [];
@@ -72,6 +85,13 @@ test.beforeEach(async ({ page }) => {
           isSystem: true,
         },
         { id: "other", label: "未分類", sortOrder: 17, isSystem: true },
+        {
+          id: "excluded",
+          label: "不列入統計",
+          sortOrder: 18,
+          isSystem: true,
+          behavior: "excluded",
+        },
       ];
     else if (path === "/api/classification/rules") body = [];
     else if (path.includes("/connectors/") && path.endsWith("/settings"))
@@ -243,10 +263,73 @@ test("renders the mobile bottom navigation", async ({ page }) => {
   ).toBeVisible();
 });
 
+test("keeps activity analysis behind an explicit expansion", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#/activity");
+  await expect(page.getByRole("region", { name: "活動列表" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "每月分類比例" }),
+  ).toBeHidden();
+  await expect(page.getByRole("tablist", { name: "活動來源" })).toBeHidden();
+
+  await page
+    .locator("summary")
+    .filter({ hasText: "查看本月分類與現金流分析" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "每月分類比例" }),
+  ).toBeVisible();
+  await page
+    .locator("summary")
+    .filter({ hasText: "篩選來源與搜尋本月" })
+    .click();
+  await expect(page.getByRole("tablist", { name: "活動來源" })).toBeVisible();
+});
+
+test("keeps maintenance controls available below primary data", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#/assets");
+  await expect(page.getByLabel("初始現金餘額")).toBeHidden();
+  await page
+    .locator("summary")
+    .filter({ hasText: "現金錢包與初始餘額設定" })
+    .click();
+  await expect(page.getByLabel("初始現金餘額")).toBeVisible();
+
+  await page.goto("/#/classification-rules");
+  await expect(page.getByRole("button", { name: "新增分類" })).toBeHidden();
+  await page
+    .locator("summary")
+    .filter({ hasText: "管理分類與顯示順序" })
+    .click();
+  await page.getByRole("button", { name: "新增分類" }).click();
+  await expect(page.getByRole("textbox", { name: "分類名稱" })).toBeVisible();
+});
+
 test("opens and scrolls to the selected connector from mobile more", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("**/api/sync-jobs", async (route) => {
+    await route.fulfill({
+      json: [
+        {
+          id: "taishin:all",
+          connectorId: "taishin",
+          scope: "all",
+          configured: true,
+          enabled: true,
+          running: false,
+          lastStatus: "success",
+          lastSuccessAt: "2026-09-01T00:00:00Z",
+        },
+      ],
+    });
+  });
   await page.goto("/#/more");
 
   await page.getByRole("button", { name: "管理台新銀行", exact: true }).click();
@@ -848,6 +931,14 @@ test("filters activity by cash flow and keeps source filters composable", async 
 
   const activityRows = page.locator("tbody tr");
   const sourceFilters = page.getByRole("tablist", { name: "活動來源" });
+  await page
+    .locator("summary")
+    .filter({ hasText: "查看本月分類與現金流分析" })
+    .click();
+  await page
+    .locator("summary")
+    .filter({ hasText: "篩選來源與搜尋本月" })
+    .click();
 
   await expect(activityRows).toHaveCount(4);
   await page.getByRole("button", { name: "查看收入活動" }).click();
@@ -1071,7 +1162,7 @@ test("redirects the removed invoices route to overview", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("excludes a bank transaction from activity calculations and restores it", async ({
+test("excludes a bank transaction through its category and restores it", async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -1080,7 +1171,7 @@ test("excludes a bank transaction from activity calculations and restores it", a
       value: true,
     });
   });
-  let excludedFromCalculation = false;
+  let categoryId = "other";
   const month = new Date().toISOString().slice(0, 7);
 
   await page.route("**/api/bank**", async (route) => {
@@ -1110,11 +1201,11 @@ test("excludes a bank transaction from activity calculations and restores it", a
             currency: "TWD",
             description: "台新卡費",
             status: "posted",
-            excludedFromCalculation,
+            excludedFromCalculation: categoryId === "excluded",
             classification: {
-              categoryId: "other",
-              label: "未分類",
-              source: "fallback",
+              categoryId,
+              label: categoryId === "excluded" ? "不列入統計" : "未分類",
+              source: categoryId === "excluded" ? "override" : "fallback",
             },
           },
         ],
@@ -1122,22 +1213,20 @@ test("excludes a bank transaction from activity calculations and restores it", a
     });
   });
   await page.route(
-    "**/api/bank/transactions/transaction-1/calculation",
+    "**/api/classification/overrides/bank_transaction/transaction-1",
     async (route) => {
-      const body = route.request().postDataJSON() as {
-        excludedFromCalculation: boolean;
-      };
-      excludedFromCalculation = body.excludedFromCalculation;
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ success: true, excludedFromCalculation }),
-      });
+      categoryId = (route.request().postDataJSON() as { categoryId: string })
+        .categoryId;
+      await route.fulfill({ json: { success: true } });
     },
   );
 
   await page.goto("/#/activity");
   await expect(page.locator("html")).toHaveClass(/is-standalone/);
+  await page
+    .locator("summary")
+    .filter({ hasText: "查看本月分類與現金流分析" })
+    .click();
   const expenseSlice = page.getByRole("button", {
     name: "未分類 100.0% NT$8,318",
   });
@@ -1152,62 +1241,34 @@ test("excludes a bank transaction from activity calculations and restores it", a
   await expect(desktopDetailDialog).toBeHidden();
 
   await page.getByRole("button", { name: "查看 台新卡費 活動詳情" }).click();
-  await page
-    .getByRole("checkbox", { name: "排除 台新卡費 的統計計算" })
-    .click();
-  const calculationDialog = page.getByRole("dialog", {
-    name: "排除統計計算",
+  const categorySelect = page.getByRole("combobox", {
+    name: "更新 台新卡費 分類",
   });
-  await expect(calculationDialog).toBeVisible();
-  await expect(
-    calculationDialog.getByRole("checkbox", {
-      name: "同時新增分類規則",
-    }),
-  ).not.toBeChecked();
-  await calculationDialog.getByRole("button", { name: "取消" }).click();
-  await expect(calculationDialog).toBeHidden();
-  await expect(
-    page.getByRole("checkbox", { name: "排除 台新卡費 的統計計算" }),
-  ).not.toBeChecked();
-  await expect(expenseSlice).toBeVisible();
-
-  await page
-    .getByRole("checkbox", { name: "排除 台新卡費 的統計計算" })
-    .click();
-  await calculationDialog.getByRole("button", { name: "確認排除" }).click();
-  await expect(calculationDialog).toBeHidden();
-  await expect(
-    page.getByRole("checkbox", { name: "恢復 台新卡費 的統計計算" }),
-  ).toBeChecked();
+  await categorySelect.selectOption("excluded");
+  const categoryDialog = page
+    .getByRole("dialog")
+    .filter({ has: page.getByRole("heading", { name: "更新活動分類" }) });
+  await expect(categoryDialog).toBeVisible();
+  await categoryDialog.getByRole("button", { name: "更新分類" }).click();
+  await expect(categoryDialog).toBeHidden();
+  await expect(categorySelect).toHaveValue("excluded");
   await expect(expenseSlice).toBeHidden();
-  await page.getByRole("button", { name: "返回活動列表" }).click();
-  const excludedExpenseSlice = page.getByRole("button", {
-    name: "未分類 0.0% NT$0",
-  });
-  await expect(excludedExpenseSlice).toBeVisible();
-  await excludedExpenseSlice.click();
-  await page.getByRole("button", { name: "查看 台新卡費 活動詳情" }).click();
-  await expect(
-    page.getByRole("checkbox", { name: "恢復 台新卡費 的統計計算" }),
-  ).toBeChecked();
 
   await page.reload();
-  await expect(excludedExpenseSlice).toBeVisible();
   // Standalone navigation restores the open detail from browser history.
   await expect(desktopDetailDialog).toBeVisible();
-  await expect(
-    page.getByRole("checkbox", { name: "恢復 台新卡費 的統計計算" }),
-  ).toBeChecked();
+  await expect(categorySelect).toHaveValue("excluded");
 
+  await categorySelect.selectOption("other");
+  await categoryDialog.getByRole("button", { name: "更新分類" }).click();
+  await expect(categorySelect).toHaveValue("other");
+  await page.getByRole("button", { name: "返回活動列表" }).click();
   await page
-    .getByRole("checkbox", { name: "恢復 台新卡費 的統計計算" })
+    .locator("summary")
+    .filter({ hasText: "查看本月分類與現金流分析" })
     .click();
-  await expect(
-    page.getByRole("checkbox", { name: "排除 台新卡費 的統計計算" }),
-  ).not.toBeChecked();
   await expect(expenseSlice).toBeVisible();
 
-  await page.getByRole("button", { name: "返回活動列表" }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(
     page.getByRole("combobox", { name: "更新 台新卡費 分類" }),
@@ -1291,7 +1352,7 @@ test("excludes a bank transaction from activity calculations and restores it", a
   await expect(detailDialog).toBeHidden();
 });
 
-test("can add a classification rule while excluding a transaction", async ({
+test("can add an excluded-category rule from a transaction", async ({
   page,
 }) => {
   const month = new Date().toISOString().slice(0, 7);
@@ -1368,32 +1429,35 @@ test("can add a classification rule while excluding a transaction", async ({
     .getByRole("button", { name: "查看 每月家庭轉帳 活動詳情" })
     .click();
   await page
-    .getByRole("checkbox", { name: "排除 每月家庭轉帳 的統計計算" })
-    .click();
-
-  const dialog = page.getByRole("dialog", { name: "排除統計計算" });
-  await dialog.getByRole("combobox", { name: "分類" }).selectOption("transfer");
+    .getByRole("combobox", { name: "更新 每月家庭轉帳 分類" })
+    .selectOption("excluded");
+  const dialog = page
+    .getByRole("dialog")
+    .filter({ has: page.getByRole("heading", { name: "更新活動分類" }) });
   await dialog.getByRole("checkbox", { name: "同時新增分類規則" }).check();
-  await dialog.getByRole("textbox").fill("每月家庭轉帳");
-  await dialog.getByRole("button", { name: "確認排除" }).click();
+  await dialog.getByRole("combobox").selectOption("contains");
+  await dialog
+    .getByRole("textbox", { name: "分類規則比對文字" })
+    .fill("每月家庭轉帳");
+  await dialog.getByRole("button", { name: "更新分類" }).click();
 
   await expect(dialog).toBeHidden();
-  expect(overrideBody).toEqual({ categoryId: "transfer" });
+  expect(overrideBody).toEqual({ categoryId: "excluded" });
   expect(ruleBody).toMatchObject({
-    categoryId: "transfer",
+    categoryId: "excluded",
     targetType: "bank_transaction",
     field: "any_text",
     operator: "contains",
     pattern: "每月家庭轉帳",
-    excludedFromCalculation: true,
   });
 });
 
-test("can modify an existing user rule while excluding a transaction", async ({
+test("keeps an existing user rule unchanged for a one-off excluded category", async ({
   page,
 }) => {
   const month = new Date().toISOString().slice(0, 7);
   let updatedRuleBody: Record<string, unknown> | undefined;
+  let overrideBody: Record<string, unknown> | undefined;
 
   await page.route("**/api/bank**", async (route) => {
     await route.fulfill({
@@ -1451,25 +1515,31 @@ test("can modify an existing user rule while excluding a transaction", async ({
       });
     },
   );
+  await page.route(
+    "**/api/classification/overrides/bank_transaction/rule-transaction",
+    async (route) => {
+      overrideBody = route.request().postDataJSON() as Record<string, unknown>;
+      await route.fulfill({ json: { success: true } });
+    },
+  );
 
   await page.goto("/#/activity");
   await page.getByRole("button", { name: "查看 固定轉帳 活動詳情" }).click();
   await page
-    .getByRole("checkbox", { name: "排除 固定轉帳 的統計計算" })
-    .click();
+    .getByRole("combobox", { name: "更新 固定轉帳 分類" })
+    .selectOption("excluded");
 
-  const dialog = page.getByRole("dialog", { name: "排除統計計算" });
+  const dialog = page
+    .getByRole("dialog")
+    .filter({ has: page.getByRole("heading", { name: "更新活動分類" }) });
   await expect(
-    dialog.getByRole("checkbox", { name: "同時修改目前分類規則" }),
+    dialog.getByRole("checkbox", { name: "同時新增分類規則" }),
   ).not.toBeChecked();
-  await dialog.getByRole("checkbox", { name: "同時修改目前分類規則" }).check();
-  await dialog.getByRole("button", { name: "確認排除" }).click();
+  await dialog.getByRole("button", { name: "更新分類" }).click();
 
   await expect(dialog).toBeHidden();
-  expect(updatedRuleBody).toEqual({
-    categoryId: "transfer",
-    excludedFromCalculation: true,
-  });
+  expect(overrideBody).toEqual({ categoryId: "excluded" });
+  expect(updatedRuleBody).toBeUndefined();
 });
 
 test("merges a matching invoice and counts an unmatched invoice as expense", async ({
@@ -1547,8 +1617,13 @@ test("merges a matching invoice and counts an unmatched invoice as expense", asy
 
   await page.goto("/#/activity");
 
+  await page
+    .locator("summary")
+    .filter({ hasText: "查看本月分類與現金流分析" })
+    .click();
+
   await expect(
-    page.getByRole("button", { name: "發票 63.4% NT$1,490" }),
+    page.getByRole("button", { name: "未分類 63.4% NT$1,490" }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "餐飲 36.6% NT$860" }),
@@ -1570,6 +1645,10 @@ test("merges a matching invoice and counts an unmatched invoice as expense", asy
     activityRows.filter({ hasText: "未支援銀行商店" }),
   ).toContainText("−NT$1,490");
 
+  await page
+    .locator("summary")
+    .filter({ hasText: "篩選來源與搜尋本月" })
+    .click();
   await page.getByRole("tab", { name: "發票", exact: true }).click();
   await expect(activityRows).toHaveCount(2);
   await page.getByRole("tab", { name: "信用卡", exact: true }).click();
@@ -1709,9 +1788,9 @@ test("manually maps, manages, and separates a same-day invoice transaction on mo
     .click();
   await expect(page.getByText("測試品項", { exact: true })).toBeVisible();
   await expect(page.getByText("尚未找到銀行／信用卡交易")).toBeVisible();
-  await page.getByRole("button", { name: "配對交易" }).click();
+  await page.getByRole("button", { name: "關聯支付方式" }).click();
   await expect(
-    page.getByRole("heading", { name: "選擇同日候選交易" }),
+    page.getByRole("heading", { name: "選擇支付方式" }),
   ).toBeVisible();
   await page
     .getByRole("button", {
@@ -1720,7 +1799,7 @@ test("manually maps, manages, and separates a same-day invoice transaction on mo
     .click();
   await page.getByRole("button", { name: "下一步" }).click();
   await expect(
-    page.getByRole("heading", { name: "確認合併這兩筆？" }),
+    page.getByRole("heading", { name: "確認關聯這筆刷卡交易？" }),
   ).toBeVisible();
   await expect(page.getByText("差額 NT$20", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "確認配對" }).click();
@@ -1746,7 +1825,7 @@ test("manually maps, manages, and separates a same-day invoice transaction on mo
       .locator("..")
       .getByText("合成發票商店", { exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "管理配對" }).click();
+  await page.getByRole("button", { name: "管理支付方式" }).click();
   await page.getByRole("button", { name: "解除並保持分開" }).click();
   await expect(page.getByText("已解除配對，兩筆活動將保持分開")).toBeVisible();
   await expect(page.getByText("合成發票商店").first()).toBeVisible();

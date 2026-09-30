@@ -105,6 +105,44 @@ describe("activity filters", () => {
     ).toEqual([matchedCardInvoice]);
   });
 
+  it("finds an invoice in each of its item categories instead of treating invoice as a category", () => {
+    const mixed = item("mixed-invoice", {
+      source: "invoice",
+      amount: 300,
+      category: "多分類",
+      categoryId: "mixed",
+      categoryParts: [
+        {
+          itemId: "food",
+          categoryId: "food",
+          category: "餐飲",
+          amount: 100,
+          behavior: "normal",
+        },
+        {
+          itemId: "shopping",
+          categoryId: "shopping",
+          category: "購物",
+          amount: 200,
+          behavior: "normal",
+        },
+      ],
+    });
+    expect(
+      filterActivities([mixed], {
+        ...defaultFilters,
+        flow: "expense",
+        category: { flow: "expense", category: "餐飲" },
+      }),
+    ).toEqual([mixed]);
+    expect(
+      filterActivities([mixed], {
+        ...defaultFilters,
+        categoryId: "shopping",
+      }),
+    ).toEqual([mixed]);
+  });
+
   it("filters by the Taipei date when a timestamp crosses UTC midnight", () => {
     const taipeiAugust = item("taipei-august", {
       date: "2026-07-31T16:30:00Z",

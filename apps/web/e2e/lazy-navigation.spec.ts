@@ -15,6 +15,19 @@ test.beforeEach(async ({ page }) => {
     else if (path === "/api/investment-transactions") body = [];
     else if (path === "/api/invoices") body = [];
     else if (path === "/api/activity/invoice-mappings") body = [];
+    else if (path === "/api/activity/invoice-payment-rules") body = [];
+    else if (path === "/api/activity/invoice-payment-accounts") body = [];
+    else if (path === "/api/classification/merchants")
+      body = { merchants: [], merchantRules: [], productRules: [] };
+    else if (path === "/api/cash-wallet")
+      body = {
+        openingBalance: 0,
+        cashWithdrawals: 0,
+        cashExpenses: 0,
+        balance: 0,
+        currency: "TWD",
+        updatedAt: null,
+      };
     else if (path === "/api/manual-assets") body = [];
     else if (path === "/api/exchange-rates") body = [];
     else if (path === "/api/classification/categories") body = [];

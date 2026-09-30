@@ -66,7 +66,9 @@ export default {
   async scheduled(_controller, env, ctx) {
     if (isCloudBackupMode(env)) return;
     ctx.waitUntil(enqueueScheduledSync(env));
-    ctx.waitUntil(refreshScheduledManualAssetQuotes(env.DB, env.TWELVE_DATA_API_KEY));
+    ctx.waitUntil(
+      refreshScheduledManualAssetQuotes(env.DB, env.TWELVE_DATA_API_KEY),
+    );
   },
   async queue(batch: MessageBatch<ScheduledSyncQueueMessage>, env) {
     if (isCloudBackupMode(env)) {

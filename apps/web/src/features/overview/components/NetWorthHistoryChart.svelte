@@ -86,6 +86,14 @@
       ({ key }) => includedAssets.includes(key) && availableAssets.has(key),
     ),
   );
+  const selectedAssetLabels = $derived(
+    selectedSeries.map(({ label }) => label).join("、"),
+  );
+  const hasExcludedAvailableAssets = $derived(
+    selectedSeries.length <
+      NET_WORTH_ASSET_SERIES.filter(({ key }) => availableAssets.has(key))
+        .length,
+  );
   const activeFocus = $derived(
     displayMode === "breakdown" &&
       selectedSeries.some(({ key }) => key === focusedAsset)
@@ -133,6 +141,13 @@
     localStorage.setItem(storageKey, JSON.stringify(next));
   }
 
+  function includeAllAvailableAssets() {
+    includedAssets = NET_WORTH_ASSET_SERIES.filter(({ key }) =>
+      availableAssets.has(key),
+    ).map(({ key }) => key);
+    localStorage.setItem(storageKey, JSON.stringify(includedAssets));
+  }
+
   function xValue(point: NetWorthChartPoint) {
     return new Date(`${point.date}T00:00:00`);
   }
@@ -163,6 +178,17 @@
       <h2 class="flex items-center gap-2 text-base font-semibold">
         <TrendingUp class="size-4 text-steel" />資產走勢
       </h2>
+      <div class="flex flex-wrap items-center gap-2">
+        <p class="text-caption text-subtle">
+          目前包含：{selectedAssetLabels ||
+            "尚無可用資產"}；不一定等於上方淨資產
+        </p>
+        {#if hasExcludedAvailableAssets}<button
+            type="button"
+            class="text-caption font-semibold text-steel underline underline-offset-2"
+            onclick={includeAllAvailableAssets}>納入全部</button
+          >{/if}
+      </div>
       {#if chartData.length > 0}
         <span
           class={`inline-flex items-center gap-1 py-1 text-caption font-semibold ${changeValue >= 0 ? "text-moss" : "text-coral"}`}

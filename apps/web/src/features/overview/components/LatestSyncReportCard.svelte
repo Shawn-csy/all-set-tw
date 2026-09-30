@@ -134,9 +134,9 @@
 {:else if report && presentation}
   <section
     aria-label="最近一次排程同步"
-    class="min-w-0 border-t border-ink/10 pt-6"
+    class="min-w-0 border-t border-ink/10 pt-4"
   >
-    <div class="grid gap-5">
+    <div class="grid gap-4">
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div class="flex min-w-0 items-start gap-3">
           <span
@@ -173,7 +173,7 @@
         >
       </div>
 
-      <div class="grid gap-5 md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+      <div class="grid gap-4 md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
         <div class="min-w-0 py-1">
           <p class="text-caption font-semibold text-subtle">新增資料</p>
           <div class="mt-3 grid grid-cols-3 gap-2">

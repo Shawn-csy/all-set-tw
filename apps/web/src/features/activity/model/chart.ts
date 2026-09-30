@@ -3,11 +3,16 @@ import type { ActivityItem } from "./types";
 import {
   activityDisplayAmount,
   activityCashFlow,
+  activityCashFlowType,
+  isInvestmentCashFlow,
+  countedInvoiceAmount,
   type ActivityFlow,
 } from "@taiwan-fin-hub/core";
 export {
   activityDisplayAmount,
   activityCashFlow,
+  activityCashFlowType,
+  isInvestmentCashFlow,
   type ActivityFlow,
 } from "@taiwan-fin-hub/core";
 
@@ -56,6 +61,10 @@ export function activityCashAmountTwd(
       item.source !== "invoice")
   )
     return 0;
+  if (item.categoryParts) {
+    const amount = countedInvoiceAmount(item.categoryParts);
+    return activityCashFlow(item) === "expense" ? -amount : amount;
+  }
   return activityAmountTwd(item, rates) ?? 0;
 }
 
@@ -63,11 +72,25 @@ export function buildActivityCategorySlices(
   items: ActivityItem[],
   flow: ActivityFlow,
   rates: Record<string, number>,
+  scope: "ordinary" | "investment" | "all" = "ordinary",
 ): ActivityCategorySlice[] {
   const grouped = new Map<string, number>();
 
   for (const item of items) {
     if (activityCashFlow(item) !== flow) continue;
+    if (scope === "ordinary" && isInvestmentCashFlow(item)) continue;
+    if (scope === "investment" && !isInvestmentCashFlow(item)) continue;
+    if (item.categoryParts) {
+      for (const part of item.categoryParts) {
+        const amount =
+          item.excludedFromCalculation || part.behavior !== "normal"
+            ? 0
+            : part.amount;
+        if (amount === 0) continue;
+        grouped.set(part.category, (grouped.get(part.category) ?? 0) + amount);
+      }
+      continue;
+    }
     const amount = Math.abs(activityCashAmountTwd(item, rates));
     grouped.set(item.category, (grouped.get(item.category) ?? 0) + amount);
   }

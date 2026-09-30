@@ -1,6 +1,12 @@
-import { isLikelyInvestmentCashTransfer } from "./activity-flow";
+import { isLikelyInvestmentCashFlow } from "./activity-flow";
 import type { ActivityItem } from "./activity-types";
 import type { ClassificationBehavior } from "./activity-types";
+import {
+  allocateInvoiceCategories,
+  countedInvoiceAmount,
+  type InvoiceCategoryLine,
+  type InvoiceCategoryPart,
+} from "./invoice-categories";
 import { compareActivityItems, isActivityDateTime } from "./activity-list";
 import type {
   MatchingTransaction,
@@ -19,6 +25,7 @@ export interface ActivityTransaction extends MatchingTransaction {
   institutionName?: string | null;
   accountName?: string | null;
   accountLast4?: string | null;
+  sourceSummary?: string | null;
   status: string;
   excludedFromCalculation?: boolean;
   cashWithdrawal?: boolean;
@@ -33,6 +40,22 @@ export interface ActivityTransaction extends MatchingTransaction {
 export interface ActivityInvoice extends MatchingInvoice {
   sellerName?: string | null;
   invoiceNumber?: string | null;
+  items?: Array<InvoiceCategoryLine & { description?: string }>;
+}
+
+function invoiceCategorySummary(parts: readonly InvoiceCategoryPart[]) {
+  const labels = new Set(parts.map((part) => part.category));
+  const ids = new Set(parts.map((part) => part.categoryId));
+  return {
+    category:
+      labels.size === 0
+        ? "未分類"
+        : labels.size === 1
+          ? [...labels][0]!
+          : "多分類",
+    categoryId:
+      ids.size === 0 ? "other" : ids.size === 1 ? [...ids][0]! : "mixed",
+  };
 }
 export interface ActivityTrade {
   id: string;
@@ -67,6 +90,16 @@ export function buildActivityItems(
       const matchedInvoice = invoiceMatches.transactionToInvoice.get(t.id);
       const isCard =
         account?.accountType === "credit" || t.accountType === "credit";
+      const categoryParts = matchedInvoice?.items?.length
+        ? allocateInvoiceCategories(
+            matchedInvoice.amount,
+            Math.abs(t.amount),
+            matchedInvoice.items,
+          )
+        : undefined;
+      const invoiceCategory = categoryParts
+        ? invoiceCategorySummary(categoryParts)
+        : undefined;
       const hasAuthorizationTime = isActivityDateTime(
         t.authorizedAt ?? undefined,
       );
@@ -82,11 +115,20 @@ export function buildActivityItems(
         t.accountName ??
         account?.accountName ??
         (accountLast4 ? `末四碼 ${accountLast4}` : "");
-      const isInvestmentCashTransfer = isLikelyInvestmentCashTransfer(
-        t,
-        trades,
-      );
-      const classificationBehavior = t.classification?.behavior;
+      const isInvestmentCashFlow =
+        !categoryParts &&
+        isLikelyInvestmentCashFlow(
+          {
+            ...t,
+            categoryId: t.classification?.categoryId,
+          },
+          trades,
+        );
+      // The bank/card row establishes payment; invoice items establish what
+      // was purchased. Its old transaction category must not hide the items.
+      const classificationBehavior = categoryParts
+        ? undefined
+        : t.classification?.behavior;
       const isCashWithdrawal = classificationBehavior === "cash_withdrawal";
       const isClassificationAssetTransfer =
         classificationBehavior === "asset_transfer";
@@ -96,10 +138,14 @@ export function buildActivityItems(
         date: invoiceTime ?? t.authorizedAt ?? t.postedDate ?? "",
         dateHasTime: hasAuthorizationTime || invoiceTime != null,
         title: t.description ?? t.counterparty ?? "銀行交易",
+        sourceSummary: t.sourceSummary ?? undefined,
         searchText: [
           t.counterparty,
+          t.sourceSummary,
           matchedInvoice?.sellerName,
           matchedInvoice ? "電子發票" : undefined,
+          ...(matchedInvoice?.items?.map((item) => item.description) ?? []),
+          ...(categoryParts?.map((part) => part.category) ?? []),
           accountLast4,
           isCard ? "信用卡" : "銀行",
         ]
@@ -110,21 +156,29 @@ export function buildActivityItems(
           .join(" · "),
         institutionName,
         accountName,
-        amount: t.amount,
+        amount: matchedInvoice && isCard ? -Math.abs(t.amount) : t.amount,
         currency: t.currency,
-        cashFlowType:
-          isCashWithdrawal ||
-          isClassificationAssetTransfer ||
-          isInvestmentCashTransfer
+        cashFlowType: isInvestmentCashFlow
+          ? t.amount < 0
+            ? ("investment_expense" as const)
+            : t.amount > 0
+              ? ("investment_income" as const)
+              : ("asset_transfer" as const)
+          : isCashWithdrawal || isClassificationAssetTransfer
             ? ("asset_transfer" as const)
             : undefined,
         cashTransferType: isCashWithdrawal
           ? ("cash_withdrawal" as const)
-          : isInvestmentCashTransfer
+          : isInvestmentCashFlow
             ? ("investment" as const)
             : undefined,
-        category: t.classification?.label ?? "未分類",
-        categoryId: t.classification?.categoryId ?? "other",
+        category:
+          invoiceCategory?.category ?? t.classification?.label ?? "未分類",
+        categoryId:
+          invoiceCategory?.categoryId ??
+          t.classification?.categoryId ??
+          "other",
+        categoryParts,
         classificationPattern: t.counterparty ?? t.description ?? undefined,
         classificationSource: t.classification?.source ?? "fallback",
         classificationRuleId: t.classification?.ruleId,
@@ -133,34 +187,84 @@ export function buildActivityItems(
         invoiceId: matchedInvoice?.id,
         invoiceAmount: matchedInvoice?.amount,
         excludedFromCalculation:
-          t.excludedFromCalculation ||
+          (t.excludedFromCalculation && !isInvestmentCashFlow) ||
+          (categoryParts != null &&
+            countedInvoiceAmount(categoryParts) === 0) ||
           classificationBehavior === "excluded" ||
-          classificationBehavior === "asset_transfer" ||
+          (classificationBehavior === "asset_transfer" &&
+            !isInvestmentCashFlow) ||
           classificationBehavior === "cash_withdrawal",
         status: t.status,
       };
     }),
     ...invoices
       .filter((i) => !invoiceMatches.invoiceToTransactionId.has(i.id))
-      .map((i) => ({
-        id: i.id,
-        source: "invoice" as const,
-        date: i.invoiceDate,
-        dateHasTime: isActivityDateTime(i.invoiceDate),
-        title: i.sellerName ?? "電子發票",
-        subtitle: i.invoiceNumber ?? "",
-        institutionName: "電子發票",
-        accountName: i.invoiceNumber ?? "",
-        amount: i.amount,
-        currency: "TWD",
-        category: "發票",
-        invoiceId: i.id,
-        invoiceAmount: i.amount,
-        invoicePaymentMethod: invoiceMatches.cashInvoiceIds.has(i.id)
-          ? ("cash" as const)
-          : undefined,
-        status: "已開立",
-      })),
+      .map((i) => {
+        const cash = invoiceMatches.cashInvoiceIds.has(i.id);
+        const accountId = cash
+          ? undefined
+          : invoiceMatches.learnedAccountByInvoice.get(i.id);
+        const account = accountId ? accounts.get(accountId) : undefined;
+        const accountLabel = accountId
+          ? [
+              account?.accountName,
+              account?.accountLast4
+                ? `末四碼 ${account.accountLast4}`
+                : undefined,
+            ]
+              .filter(Boolean)
+              .join(" · ")
+          : "";
+        const categoryParts = allocateInvoiceCategories(
+          i.amount,
+          i.amount,
+          i.items,
+        );
+        const invoiceCategory = invoiceCategorySummary(categoryParts);
+        return {
+          id: i.id,
+          source: "invoice" as const,
+          date: i.invoiceDate,
+          dateHasTime: isActivityDateTime(i.invoiceDate),
+          title: i.sellerName ?? "電子發票",
+          searchText: [
+            i.invoiceNumber,
+            account?.institutionName,
+            accountLabel,
+            ...(i.items?.map((item) => item.description) ?? []),
+            ...categoryParts.map((part) => part.category),
+          ]
+            .filter(Boolean)
+            .join(" "),
+          subtitle: [i.invoiceNumber, account?.institutionName, accountLabel]
+            .filter(Boolean)
+            .join(" · "),
+          institutionName: accountId
+            ? (account?.institutionName ?? "信用卡")
+            : "電子發票",
+          accountName: accountId ? accountLabel : (i.invoiceNumber ?? ""),
+          amount: i.amount,
+          currency: "TWD",
+          category: invoiceCategory.category,
+          categoryId: invoiceCategory.categoryId,
+          categoryParts,
+          invoiceId: i.id,
+          invoiceAmount: i.amount,
+          excludedFromCalculation: countedInvoiceAmount(categoryParts) === 0,
+          invoicePaymentMethod: cash
+            ? ("cash" as const)
+            : accountId
+              ? ("card" as const)
+              : undefined,
+          invoicePaymentAccountId: accountId,
+          invoicePaymentAccountSource: accountId
+            ? invoiceMatches.assignedAccountByInvoice.has(i.id)
+              ? ("selected" as const)
+              : ("learned" as const)
+            : undefined,
+          status: "已開立",
+        };
+      }),
     ...trades.map((t) => {
       const accountName = [
         t.transactionName ?? t.transactionCode,

@@ -99,7 +99,9 @@ async function presentBankTransactions(
       return (
         // A normal category override or rule wins over automatic heuristics.
         classification?.source !== "override" &&
-        classification?.source !== "user_rule"
+        classification?.source !== "user_rule" &&
+        classification?.source !== "merchant_product_rule" &&
+        classification?.source !== "merchant_default"
       );
     },
   );

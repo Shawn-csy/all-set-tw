@@ -53,12 +53,10 @@ describe("manual asset quote service", () => {
     };
 
     await expect(
-      refreshManualAssetQuotes(
-        harness.binding,
-        "test-key",
-        fetcher,
-        { force: true, now: new Date("2026-09-24T01:00:00.000Z") },
-      ),
+      refreshManualAssetQuotes(harness.binding, "test-key", fetcher, {
+        force: true,
+        now: new Date("2026-09-24T01:00:00.000Z"),
+      }),
     ).resolves.toEqual({
       status: "updated",
       updated: 1,

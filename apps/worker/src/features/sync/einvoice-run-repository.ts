@@ -881,6 +881,7 @@ export async function promoteEinvoiceRunRecords(
         `INSERT INTO invoice_line_items (
            id, invoice_id, connector_id, invoice_source_id, source_id,
            line_number, description, quantity, unit_price, amount,
+           line_type,
            raw_payload, created_at, updated_at
          )
          SELECT
@@ -895,6 +896,7 @@ export async function promoteEinvoiceRunRecords(
            CAST(json_extract(line.value, '$.quantity') AS REAL),
            CAST(json_extract(line.value, '$.unitPrice') AS INTEGER),
            CAST(json_extract(line.value, '$.amount') AS INTEGER),
+           COALESCE(json_extract(line.value, '$.lineType'), 'item'),
            ${lineItemRaw},
            ?,
            ?
@@ -908,6 +910,7 @@ export async function promoteEinvoiceRunRecords(
            quantity = excluded.quantity,
            unit_price = excluded.unit_price,
            amount = excluded.amount,
+           line_type = excluded.line_type,
            raw_payload = excluded.raw_payload,
            updated_at = excluded.updated_at`,
       )

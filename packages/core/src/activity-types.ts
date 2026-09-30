@@ -6,6 +6,8 @@ export interface ActivityItem {
   dateHasTime?: boolean;
   title: string;
   subtitle: string;
+  /** Provider-supplied transaction type, such as CD提款 or 行動跨轉. */
+  sourceSummary?: string;
   searchText?: string;
   institutionName?: string;
   accountName?: string;
@@ -16,11 +18,21 @@ export interface ActivityItem {
   cashTransferType?: "investment" | "cash_withdrawal";
   category: string;
   categoryId?: string;
+  categoryParts?: Array<{
+    itemId?: string;
+    description?: string;
+    categoryId: string;
+    category: string;
+    amount: number;
+    behavior: ClassificationBehavior;
+  }>;
   classificationPattern?: string;
   classificationSource?:
     | "override"
     | "user_rule"
     | "system_rule"
+    | "merchant_product_rule"
+    | "merchant_default"
     | "auto_transfer"
     | "auto_offset"
     | "fallback";
@@ -30,7 +42,9 @@ export interface ActivityItem {
   excludedFromCalculation?: boolean;
   invoiceId?: string;
   invoiceAmount?: number;
-  invoicePaymentMethod?: "cash";
+  invoicePaymentMethod?: "cash" | "card";
+  invoicePaymentAccountId?: string;
+  invoicePaymentAccountSource?: "selected" | "learned";
   status: string;
 }
 
@@ -38,4 +52,9 @@ export type ClassificationBehavior =
   "normal" | "asset_transfer" | "cash_withdrawal" | "excluded";
 
 export type ActivityCashFlowType =
-  "income" | "expense" | "asset_transfer" | "valuation";
+  | "income"
+  | "expense"
+  | "investment_income"
+  | "investment_expense"
+  | "asset_transfer"
+  | "valuation";

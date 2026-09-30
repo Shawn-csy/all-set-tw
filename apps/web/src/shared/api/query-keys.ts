@@ -16,6 +16,8 @@ export const queryKeys = {
   invoiceDetail: (invoiceId: string) =>
     ["invoices", "detail", invoiceId] as const,
   invoiceTransactionMappings: ["invoice-transaction-mappings"] as const,
+  invoicePaymentAccountRules: ["invoice-payment-account-rules"] as const,
+  invoicePaymentAccounts: ["invoice-payment-accounts"] as const,
   manualAssets: ["manualAssets"] as const,
   exchangeRates: ["exchange-rates"] as const,
   netWorthHistory: ["netWorthHistory"] as const,
@@ -28,6 +30,7 @@ export const queryKeys = {
   notifications: ["notifications"] as const,
   classificationCategories: ["classification-categories"] as const,
   classificationRules: ["classification-rules"] as const,
+  classificationMerchants: ["classification-rules", "merchants"] as const,
   connectorSettings: (id: string) => ["connector-settings", id] as const,
   manualAssetHistory: (id: string) => ["manualAssetHistory", id] as const,
 };

@@ -80,15 +80,15 @@
     body="必要的投資或匯率資料目前無法取得，請稍後再試。"
   />
 {:else}
-  <div class="grid min-w-0 gap-6">
-    <section class="min-w-0 pt-3 md:pt-2" aria-label="投資摘要">
+  <div class="grid min-w-0 gap-4">
+    <section class="min-w-0 pt-1" aria-label="投資摘要">
       <p class="text-sm text-subtle">投資資產總額</p>
       <p
-        class="mt-3 break-all text-[clamp(2rem,7vw,2.75rem)] leading-tight font-semibold tracking-tight tabular-nums"
+        class="mt-2 break-all text-[clamp(2rem,7vw,2.75rem)] leading-tight font-semibold tracking-tight tabular-nums"
       >
         {formatCurrency(total)}
       </p>
-      <div class="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-6">
+      <div class="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
         <div class="min-w-0">
           <p class="text-caption text-subtle">持倉市值</p>
           <p class="mt-2 text-lg font-medium tracking-tight tabular-nums">

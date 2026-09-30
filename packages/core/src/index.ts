@@ -65,8 +65,12 @@ export interface InvoiceLineItem {
   quantity?: number;
   unitPrice?: number;
   amount: number;
+  /** Semantic meaning of the invoice line; omitted by legacy connectors. */
+  lineType?: InvoiceLineType;
   raw?: unknown;
 }
+
+export type InvoiceLineType = "item" | "allowance" | "refund" | "fee";
 
 export type AssetType = "stock" | "etf" | "fund";
 
@@ -80,6 +84,8 @@ export interface InvestmentPosition {
   quantity?: number;
   marketValue?: number;
   cashBalance?: number;
+  costPerShare?: number | null;
+  costBasis?: number | null;
   currency: string;
   asOfDate: string;
   raw?: unknown;
@@ -614,10 +620,17 @@ export * from "./activity-list";
 export * from "./activity-flow";
 export * from "./activity-filter";
 export * from "./activity-items";
+export * from "./invoice-categories";
 export {
   deduplicateBankTransactions,
   matchInvoicesToTransactions,
   invoiceTransactionCandidates,
+  invoiceTransactionDayDifference,
+  isInvoicePaymentExpense,
+  invoiceMatchKey,
+  invoicePaymentMatchKey,
+  type InvoicePaymentAccountRule,
+  type InvoicePaymentAccountAssignment,
   type InvoiceTransactionMatches,
 } from "./activity-matching";
 

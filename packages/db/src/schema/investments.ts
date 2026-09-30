@@ -55,6 +55,33 @@ export const investmentPositions = sqliteTable(
   ],
 );
 
+export const investmentPositionCostOverrides = sqliteTable(
+  "investment_position_cost_overrides",
+  {
+    id: text("id").notNull(),
+    connectorId: text("connector_id").notNull(),
+    holdingKey: text("holding_key").notNull(),
+    costPerShare: real("cost_per_share").notNull(),
+    currency: text("currency")
+      .notNull()
+      .default(sql`'TWD'`),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.id] }),
+    unique().on(table.connectorId, table.holdingKey),
+    check(
+      "investment_position_cost_overrides_cost_check",
+      sql`cost_per_share > 0`,
+    ),
+    index("idx_investment_position_cost_overrides_source").on(
+      table.connectorId,
+      table.holdingKey,
+    ),
+  ],
+);
+
 export const investmentTransactions = sqliteTable(
   "investment_transactions",
   {
@@ -99,6 +126,36 @@ export const investmentTransactions = sqliteTable(
     check(
       "investment_transactions_check_1",
       sql`asset_type IN ('stock', 'etf', 'fund', 'bond', 'unknown')`,
+    ),
+  ],
+);
+
+export const investmentTransactionAmountOverrides = sqliteTable(
+  "investment_transaction_amount_overrides",
+  {
+    id: text("id").notNull(),
+    transactionId: text("transaction_id").notNull(),
+    amount: integer("amount").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    source: text("source").notNull().default("manual"),
+    referencePrice: real("reference_price"),
+    priceDate: text("price_date"),
+    provider: text("provider"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.id] }),
+    unique().on(table.transactionId),
+    check(
+      "investment_transaction_amount_overrides_amount_check",
+      sql`amount > 0`,
+    ),
+    check(
+      "investment_transaction_amount_overrides_source_check",
+      sql`source IN ('manual', 'historical-close')`,
+    ),
+    index("idx_investment_transaction_amount_overrides_transaction").on(
+      table.transactionId,
     ),
   ],
 );

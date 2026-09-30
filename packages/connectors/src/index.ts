@@ -3,6 +3,7 @@ import type {
   ConnectorId,
   Invoice,
   InvoiceLineItem,
+  InvoiceLineType,
 } from "@taiwan-fin-hub/core";
 import { z } from "zod";
 import { currentPeriodIndex, periodFromIndex } from "./invoice-data";
@@ -439,6 +440,7 @@ export async function fetchEInvoiceInvoiceDetail(
       quantity: parseOptionalNumber(item.quantity),
       unitPrice: parseOptionalInteger(item.unitPrice),
       amount: parseRequiredInteger(item.amount),
+      lineType: item.lineType,
       raw: item,
     })),
   };
@@ -654,7 +656,53 @@ function getV2DetailItems(payload: unknown) {
         "未命名品項",
       quantity: firstStringValue(item.quantity, item.qty),
       unitPrice: firstStringValue(item.unitPrice, item.price),
+      lineType: inferInvoiceLineType(
+        item,
+        Number(firstStringValue(item.amount, item.subtotal)),
+      ),
     }));
+}
+
+function inferInvoiceLineType(
+  item: Record<string, unknown>,
+  amount?: number,
+): InvoiceLineType {
+  const explicit = firstStringValue(
+    item.lineType,
+    item.line_type,
+    item.itemType,
+    item.type,
+  ).toLocaleLowerCase("zh-TW");
+  if (
+    explicit.includes("allowance") ||
+    explicit.includes("discount") ||
+    /折讓|折抵|折扣|折價/u.test(explicit)
+  )
+    return "allowance";
+  if (
+    explicit.includes("refund") ||
+    explicit.includes("return") ||
+    /退貨|退費|退款/u.test(explicit)
+  )
+    return "refund";
+  if (explicit.includes("fee") || /運費|服務費|手續費/u.test(explicit))
+    return "fee";
+
+  const description = firstStringValue(
+    item.description,
+    item.itemName,
+    item.name,
+  );
+  if (/折讓|折抵|折扣|折價|優惠券|點數抵/u.test(description))
+    return "allowance";
+  if (/退貨|退費|退款/u.test(description)) return "refund";
+  if (/運費|服務費|手續費/u.test(description)) return "fee";
+  // E-invoice providers frequently leave promotion rows without a semantic
+  // type. A negative line cannot be a purchased item, so keep it as a
+  // positive discount record in the presentation layer.
+  if (amount != null && Number.isFinite(amount) && amount < 0)
+    return "allowance";
+  return "item";
 }
 
 function findArray(value: unknown, keys: string[], depth = 0): unknown[] {

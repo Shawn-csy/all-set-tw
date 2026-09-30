@@ -14,6 +14,7 @@ import {
 import type { SyncResult } from "@taiwan-fin-hub/core";
 import {
   maskSensitiveData,
+  sanitizeErrorMessage,
   sanitizeErrorForLog,
 } from "../platform/sensitive-data";
 
@@ -462,7 +463,7 @@ async function fetchRealtimeTransactions(page: BrowserPage) {
       if (!isBusy && !isTransient) throw error;
       if (attempt < REALTIME_RETRY_ATTEMPTS) {
         console.warn(
-          `[taishin] realtime retry ${attempt}/${REALTIME_RETRY_ATTEMPTS}: ${sanitizeErrorForLog(
+          `[taishin] realtime retry ${attempt}/${REALTIME_RETRY_ATTEMPTS}: ${sanitizeErrorMessage(
             error,
           )}`,
         );

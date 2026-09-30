@@ -10,9 +10,15 @@ describe("local D1 backup", () => {
     const sql = buildBackupClearSql();
     expect(sql).toContain('DELETE FROM "bank_transactions";');
     expect(sql).toContain('DELETE FROM "connector_settings";');
+    expect(sql).toContain('DELETE FROM "classification_merchants";');
+    expect(sql).toContain('DELETE FROM "investment_position_cost_overrides";');
+    expect(sql).toContain('DELETE FROM "classification_merchant_rules";');
+    expect(sql).toContain(
+      'DELETE FROM "classification_merchant_product_rules";',
+    );
     expect(sql).not.toContain("d1_migrations");
     expect(sql).toContain("PRAGMA defer_foreign_keys = ON;");
-    expect(BACKUP_TABLES).toHaveLength(33);
+    expect(BACKUP_TABLES).toHaveLength(37);
   });
 
   it("prepends the clear transaction to a local data export", () => {
@@ -28,9 +34,9 @@ describe("local D1 backup", () => {
 
   it("does not restore Wrangler-owned metadata rows", () => {
     const sql = buildRestoreSql(
-      'INSERT INTO "d1_migrations" (id, name, applied_at) VALUES (1, \'migration\', 1);\n' +
-        'INSERT INTO "sqlite_sequence" (name, seq) VALUES (\'invoices\', 1);\n' +
-        'INSERT INTO invoices (id) VALUES (\'invoice-1\');',
+      "INSERT INTO \"d1_migrations\" (id, name, applied_at) VALUES (1, 'migration', 1);\n" +
+        "INSERT INTO \"sqlite_sequence\" (name, seq) VALUES ('invoices', 1);\n" +
+        "INSERT INTO invoices (id) VALUES ('invoice-1');",
     );
 
     expect(sql).not.toContain('INSERT INTO "d1_migrations"');

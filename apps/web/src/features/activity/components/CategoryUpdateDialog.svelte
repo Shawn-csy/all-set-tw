@@ -3,13 +3,14 @@
   import Checkbox from "@/shared/ui/Checkbox.svelte";
   import Input from "@/shared/ui/Input.svelte";
   import Select from "@/shared/ui/Select.svelte";
+  import { compileRulePattern } from "@/shared/classification-rule-pattern";
   import type {
     CategoryUpdateInput,
     PendingCategoryUpdate,
   } from "../model/types";
 
   let {
-    update,
+    update = $bindable(),
     categories,
     matchCount,
     submitting,
@@ -57,12 +58,31 @@
       <div
         class="mt-4 grid gap-3 rounded-xl border border-steel/20 bg-steel/5 p-4"
       >
-        <Select bind:value={update.operator}
-          ><option value="contains">交易文字包含</option><option value="equals"
-            >交易文字完全等於</option
-          ></Select
-        >
-        <Input bind:value={update.pattern} />
+        <Select bind:value={update.operator}>
+          <option value="keywords">多個關鍵字（任一符合）</option>
+          <option value="contains">包含文字</option>
+          <option value="equals">完全相同</option>
+          <option value="regex">正則表達式</option>
+        </Select>
+        {#if update.operator === "keywords"}
+          <textarea
+            aria-label="分類規則關鍵字"
+            class="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            placeholder="每行一個關鍵字"
+            bind:value={update.pattern}></textarea>
+        {:else}
+          <Input aria-label="分類規則比對文字" bind:value={update.pattern} />
+        {/if}
+        {#if update.pattern.trim() && !compileRulePattern(update.operator, update.pattern)}
+          <p class="text-caption text-coral" role="alert">
+            比對條件格式有誤或超過 300 字。
+          </p>
+        {/if}
+        {#if update.operator === "keywords"}
+          <p class="text-caption text-subtle">
+            每行一個，會安全地合併成一條正則規則。
+          </p>
+        {/if}
         <p class="text-caption font-semibold text-steel">
           將更新 {matchCount} 筆過去活動
         </p>
@@ -71,10 +91,13 @@
     <div class="mt-5 grid grid-cols-2 gap-3">
       <Button variant="secondary" onclick={onCancel}>取消</Button>
       <Button
-        disabled={submitting || (update.addRule && !update.pattern.trim())}
+        disabled={submitting ||
+          (update.addRule &&
+            !compileRulePattern(update.operator, update.pattern))}
         onclick={() =>
           onSubmit({
-            transactionId: update.item.transactionId!,
+            targetType: update.targetType,
+            targetId: update.targetId,
             categoryId: update.categoryId,
             addRule: update.addRule,
             pattern: update.pattern,

@@ -150,5 +150,52 @@ describe("invoice repository", () => {
         (row) => row.id,
       ),
     ).toEqual(["a1", "a2", "b2"]);
+    expect(
+      (await repository.listInvoiceItems(db, ["inv-a"])).every(
+        (row) => row.lineType === "item",
+      ),
+    ).toBe(true);
+  });
+
+  it("applies an invoice merchant override to its detail rows", async () => {
+    const db = harness.binding;
+    await invoice({
+      id: "inv-merchant",
+      sourceId: "inv-merchant",
+      invoiceDate: "2026-09-01",
+      sellerName: "原始商家",
+    });
+    await db.batch([
+      db
+        .prepare(
+          "INSERT INTO classification_merchants (id, name, normalized_name, created_at, updated_at) VALUES ('merchant:manual', '手動商家', '手動商家', ?, ?)",
+        )
+        .bind(now, now),
+      db
+        .prepare(
+          "INSERT INTO invoice_line_items (id, invoice_id, connector_id, invoice_source_id, source_id, line_number, description, amount, line_type, created_at, updated_at) VALUES ('merchant-line', 'inv-merchant', 'einvoice', 'inv-merchant', 'merchant-line', 1, '商品', 100, 'item', ?, ?)",
+        )
+        .bind(now, now),
+    ]);
+    await repository.upsertInvoiceMerchantOverride(db, {
+      invoiceId: "inv-merchant",
+      merchantId: "merchant:manual",
+      now,
+    });
+
+    expect(await repository.findInvoice(db, "inv-merchant")).toMatchObject({
+      classificationMerchantId: "merchant:manual",
+      classificationMerchantName: "手動商家",
+    });
+    expect(
+      await repository.listInvoiceItems(db, ["inv-merchant"]),
+    ).toMatchObject([
+      { merchantId: "merchant:manual", merchantName: "手動商家" },
+    ]);
+
+    await repository.deleteInvoiceMerchantOverride(db, "inv-merchant");
+    expect(
+      await repository.listInvoiceItems(db, ["inv-merchant"]),
+    ).toMatchObject([{ merchantId: null, merchantName: "原始商家" }]);
   });
 });

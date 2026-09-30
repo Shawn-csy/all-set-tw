@@ -2,7 +2,7 @@
 // Trimmed to the ePassbook login/OTP and snapshot/page APIs used by the
 // connector. Durable callers own pagination and promotion of staged pages.
 const BASE_URL = "https://epassbooksys.tdcc.com.tw/MPSBKV2/rest/";
-const APP_INFO = "tw.com.tdcc.epassbook:3.3.4";
+const APP_INFO = "tw.com.tdcc.epassbook:3.3.7";
 const API_VER = "20250220";
 const DEFAULT_LAST_UPDATE = "19000101000000";
 const BANK_TRANSACTION_PAGE_SIZE = 100;
@@ -25,6 +25,8 @@ export type BankTransaction = {
   occurredAt: string;
   amount: string;
   memo?: string;
+  /** The bank-provided transaction type, e.g. CD提款 or 行動跨轉. */
+  summary?: string;
 };
 
 /**
@@ -62,6 +64,7 @@ export class EPassbookError extends Error {
   constructor(
     public code: string,
     message: string,
+    public readonly endpoint?: string,
   ) {
     super(`[${code}] ${message}`);
   }
@@ -200,6 +203,7 @@ export class EPassbookClient {
       throw new EPassbookError(
         `HTTP_${response.status}`,
         "TDCC ePassbook request failed.",
+        endpoint,
       );
     }
 
@@ -218,6 +222,7 @@ export class EPassbookClient {
       throw new EPassbookError(
         code,
         header.returnMsg ?? "TDCC ePassbook error",
+        endpoint,
       );
     }
     return {
@@ -544,6 +549,7 @@ export function normalizeBankTransactionDetails(
     const transferInAmount = detail.transferInAmount?.trim() || "0";
     const transferOutAmount = detail.transferOutAmount?.trim() || "0";
     const memo = detail.memo?.trim() || detail.summary?.trim();
+    const summary = detail.summary?.trim();
     const amount = String(Number(transferInAmount) - Number(transferOutAmount));
     // Keep the established prefix, but do not include STAN because TDCC may
     // add it after the transaction first appears.
@@ -558,6 +564,7 @@ export function normalizeBankTransactionDetails(
       occurredAt,
       amount,
       ...(memo ? { memo } : {}),
+      ...(summary ? { summary } : {}),
     };
   });
 }

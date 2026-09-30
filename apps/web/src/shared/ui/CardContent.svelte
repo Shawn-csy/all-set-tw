@@ -7,4 +7,4 @@
   }: { children?: Snippet; class?: string } = $props();
 </script>
 
-<div class={cn("p-5 pt-0", className)}>{@render children?.()}</div>
+<div class={cn("p-4 pt-0", className)}>{@render children?.()}</div>

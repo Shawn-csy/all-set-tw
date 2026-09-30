@@ -47,18 +47,16 @@ for (const state of ["unconfigured", "pending", "healthy", "failed"] as const) {
       {
         unconfigured: "尚未設定",
         pending: "等待首次同步",
-        healthy: "大致正常",
+        healthy: "目前正常",
         failed: "需要處理",
       }[state],
     );
     if (state === "unconfigured") {
       await expect(health).not.toContainText("0 / 0");
-    } else {
-      await expect(health).toContainText(
-        state === "healthy" ? "1 / 1" : "0 / 1",
-      );
+    } else if (state === "healthy") {
+      await expect(health).toContainText("1 / 1");
     }
-    if (state !== "healthy") await expect(health).not.toContainText("大致正常");
+    if (state !== "healthy") await expect(health).not.toContainText("目前正常");
   });
 }
 
@@ -136,7 +134,8 @@ test("classification rules retains its working form without the duplicate header
   await expect(page.getByText("＋ 新增規則", { exact: true })).toHaveCount(0);
   const add = page.getByRole("button", { name: "新增規則", exact: true });
   await expect(add).toBeVisible({ timeout: 15_000 });
-  await expect(add).toBeDisabled();
-  await page.getByRole("textbox", { name: "關鍵字", exact: true }).fill("咖啡");
-  await expect(add).toBeEnabled();
+  await add.click();
+  await expect(
+    page.getByRole("textbox", { name: "規則關鍵字", exact: true }),
+  ).toBeVisible();
 });

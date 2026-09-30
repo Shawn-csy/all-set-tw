@@ -4,7 +4,7 @@
     createQuery,
     useQueryClient,
   } from "@tanstack/svelte-query";
-  import { ChevronDown, ChevronUp, Pencil, Plus } from "@lucide/svelte";
+  import { ChevronDown, ChevronUp, Pencil, Plus, Trash2 } from "@lucide/svelte";
   import Card from "@/shared/ui/Card.svelte";
   import CardHeader from "@/shared/ui/CardHeader.svelte";
   import CardContent from "@/shared/ui/CardContent.svelte";
@@ -15,6 +15,11 @@
   import Select from "@/shared/ui/Select.svelte";
   import type { ApiClient } from "@/shared/api/client";
   import { messageFromError } from "@/shared/api/client";
+  import {
+    compileRulePattern,
+    parseKeywordAlternation,
+    type RuleInputMode,
+  } from "@/shared/classification-rule-pattern";
   import { queryKeys } from "@/shared/api/query-keys";
   import {
     classificationCategoriesQuery,
@@ -24,217 +29,307 @@
     ClassificationCategoryRow,
     ClassificationRuleRow,
   } from "@/data/classification/types";
+  import {
+    editableRules,
+    findRuleConflicts,
+    groupRulesByCategory,
+    moveRuleWithinTarget,
+    rulesForTarget,
+    type RuleTarget,
+  } from "../model/classification-rule-list";
 
-  type RuleOperator = "contains" | "equals" | "starts_with" | "regex";
-  type EditableRule = {
-    id: string;
+  type RuleEditor = {
+    id?: string;
+    targetType: RuleTarget;
     categoryId: string;
     pattern: string;
-    operator: RuleOperator;
+    mode: RuleInputMode;
   };
 
   let { api }: { api: ApiClient } = $props();
-
+  const qc = useQueryClient();
+  const rules = createQuery(classificationRulesQuery(() => api));
+  const categories = createQuery(classificationCategoriesQuery(() => api));
   const operatorLabels: Record<string, string> = {
     contains: "包含",
     equals: "完全等於",
     starts_with: "開頭為",
-    regex: "符合正規表示式",
+    regex: "正則",
   };
-  function behaviorLabel(behavior?: string) {
-    return (
-      {
-        normal: "一般收支",
-        asset_transfer: "資產轉換",
-        cash_withdrawal: "提款至現金",
-        excluded: "不列入統計",
-      }[behavior ?? "normal"] ?? "一般收支"
-    );
-  }
-  const systemAutoRules = [
-    {
-      title: "帳戶互轉",
-      description:
-        "同日、同幣別、同金額且方向相反的已入帳交易，會在不同帳戶間自動配對，分類為「轉帳」並排除收支計算；相同銀行的不同帳戶也適用。",
-    },
-    {
-      title: "信用卡年費減免",
-      description:
-        "同一張信用卡同日出現同幣別、同金額、方向相反的「年費」與減免相關交易時，會自動互相沖銷，分類為「手續費」並排除收支計算；一般退款不套用。",
-    },
-    {
-      title: "電子發票配對",
-      description:
-        "電子發票與同日、同金額的 TWD 銀行／信用卡支出會自動配對；一筆發票與交易只配對一次，已配對發票不會重複計入支出。手動連結或「解除並保持分開」優先。",
-    },
-  ] as const;
-  const rules = createQuery(classificationRulesQuery(() => api));
-  const categories = createQuery(classificationCategoriesQuery(() => api));
-  const qc = useQueryClient();
+  const targetLabels: Record<RuleTarget, string> = {
+    invoice_item: "發票品項",
+    bank_transaction: "銀行／信用卡",
+  };
+
+  let selectedTarget = $state<RuleTarget>("invoice_item");
+  let ruleSearch = $state("");
+  let editor = $state<RuleEditor | null>(null);
+  let showCategoryForm = $state(false);
+  let categoryName = $state("");
+  let categoryEditor = $state<{ id: string; label: string } | null>(null);
+  let categoryDeleteCandidate = $state<string | null>(null);
+  let categoryReplacementId = $state("");
+  let deleteCandidate = $state<string | null>(null);
+
+  const categoryRows = $derived(
+    [...($categories.data ?? [])].sort(
+      (left, right) =>
+        left.sortOrder - right.sortOrder || left.id.localeCompare(right.id),
+    ),
+  );
   const categoryLabels = $derived(
     Object.fromEntries(
       ($categories.data ?? []).map((category) => [category.id, category.label]),
     ),
   );
-  let newRule = $state({
-    categoryId: "food",
-    pattern: "",
-    operator: "contains",
-  });
-  let showCategoryForm = $state(false);
-  let categoryName = $state("");
-  let editingRule = $state<EditableRule | undefined>();
-
-  function startEditing(rule: ClassificationRuleRow) {
-    editingRule = {
-      id: rule.id,
-      categoryId: rule.categoryId,
-      pattern: rule.pattern,
-      operator: rule.operator as RuleOperator,
-    };
-  }
-
-  function invalidateRuleResults() {
-    qc.invalidateQueries({ queryKey: queryKeys.classificationRules });
-    qc.invalidateQueries({ queryKey: queryKeys.bank });
-  }
-
-  function editableRuleIndex(ruleId: string) {
-    return ($rules.data ?? [])
-      .filter((rule) => !rule.isSystem)
-      .findIndex((rule) => rule.id === ruleId);
-  }
-
-  const editableRuleCount = $derived(
-    ($rules.data ?? []).filter((rule) => !rule.isSystem).length,
+  const customRules = $derived(editableRules($rules.data ?? []));
+  const systemRules = $derived(
+    ($rules.data ?? []).filter((rule) => rule.isSystem),
   );
+  const targetRules = $derived(rulesForTarget(customRules, selectedTarget));
+  const visibleRules = $derived(
+    rulesForTarget(customRules, selectedTarget, ruleSearch, categoryLabels),
+  );
+  const invoiceRuleGroups = $derived(
+    groupRulesByCategory(visibleRules, categoryRows),
+  );
+  const conflicts = $derived(findRuleConflicts(customRules));
+  const targetConflictCount = $derived(
+    targetRules.filter((rule) => conflicts.has(rule.id)).length,
+  );
+  const editorError = $derived.by(() => {
+    if (!editor) return "";
+    if (!editor.pattern.trim()) return "請輸入關鍵字或正則表達式。";
+    if (!editor.categoryId) return "請選擇分類。";
+    const category = ($categories.data ?? []).find(
+      (row) => row.id === editor?.categoryId,
+    );
+    if (
+      editor.targetType === "invoice_item" &&
+      category?.behavior === "cash_withdrawal"
+    )
+      return "發票品項不能設定為提款至現金。";
+    if (!compileRulePattern(editor.mode, editor.pattern))
+      return "比對條件格式有誤或超出長度上限，請修正後再儲存。";
+    return "";
+  });
+
+  function categoryLabel(id: string) {
+    return categoryLabels[id] ?? id;
+  }
+
+  function ruleSummary(rule: ClassificationRuleRow) {
+    const keywords =
+      rule.operator === "regex" ? parseKeywordAlternation(rule.pattern) : null;
+    return keywords ? `${keywords.length} 個關鍵字` : rule.pattern;
+  }
+
+  function invalidateResults() {
+    void qc.invalidateQueries({ queryKey: queryKeys.classificationRules });
+    void qc.invalidateQueries({ queryKey: queryKeys.bank });
+    void qc.invalidateQueries({ queryKey: queryKeys.invoices });
+  }
+
+  function startCreate() {
+    const firstCategory = categoryRows.find(
+      (category) =>
+        selectedTarget !== "invoice_item" ||
+        category.behavior !== "cash_withdrawal",
+    );
+    editor = {
+      targetType: selectedTarget,
+      categoryId: firstCategory?.id ?? "food",
+      pattern: "",
+      mode: "keywords",
+    };
+    showCategoryForm = false;
+    categoryName = "";
+  }
+
+  function startEdit(rule: ClassificationRuleRow) {
+    const keywords =
+      rule.operator === "regex" ? parseKeywordAlternation(rule.pattern) : null;
+    editor = {
+      id: rule.id,
+      targetType:
+        rule.targetType === "invoice_item"
+          ? "invoice_item"
+          : "bank_transaction",
+      categoryId: rule.categoryId,
+      pattern: keywords ? keywords.join("\n") : rule.pattern,
+      mode: keywords ? "keywords" : (rule.operator as RuleInputMode),
+    };
+    showCategoryForm = false;
+    categoryName = "";
+  }
+
+  function closeEditor() {
+    editor = null;
+    showCategoryForm = false;
+    categoryName = "";
+  }
+
+  function startCategoryEdit(category: ClassificationCategoryRow) {
+    categoryEditor = { id: category.id, label: category.label };
+    showCategoryForm = false;
+    categoryDeleteCandidate = null;
+  }
+
+  function startCategoryDelete(category: ClassificationCategoryRow) {
+    categoryDeleteCandidate = category.id;
+    categoryEditor = null;
+    categoryReplacementId =
+      categoryRows.find((row) => row.id !== category.id)?.id ?? "";
+  }
+
+  function closeCategoryActions() {
+    categoryEditor = null;
+    categoryDeleteCandidate = null;
+    categoryReplacementId = "";
+  }
+
+  function moveCategory(id: string, direction: -1 | 1) {
+    const ids = categoryRows.map((category) => category.id);
+    const index = ids.indexOf(id);
+    const nextIndex = index + direction;
+    if (index < 0 || nextIndex < 0 || nextIndex >= ids.length) return;
+    [ids[index], ids[nextIndex]] = [ids[nextIndex], ids[index]];
+    $reorderCategories.mutate(ids);
+  }
+
+  function changeTarget(target: RuleTarget) {
+    selectedTarget = target;
+    ruleSearch = "";
+    closeEditor();
+    deleteCandidate = null;
+  }
 
   const addCategory = createMutation({
     mutationFn: () =>
       api.post<ClassificationCategoryRow>("/api/classification/categories", {
-        label: categoryName,
+        label: categoryName.trim(),
       }),
     onSuccess: (category) => {
-      qc.invalidateQueries({ queryKey: queryKeys.classificationCategories });
-      newRule.categoryId = category.id;
+      void qc.invalidateQueries({
+        queryKey: queryKeys.classificationCategories,
+      });
+      if (editor) editor.categoryId = category.id;
       categoryName = "";
       showCategoryForm = false;
     },
   });
-  const add = createMutation({
-    mutationFn: () =>
-      api.post("/api/classification/rules", {
-        ...newRule,
-        targetType: "bank_transaction",
-        field: "any_text",
-        priority: 200,
-      }),
+  const updateCategory = createMutation({
+    mutationFn: (draft: { id: string; label: string }) =>
+      api.put(
+        `/api/classification/categories/${encodeURIComponent(draft.id)}`,
+        { label: draft.label.trim() },
+      ),
     onSuccess: () => {
-      invalidateRuleResults();
-      newRule.pattern = "";
+      void qc.invalidateQueries({
+        queryKey: queryKeys.classificationCategories,
+      });
+      closeCategoryActions();
+    },
+  });
+  const removeCategory = createMutation({
+    mutationFn: (input: { id: string; replacementId: string }) =>
+      api.delete(
+        `/api/classification/categories/${encodeURIComponent(input.id)}?replacementCategoryId=${encodeURIComponent(input.replacementId)}`,
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({
+        queryKey: queryKeys.classificationCategories,
+      });
+      void qc.invalidateQueries({
+        queryKey: queryKeys.classificationRules,
+      });
+      closeCategoryActions();
+    },
+  });
+  const reorderCategories = createMutation({
+    mutationFn: (categoryIds: string[]) =>
+      api.put("/api/classification/categories/order", { categoryIds }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: queryKeys.classificationCategories }),
+  });
+  const save = createMutation({
+    mutationFn: (draft: RuleEditor) => {
+      const compiled = compileRulePattern(draft.mode, draft.pattern);
+      if (!compiled) throw new Error("請輸入有效的比對條件。");
+      return draft.id
+        ? api.put(`/api/classification/rules/${encodeURIComponent(draft.id)}`, {
+            categoryId: draft.categoryId,
+            ...compiled,
+          })
+        : api.post("/api/classification/rules", {
+            categoryId: draft.categoryId,
+            targetType: draft.targetType,
+            field:
+              draft.targetType === "invoice_item" ? "description" : "any_text",
+            ...compiled,
+            priority: 200,
+          });
+    },
+    onSuccess: () => {
+      invalidateResults();
+      closeEditor();
     },
   });
   const toggle = createMutation({
-    mutationFn: (payload: { id: string; enabled: boolean }) =>
-      api.put(`/api/classification/rules/${payload.id}`, {
-        enabled: payload.enabled,
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
+      api.put(`/api/classification/rules/${encodeURIComponent(id)}`, {
+        enabled,
       }),
-    onSuccess: invalidateRuleResults,
-  });
-  const update = createMutation({
-    mutationFn: (rule: EditableRule) =>
-      api.put(`/api/classification/rules/${rule.id}`, {
-        categoryId: rule.categoryId,
-        pattern: rule.pattern,
-        operator: rule.operator,
-      }),
-    onSuccess: () => {
-      invalidateRuleResults();
-      editingRule = undefined;
-    },
+    onSuccess: invalidateResults,
   });
   const remove = createMutation({
-    mutationFn: (id: string) => api.delete(`/api/classification/rules/${id}`),
-    onSuccess: invalidateRuleResults,
+    mutationFn: (id: string) =>
+      api.delete(`/api/classification/rules/${encodeURIComponent(id)}`),
+    onSuccess: () => {
+      invalidateResults();
+      deleteCandidate = null;
+    },
   });
   const reorder = createMutation({
     mutationFn: (ruleIds: string[]) =>
       api.put("/api/classification/rules/order", { ruleIds }),
-    onSuccess: invalidateRuleResults,
+    onSuccess: invalidateResults,
   });
 
-  function moveRule(ruleId: string, direction: -1 | 1) {
-    const editableRules = ($rules.data ?? []).filter((rule) => !rule.isSystem);
-    const currentIndex = editableRules.findIndex(({ id }) => id === ruleId);
-    const nextIndex = currentIndex + direction;
-    if (
-      currentIndex < 0 ||
-      nextIndex < 0 ||
-      nextIndex >= editableRules.length
-    ) {
-      return;
-    }
-
-    const nextOrder = editableRules.map(({ id }) => id);
-    const currentId = nextOrder[currentIndex];
-    const nextId = nextOrder[nextIndex];
-    if (!currentId || !nextId) return;
-    nextOrder[currentIndex] = nextId;
-    nextOrder[nextIndex] = currentId;
-    $reorder.mutate(nextOrder);
+  function moveRule(id: string, direction: -1 | 1) {
+    const ids = moveRuleWithinTarget(
+      $rules.data ?? [],
+      selectedTarget,
+      id,
+      direction,
+    );
+    if (ids) $reorder.mutate(ids);
   }
 </script>
 
 <Card class="w-full min-w-0">
   <CardHeader class="gap-4">
-    <div>
-      <h2 class="text-lg font-semibold">分類規則</h2>
-      <p class="text-sm text-muted-foreground">
-        管理自訂分類規則；現金流向與統計行為由所選分類決定
-      </p>
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h2 class="hidden text-lg font-semibold md:block">分類規則</h2>
+      </div>
+      <div class="flex flex-wrap items-center justify-end gap-2">
+        <Button
+          variant="primary"
+          onclick={startCreate}
+          disabled={$categories.isPending}
+        >
+          <Plus class="size-4" />新增規則
+        </Button>
+      </div>
     </div>
   </CardHeader>
   <CardContent>
-    <details class="group mb-6 border-b border-border pb-5">
-      <summary
-        class="flex cursor-pointer list-none items-start justify-between gap-3 rounded-lg py-1 outline-none focus-visible:ring-2 focus-visible:ring-steel"
-      >
-        <div class="min-w-0">
-          <div class="flex flex-wrap items-center gap-2">
-            <h3 class="text-base font-semibold">系統自動分類與配對</h3>
-            <Badge variant="secondary">內建 3 項</Badge>
-          </div>
-          <p class="mt-1 text-sm text-muted-foreground">
-            查看系統分類，以及「投資」、「提款至現金」和「不列入統計」等特殊分類的行為。
-          </p>
-        </div>
-        <ChevronDown
-          class="mt-1 size-5 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
-        />
+    <details class="mb-5 rounded-xl border border-border bg-muted/20 p-4">
+      <summary class="min-h-8 cursor-pointer text-sm font-semibold text-steel">
+        管理分類與顯示順序
       </summary>
-      <div class="mt-3 grid gap-3 md:grid-cols-3">
-        {#each systemAutoRules as rule (rule.title)}
-          <article class="rounded-lg border border-border bg-muted/30 p-4">
-            <h4 class="text-sm font-semibold">{rule.title}</h4>
-            <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
-              {rule.description}
-            </p>
-          </article>
-        {/each}
-      </div>
-      <p class="mt-3 text-sm leading-relaxed text-muted-foreground">
-        活動套用分類後，該分類會同時決定它是否列入收支、是否為資產轉換，以及是否增加現金錢包。
-      </p>
-    </details>
-
-    <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <h3 class="text-base font-semibold">自訂分類規則</h3>
-        <p class="mt-1 text-sm text-muted-foreground">
-          建立、排序與編輯自己的關鍵字分類規則。
-        </p>
-      </div>
-      <div class="flex shrink-0 flex-wrap items-center gap-2">
+      <div class="mt-3">
         <Button
           size="sm"
           variant="outline"
@@ -243,183 +338,517 @@
         >
           <Plus class="size-4" />新增分類
         </Button>
-        <Badge class="text-sm" variant="secondary"
-          >{editableRuleCount} 條自訂規則</Badge
-        >
-      </div>
-    </div>
-
-    {#if showCategoryForm}
-      <form
-        class="mb-4 grid gap-3 rounded-lg border border-border bg-background p-4 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end"
-        onsubmit={(event) => {
-          event.preventDefault();
-          if (categoryName.trim()) $addCategory.mutate();
-        }}
-      >
-        <label class="grid gap-1.5 text-sm font-medium">
-          分類名稱
-          <Input
-            maxlength="24"
-            placeholder="例如：寵物、旅遊"
-            bind:value={categoryName}
-          />
-        </label>
-        <Button
-          type="submit"
-          variant="primary"
-          disabled={!categoryName.trim() || $addCategory.isPending}
-        >
-          {$addCategory.isPending ? "新增中…" : "儲存分類"}
-        </Button>
-        <Button
-          variant="ghost"
-          onclick={() => {
-            showCategoryForm = false;
-            categoryName = "";
-          }}>取消</Button
-        >
-        {#if $addCategory.isError}
-          <p class="text-sm text-destructive sm:col-span-3" role="alert">
-            {messageFromError($addCategory.error)}
-          </p>
+        {#if showCategoryForm}
+          <form
+            class="mt-3 grid gap-3 rounded-lg border border-border bg-background p-4 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end"
+            onsubmit={(event) => {
+              event.preventDefault();
+              if (categoryName.trim()) $addCategory.mutate();
+            }}
+          >
+            <label class="grid gap-1.5 text-sm font-medium">
+              分類名稱
+              <Input
+                maxlength="24"
+                placeholder="例如：寵物、旅遊"
+                bind:value={categoryName}
+              />
+            </label>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={!categoryName.trim() || $addCategory.isPending}
+            >
+              {$addCategory.isPending ? "新增中…" : "儲存分類"}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onclick={() => {
+                showCategoryForm = false;
+                categoryName = "";
+              }}>取消</Button
+            >
+            {#if $addCategory.isError}
+              <p class="text-sm text-destructive sm:col-span-3" role="alert">
+                {messageFromError($addCategory.error)}
+              </p>
+            {/if}
+          </form>
         {/if}
-      </form>
-    {/if}
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 class="font-semibold">分類管理</h3>
+            <p class="mt-1 text-xs text-muted-foreground">
+              排序只影響分類顯示；規則命中順序請在規則列表調整。內建分類不能改名或刪除。
+            </p>
+          </div>
+          {#if $reorderCategories.isPending}
+            <span class="text-xs text-muted-foreground">儲存排序中…</span>
+          {/if}
+        </div>
 
-    <div
-      class="mb-4 overflow-hidden rounded-lg border border-border bg-muted/40"
-    >
-      <div
-        class="grid gap-3 p-4 md:grid-cols-[minmax(0,140px)_minmax(0,140px)_minmax(0,1fr)]"
-      >
-        <label class="grid gap-1.5 text-sm font-medium">
-          分類
-          <Select bind:value={newRule.categoryId}>
-            {#each $categories.data ?? [] as category (category.id)}
-              <option value={category.id}>{category.label}</option>
-            {/each}
-          </Select>
-          <span class="text-xs font-normal text-muted-foreground">
-            行為：{behaviorLabel(
-              $categories.data?.find(
-                (category) => category.id === newRule.categoryId,
-              )?.behavior,
-            )}
-          </span>
-        </label>
-        <label class="grid gap-1.5 text-sm font-medium">
-          條件
-          <Select bind:value={newRule.operator}>
-            <option value="contains">包含</option>
-            <option value="equals">完全等於</option>
-            <option value="starts_with">開頭為</option>
-            <option value="regex">符合正規表示式</option>
-          </Select>
-        </label>
-        <label class="grid gap-1.5 text-sm font-medium">
-          關鍵字
-          <Input placeholder="例如：卡費" bind:value={newRule.pattern} />
-        </label>
-      </div>
-      <p class="border-t border-border px-4 py-3 text-xs text-muted-foreground">
-        例：選擇「提款至現金」並使用正則表示式
-        <code>ATM|提款|現金提領|自動櫃員機</code
-        >，符合的銀行扣款會增加現金錢包；選擇「不列入統計」則只排除統計。
-      </p>
-      <div
-        class="flex justify-end border-t border-border bg-background px-4 py-3"
-      >
-        <Button
-          class="w-full sm:w-auto"
-          variant="primary"
-          disabled={!newRule.pattern.trim() || $add.isPending}
-          onclick={() => $add.mutate()}
+        {#if categoryEditor}
+          <form
+            class="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end"
+            onsubmit={(event) => {
+              event.preventDefault();
+              if (categoryEditor?.label.trim())
+                $updateCategory.mutate({ ...categoryEditor });
+            }}
+          >
+            <label class="grid gap-1.5 text-sm font-medium">
+              編輯分類名稱
+              <Input maxlength="24" bind:value={categoryEditor.label} />
+            </label>
+            <Button
+              type="submit"
+              size="sm"
+              variant="primary"
+              disabled={!categoryEditor.label.trim() ||
+                $updateCategory.isPending}
+            >
+              {$updateCategory.isPending ? "儲存中…" : "儲存"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onclick={closeCategoryActions}>取消</Button
+            >
+          </form>
+        {/if}
+
+        <div
+          class="mt-3 divide-y divide-border rounded-lg border border-border"
         >
-          {$add.isPending ? "新增中…" : "新增規則"}
-        </Button>
-      </div>
-    </div>
-
-    {#if $categories.isError || $rules.isError}
-      <p class="py-3 text-sm text-destructive" role="alert">
-        無法載入分類設定，請稍後再試。
-      </p>
-    {:else if $rules.isPending}
-      <p class="py-3 text-sm text-muted-foreground">載入分類規則中…</p>
-    {:else if ($rules.data?.length ?? 0) === 0}
-      <p class="py-3 text-sm text-muted-foreground">目前還沒有分類規則。</p>
-    {:else}
-      <div class="divide-y divide-border">
-        {#each $rules.data ?? [] as rule (rule.id)}
-          <div class="py-3.5 text-sm">
-            {#if editingRule && editingRule.id === rule.id}
-              <form
-                class="rounded-lg border border-border bg-muted/30 p-4"
-                onsubmit={(event) => {
-                  event.preventDefault();
-                  if (editingRule?.pattern.trim()) $update.mutate(editingRule);
-                }}
-              >
+          {#each categoryRows as category, index (category.id)}
+            <div class="p-2.5">
+              <div class="flex min-w-0 items-center gap-2">
+                <div class="flex shrink-0 items-center gap-0.5">
+                  <Button
+                    type="button"
+                    size="icon"
+                    class="size-8"
+                    variant="ghost"
+                    aria-label={`將${category.label}上移`}
+                    title="上移"
+                    disabled={$reorderCategories.isPending || index === 0}
+                    onclick={() => moveCategory(category.id, -1)}
+                    ><ChevronUp class="size-4" /></Button
+                  >
+                  <Button
+                    type="button"
+                    size="icon"
+                    class="size-8"
+                    variant="ghost"
+                    aria-label={`將${category.label}下移`}
+                    title="下移"
+                    disabled={$reorderCategories.isPending ||
+                      index === categoryRows.length - 1}
+                    onclick={() => moveCategory(category.id, 1)}
+                    ><ChevronDown class="size-4" /></Button
+                  >
+                </div>
+                <span class="min-w-0 flex-1 truncate text-sm font-medium">
+                  {category.label}
+                </span>
+                {#if category.isSystem}
+                  <Badge variant="secondary">內建</Badge>
+                {:else}
+                  <Badge variant="outline">自訂</Badge>
+                  <Button
+                    type="button"
+                    size="icon"
+                    class="size-8"
+                    variant="ghost"
+                    aria-label={`編輯${category.label}`}
+                    onclick={() => startCategoryEdit(category)}
+                  >
+                    <Pencil class="size-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    size="icon"
+                    class="size-8 text-destructive"
+                    variant="ghost"
+                    aria-label={`刪除${category.label}`}
+                    disabled={$removeCategory.isPending}
+                    onclick={() => startCategoryDelete(category)}
+                  >
+                    <Trash2 class="size-4" />
+                  </Button>
+                {/if}
+              </div>
+              {#if categoryDeleteCandidate === category.id}
                 <div
-                  class="grid gap-3 md:grid-cols-[minmax(0,140px)_minmax(0,140px)_minmax(0,1fr)]"
+                  class="mt-2 grid gap-2 border-t border-border pt-2 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end"
                 >
-                  <label class="grid gap-1.5 font-medium">
-                    分類
-                    <Select bind:value={editingRule.categoryId}>
-                      {#each $categories.data ?? [] as category (category.id)}
-                        <option value={category.id}>{category.label}</option>
+                  <label class="grid gap-1 text-xs font-medium">
+                    刪除後移至
+                    <Select bind:value={categoryReplacementId}>
+                      {#each categoryRows as replacement (replacement.id)}
+                        {#if replacement.id !== category.id}
+                          <option value={replacement.id}
+                            >{replacement.label}</option
+                          >
+                        {/if}
                       {/each}
                     </Select>
                   </label>
-                  <label class="grid gap-1.5 font-medium">
-                    條件
-                    <Select bind:value={editingRule.operator}>
-                      <option value="contains">包含</option>
-                      <option value="equals">完全等於</option>
-                      <option value="starts_with">開頭為</option>
-                      <option value="regex">符合正規表示式</option>
-                    </Select>
-                  </label>
-                  <label class="grid gap-1.5 font-medium">
-                    關鍵字
-                    <Input bind:value={editingRule.pattern} />
-                  </label>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onclick={closeCategoryActions}>取消</Button
+                  >
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    class="text-destructive"
+                    disabled={!categoryReplacementId ||
+                      $removeCategory.isPending}
+                    onclick={() =>
+                      $removeCategory.mutate({
+                        id: category.id,
+                        replacementId: categoryReplacementId,
+                      })}
+                  >
+                    {$removeCategory.isPending ? "刪除中…" : "確定刪除"}
+                  </Button>
                 </div>
-                <div
-                  class="mt-4 flex flex-col gap-3 border-t border-border pt-3 sm:flex-row sm:items-center"
+              {/if}
+            </div>
+          {/each}
+        </div>
+        {#if $updateCategory.isError || $removeCategory.isError || $reorderCategories.isError}
+          <p class="mt-2 text-sm text-destructive" role="alert">
+            {messageFromError(
+              $updateCategory.error ??
+                $removeCategory.error ??
+                $reorderCategories.error,
+            )}
+          </p>
+        {/if}
+      </div>
+    </details>
+
+    <div class="flex flex-wrap gap-2" role="group" aria-label="規則資料來源">
+      {#each ["invoice_item", "bank_transaction"] as target (target)}
+        <Button
+          size="sm"
+          variant={selectedTarget === target ? "primary" : "outline"}
+          aria-pressed={selectedTarget === target}
+          onclick={() => changeTarget(target as RuleTarget)}
+        >
+          {targetLabels[target as RuleTarget]}
+          {rulesForTarget(customRules, target as RuleTarget).length}
+        </Button>
+      {/each}
+    </div>
+
+    {#if editor}
+      <form
+        class="mt-4 grid gap-4 rounded-xl border border-steel/30 bg-steel/5 p-4"
+        onsubmit={(event) => {
+          event.preventDefault();
+          if (editor && !editorError) $save.mutate({ ...editor });
+        }}
+      >
+        <div class="flex items-center justify-between gap-3">
+          <h3 class="font-semibold">{editor.id ? "編輯規則" : "新增規則"}</h3>
+          <Badge variant="secondary"
+            >{editor.id &&
+            !$rules.data?.find((rule) => rule.id === editor?.id)?.targetType
+              ? "所有來源"
+              : targetLabels[editor.targetType]}</Badge
+          >
+        </div>
+        <div class="grid gap-3 sm:grid-cols-2">
+          <label class="grid gap-1.5 text-sm font-medium">
+            條件
+            <Select bind:value={editor.mode}>
+              <option value="keywords">多個關鍵字（任一符合）</option>
+              <option value="contains">包含文字</option>
+              <option value="equals">完全相同</option>
+              <option value="starts_with">開頭為</option>
+              <option value="regex">正則表達式</option>
+            </Select>
+          </label>
+          <label class="grid gap-1.5 text-sm font-medium">
+            分類
+            <Select bind:value={editor.categoryId}>
+              {#each categoryRows.filter((category) => editor?.targetType !== "invoice_item" || category.behavior !== "cash_withdrawal") as category (category.id)}
+                <option value={category.id}>{category.label}</option>
+              {/each}
+            </Select>
+          </label>
+        </div>
+        <label class="grid gap-1.5 text-sm font-medium">
+          {editor.mode === "regex"
+            ? "正則表達式"
+            : editor.mode === "keywords"
+              ? "關鍵字（每行一個）"
+              : "比對文字"}
+          {#if editor.mode === "keywords"}
+            <textarea
+              aria-label="規則關鍵字"
+              class="min-h-28 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              placeholder="每行一個，例如：&#10;Spotify Premium&#10;YouTube Premium"
+              bind:value={editor.pattern}></textarea>
+          {:else}
+            <Input
+              aria-label="規則比對文字"
+              placeholder={editor.targetType === "invoice_item"
+                ? "例如：Spotify Premium"
+                : "例如：信用卡款"}
+              bind:value={editor.pattern}
+            />
+          {/if}
+        </label>
+        <p class="text-xs text-muted-foreground">
+          {#if editor.mode === "keywords"}多個關鍵字會安全地合併成一條正則規則；特殊符號當作一般文字。{/if}
+          同一分類、來源與欄位的文字規則會自動整合。
+          {editor.targetType === "invoice_item"
+            ? "只比對發票品項名稱，不比對商家。"
+            : "比對銀行／信用卡交易的名稱與備註。"}
+          第一條符合的規則生效；手動指定分類仍優先。
+        </p>
+        {#if editor.pattern.trim() && editorError}
+          <p class="text-sm text-destructive" role="alert">{editorError}</p>
+        {/if}
+        {#if $save.isError}
+          <p class="text-sm text-destructive" role="alert">
+            {messageFromError($save.error)}
+          </p>
+        {/if}
+        <div
+          class="flex items-center justify-end gap-2 border-t border-border pt-3"
+        >
+          <Button variant="ghost" type="button" onclick={closeEditor}
+            >取消</Button
+          >
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={Boolean(editorError) || $save.isPending}
+          >
+            {$save.isPending ? "儲存中…" : "儲存規則"}
+          </Button>
+        </div>
+      </form>
+    {/if}
+
+    <div class="mt-5 flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h3 class="font-semibold">{targetLabels[selectedTarget]}規則</h3>
+        <p class="mt-1 text-xs text-muted-foreground">
+          由上而下比對，先符合者生效。
+        </p>
+      </div>
+      <Input
+        aria-label="搜尋分類規則"
+        class="h-10 w-full sm:w-52"
+        placeholder="搜尋規則或分類"
+        bind:value={ruleSearch}
+      />
+    </div>
+
+    {#if targetConflictCount > 0}
+      <p
+        class="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900"
+        role="status"
+      >
+        有 {targetConflictCount} 條規則的條件重複；只有規則排序最前面的條件會生效。請檢查下方標記。
+      </p>
+    {/if}
+    <div>
+      {#snippet renderInvoiceRule(rule: ClassificationRuleRow)}
+        {@const position = targetRules.findIndex((row) => row.id === rule.id)}
+        {@const conflict = conflicts.get(rule.id)}
+        {@const keywords =
+          rule.operator === "regex"
+            ? parseKeywordAlternation(rule.pattern)
+            : null}
+        <article class={`p-2 sm:p-3 ${rule.enabled ? "" : "opacity-60"}`}>
+          <div class="flex min-w-0 items-start gap-3">
+            <Checkbox
+              aria-label={`${rule.enabled ? "停用" : "啟用"}${categoryLabel(rule.categoryId)}規則`}
+              class="mt-0.5"
+              checked={rule.enabled}
+              disabled={$toggle.isPending}
+              onchange={(event: Event) =>
+                $toggle.mutate({
+                  id: rule.id,
+                  enabled: (event.currentTarget as HTMLInputElement).checked,
+                })}
+            />
+            <div class="min-w-0 flex-1">
+              {#if keywords}
+                <details class="group">
+                  <summary class="cursor-pointer list-none font-medium">
+                    {keywords.length} 個關鍵字（任一符合）
+                    <span
+                      class="ml-1 text-xs font-normal text-muted-foreground underline"
+                      >檢視</span
+                    >
+                  </summary>
+                  <ul class="mt-2 flex flex-wrap gap-1.5">
+                    {#each keywords as keyword (`${rule.id}:${keyword}`)}
+                      <li
+                        class="max-w-full break-words rounded bg-muted px-2 py-1 text-xs"
+                      >
+                        {keyword}
+                      </li>
+                    {/each}
+                  </ul>
+                </details>
+              {:else}
+                <p class="break-words font-medium">{rule.pattern}</p>
+              {/if}
+              <div
+                class="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"
+              >
+                <span>{operatorLabels[rule.operator] ?? rule.operator}</span>
+                {#if !rule.targetType}<span>· 所有來源</span>{/if}
+                {#if !rule.enabled}<span>· 已停用</span>{/if}
+              </div>
+              {#if conflict}
+                <p class="mt-1 text-xs text-amber-800" role="status">
+                  {conflict.kind === "different_category"
+                    ? "分類衝突"
+                    : "重複條件"}：
+                  {conflict.winnerId === rule.id
+                    ? "這條會優先套用"
+                    : "前面的規則會先套用"}。
+                </p>
+              {/if}
+            </div>
+            <div class="flex shrink-0 items-center gap-0.5">
+              <Button
+                size="icon"
+                class="size-8"
+                variant="ghost"
+                aria-label={`將${ruleSummary(rule)}規則上移`}
+                title="上移"
+                disabled={Boolean(ruleSearch) ||
+                  $reorder.isPending ||
+                  position <= 0}
+                onclick={() => moveRule(rule.id, -1)}
+                ><ChevronUp class="size-4" /></Button
+              >
+              <Button
+                size="icon"
+                class="size-8"
+                variant="ghost"
+                aria-label={`將${ruleSummary(rule)}規則下移`}
+                title="下移"
+                disabled={Boolean(ruleSearch) ||
+                  $reorder.isPending ||
+                  position >= targetRules.length - 1}
+                onclick={() => moveRule(rule.id, 1)}
+                ><ChevronDown class="size-4" /></Button
+              >
+              <Button
+                size="icon"
+                class="size-8"
+                variant="ghost"
+                aria-label={`編輯${ruleSummary(rule)}規則`}
+                onclick={() => startEdit(rule)}
+              >
+                <Pencil class="size-4" />
+              </Button>
+              {#if deleteCandidate !== rule.id}
+                <Button
+                  size="icon"
+                  class="size-8 text-destructive"
+                  variant="ghost"
+                  aria-label={`刪除${ruleSummary(rule)}規則`}
+                  disabled={$remove.isPending}
+                  onclick={() => (deleteCandidate = rule.id)}
                 >
-                  <div class="min-w-0 flex-1 text-sm text-muted-foreground">
-                    分類行為：{behaviorLabel(
-                      $categories.data?.find(
-                        (category) => category.id === editingRule?.categoryId,
-                      )?.behavior,
-                    )}
-                  </div>
-                  <div class="flex justify-end gap-2">
-                    <Button
-                      variant="ghost"
-                      disabled={$update.isPending}
-                      onclick={() => (editingRule = undefined)}>取消</Button
-                    >
-                    <Button
-                      type="submit"
-                      variant="primary"
-                      disabled={!editingRule.pattern.trim() ||
-                        $update.isPending}
-                    >
-                      {$update.isPending ? "儲存中…" : "儲存變更"}
-                    </Button>
-                  </div>
-                </div>
-              </form>
-            {:else}
-              <div class="flex min-w-0 flex-wrap items-start gap-3">
+                  <Trash2 class="size-4" />
+                </Button>
+              {/if}
+            </div>
+          </div>
+          {#if deleteCandidate === rule.id}
+            <div
+              class="mt-2 flex flex-wrap items-center justify-end gap-2 border-t border-border pt-2 text-xs"
+            >
+              <span class="mr-auto text-destructive">確定刪除此規則？</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                onclick={() => (deleteCandidate = null)}>取消</Button
+              >
+              <Button
+                size="sm"
+                variant="outline"
+                class="text-destructive"
+                disabled={$remove.isPending}
+                onclick={() => $remove.mutate(rule.id)}
+              >
+                {$remove.isPending ? "刪除中…" : "確定刪除"}
+              </Button>
+            </div>
+          {/if}
+        </article>
+      {/snippet}
+
+      {#if $rules.isError || $categories.isError}
+        <p class="mt-4 text-sm text-destructive" role="alert">
+          無法載入分類規則，請稍後再試。
+        </p>
+      {:else if $rules.isPending}
+        <p class="mt-4 text-sm text-muted-foreground">載入規則中…</p>
+      {:else if visibleRules.length === 0}
+        <p
+          class="mt-4 rounded-lg bg-muted/40 p-4 text-sm text-muted-foreground"
+        >
+          {ruleSearch
+            ? "找不到符合的規則。"
+            : `尚無${targetLabels[selectedTarget]}自訂規則。`}
+        </p>
+      {:else if selectedTarget === "invoice_item"}
+        <div class="mt-3 space-y-3">
+          {#each invoiceRuleGroups as group (group.categoryId)}
+            <details class="overflow-hidden rounded-xl border border-border">
+              <summary
+                class="flex cursor-pointer list-none items-center justify-between gap-3 bg-muted/40 px-3 py-3 font-semibold"
+              >
+                <span class="min-w-0 truncate">{group.label}</span>
+                <Badge variant="secondary">{group.rules.length} 條條件</Badge>
+              </summary>
+              <div class="divide-y divide-border border-t border-border">
+                {#each group.rules as rule (rule.id)}
+                  {@render renderInvoiceRule(rule)}
+                {/each}
+              </div>
+            </details>
+          {/each}
+        </div>
+      {:else}
+        <div
+          class="mt-3 divide-y divide-border rounded-xl border border-border"
+        >
+          {#each visibleRules as rule (rule.id)}
+            {@const position = targetRules.findIndex(
+              (row) => row.id === rule.id,
+            )}
+            {@const conflict = conflicts.get(rule.id)}
+            {@const keywords =
+              rule.operator === "regex"
+                ? parseKeywordAlternation(rule.pattern)
+                : null}
+            <article class={`p-2 sm:p-3 ${rule.enabled ? "" : "opacity-60"}`}>
+              <div class="flex min-w-0 items-start gap-3">
                 <Checkbox
-                  aria-label={`${rule.enabled ? "停用" : "啟用"}${categoryLabels[rule.categoryId] ?? rule.categoryId}規則`}
-                  class="mt-1"
+                  aria-label={`${rule.enabled ? "停用" : "啟用"}${categoryLabel(rule.categoryId)}規則`}
+                  class="mt-0.5"
                   checked={rule.enabled}
-                  disabled={rule.isSystem}
+                  disabled={$toggle.isPending}
                   onchange={(event: Event) =>
                     $toggle.mutate({
                       id: rule.id,
@@ -428,93 +857,151 @@
                     })}
                 />
                 <div class="min-w-0 flex-1">
-                  <div class="flex flex-wrap items-center gap-1.5">
-                    <Badge class="text-sm" variant="outline">
-                      {categoryLabels[rule.categoryId] ?? rule.categoryId}
-                    </Badge>
-                    {#if rule.behavior !== "normal"}
-                      <Badge
-                        class="border-transparent bg-coral/10 text-coral text-sm"
-                      >
-                        {rule.behavior === "cash_withdrawal"
-                          ? "提款至現金"
-                          : rule.behavior === "asset_transfer"
-                            ? "資產轉換"
-                            : "不列入統計"}
-                      </Badge>
-                    {/if}
-                    {#if rule.isSystem}
-                      <Badge class="text-sm" variant="secondary">內建</Badge>
-                    {/if}
-                  </div>
-                  <p class="mt-1.5 break-words text-foreground/80">
-                    {operatorLabels[rule.operator] ??
-                      rule.operator}「{rule.pattern}」
-                  </p>
-                </div>
-                {#if !rule.isSystem}
-                  {@const ruleIndex = editableRuleIndex(rule.id)}
+                  {#if keywords}
+                    <details class="group">
+                      <summary class="cursor-pointer list-none font-medium">
+                        {keywords.length} 個關鍵字（任一符合）
+                        <span
+                          class="ml-1 text-xs font-normal text-muted-foreground underline"
+                          >檢視</span
+                        >
+                      </summary>
+                      <ul class="mt-2 flex flex-wrap gap-1.5">
+                        {#each keywords as keyword (`${rule.id}:${keyword}`)}
+                          <li
+                            class="max-w-full break-words rounded bg-muted px-2 py-1 text-xs"
+                          >
+                            {keyword}
+                          </li>
+                        {/each}
+                      </ul>
+                    </details>
+                  {:else}
+                    <p class="break-words font-medium">{rule.pattern}</p>
+                  {/if}
                   <div
-                    class="flex w-full shrink-0 items-center justify-end gap-1 sm:w-auto"
+                    class="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"
                   >
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label={`將${categoryLabels[rule.categoryId] ?? rule.categoryId}規則上移`}
-                      title="上移"
-                      disabled={$reorder.isPending || ruleIndex <= 0}
-                      onclick={() => moveRule(rule.id, -1)}
+                    <Badge variant="outline"
+                      >{categoryLabel(rule.categoryId)}</Badge
                     >
-                      <ChevronUp />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label={`將${categoryLabels[rule.categoryId] ?? rule.categoryId}規則下移`}
-                      title="下移"
-                      disabled={$reorder.isPending ||
-                        ruleIndex >= editableRuleCount - 1}
-                      onclick={() => moveRule(rule.id, 1)}
+                    <span>{operatorLabels[rule.operator] ?? rule.operator}</span
                     >
-                      <ChevronDown />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={$update.isPending ||
-                        $remove.isPending ||
-                        $reorder.isPending}
-                      onclick={() => startEditing(rule)}
-                    >
-                      <Pencil class="size-4" />編輯
-                    </Button>
-                    <Button
-                      class="text-destructive hover:text-destructive"
-                      size="sm"
-                      variant="ghost"
-                      disabled={$remove.isPending &&
-                        $remove.variables === rule.id}
-                      onclick={() => $remove.mutate(rule.id)}>刪除</Button
-                    >
+                    {#if !rule.targetType}<span>· 所有來源</span>{/if}
+                    {#if !rule.enabled}<span>· 已停用</span>{/if}
                   </div>
-                {/if}
+                  {#if conflict}
+                    <p class="mt-1 text-xs text-amber-800" role="status">
+                      {conflict.kind === "different_category"
+                        ? "分類衝突"
+                        : "重複條件"}：
+                      {conflict.winnerId === rule.id
+                        ? "這條會優先套用"
+                        : "前面的規則會先套用"}。
+                    </p>
+                  {/if}
+                </div>
+                <div class="flex shrink-0 items-center gap-0.5">
+                  <Button
+                    size="icon"
+                    class="size-8"
+                    variant="ghost"
+                    aria-label={`將${ruleSummary(rule)}規則上移`}
+                    title="上移"
+                    disabled={Boolean(ruleSearch) ||
+                      $reorder.isPending ||
+                      position <= 0}
+                    onclick={() => moveRule(rule.id, -1)}
+                    ><ChevronUp class="size-4" /></Button
+                  >
+                  <Button
+                    size="icon"
+                    class="size-8"
+                    variant="ghost"
+                    aria-label={`將${ruleSummary(rule)}規則下移`}
+                    title="下移"
+                    disabled={Boolean(ruleSearch) ||
+                      $reorder.isPending ||
+                      position >= targetRules.length - 1}
+                    onclick={() => moveRule(rule.id, 1)}
+                    ><ChevronDown class="size-4" /></Button
+                  >
+                  <Button
+                    size="icon"
+                    class="size-8"
+                    variant="ghost"
+                    aria-label={`編輯${ruleSummary(rule)}規則`}
+                    onclick={() => startEdit(rule)}
+                  >
+                    <Pencil class="size-4" />
+                  </Button>
+                  {#if deleteCandidate !== rule.id}
+                    <Button
+                      size="icon"
+                      class="size-8 text-destructive"
+                      variant="ghost"
+                      aria-label={`刪除${ruleSummary(rule)}規則`}
+                      disabled={$remove.isPending}
+                      onclick={() => (deleteCandidate = rule.id)}
+                    >
+                      <Trash2 class="size-4" />
+                    </Button>
+                  {/if}
+                </div>
               </div>
-            {/if}
-          </div>
-        {/each}
-      </div>
-    {/if}
+              {#if deleteCandidate === rule.id}
+                <div
+                  class="mt-2 flex flex-wrap items-center justify-end gap-2 border-t border-border pt-2 text-xs"
+                >
+                  <span class="mr-auto text-destructive">確定刪除此規則？</span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onclick={() => (deleteCandidate = null)}>取消</Button
+                  >
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    class="text-destructive"
+                    disabled={$remove.isPending}
+                    onclick={() => $remove.mutate(rule.id)}
+                  >
+                    {$remove.isPending ? "刪除中…" : "確定刪除"}
+                  </Button>
+                </div>
+              {/if}
+            </article>
+          {/each}
+        </div>
+      {/if}
+    </div>
 
-    {#if $add.isError || $toggle.isError || $update.isError || $remove.isError || $reorder.isError}
+    {#if $toggle.isError || $remove.isError || $reorder.isError}
       <p class="mt-3 text-sm text-destructive" role="alert">
-        {messageFromError(
-          $add.error ??
-            $toggle.error ??
-            $update.error ??
-            $remove.error ??
-            $reorder.error,
-        )}
+        {messageFromError($toggle.error ?? $remove.error ?? $reorder.error)}
       </p>
     {/if}
+
+    <details class="mt-6 rounded-lg border border-border p-4">
+      <summary class="cursor-pointer text-sm font-semibold"
+        >內建規則與配對說明（{systemRules.length} 條）</summary
+      >
+      <p class="mt-3 text-xs leading-relaxed text-muted-foreground">
+        內建規則不可編輯；自訂規則優先。發票是資料來源，消費分類依品項；信用卡繳款屬資產移轉，不算新消費。
+      </p>
+      <div class="mt-3 divide-y divide-border">
+        {#each systemRules as rule (rule.id)}
+          <details class="py-2 text-sm">
+            <summary class="cursor-pointer break-words">
+              {categoryLabel(rule.categoryId)} · {rule.description ??
+                "內建比對"}
+            </summary>
+            <code class="mt-2 block break-all rounded bg-muted p-2 text-xs"
+              >{rule.pattern}</code
+            >
+          </details>
+        {/each}
+      </div>
+    </details>
   </CardContent>
 </Card>

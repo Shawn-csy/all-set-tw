@@ -7,6 +7,7 @@ import {
   buildActivityCategorySlices,
 } from "./chart";
 import type { ActivityItem } from "./types";
+import { allocateInvoiceCategories } from "@taiwan-fin-hub/core";
 
 function item(overrides: Partial<ActivityItem>): ActivityItem {
   return {
@@ -24,6 +25,65 @@ function item(overrides: Partial<ActivityItem>): ActivityItem {
 }
 
 describe("activity category chart", () => {
+  it("splits one invoice by item categories and leaves uncovered value uncategorized", () => {
+    const parts = allocateInvoiceCategories(300, 270, [
+      {
+        id: "food",
+        amount: 100,
+        classification: { categoryId: "food", label: "餐飲" },
+      },
+      {
+        id: "shopping",
+        amount: 150,
+        classification: {
+          categoryId: "shopping",
+          label: "購物",
+          behavior: "excluded",
+        },
+      },
+    ]);
+    expect(parts.map(({ category, amount }) => [category, amount])).toEqual([
+      ["餐飲", 90],
+      ["購物", 135],
+      ["未分類", 45],
+    ]);
+    const activity = item({
+      source: "invoice",
+      amount: 300,
+      category: "多分類",
+      categoryParts: parts,
+    });
+    expect(activityCashAmountTwd(activity, {})).toBe(-135);
+    expect(
+      buildActivityCategorySlices([activity], "expense", {}).map(
+        ({ category, amount }) => [category, amount],
+      ),
+    ).toEqual([
+      ["餐飲", 90],
+      ["未分類", 45],
+    ]);
+  });
+
+  it("does not treat allowance lines as a separate spending category", () => {
+    const parts = allocateInvoiceCategories(180, 180, [
+      {
+        id: "item",
+        amount: 200,
+        lineType: "item",
+        classification: { categoryId: "food", label: "餐飲" },
+      },
+      { id: "allowance", amount: 20, lineType: "allowance" },
+    ]);
+    expect(parts).toEqual([
+      {
+        itemId: "item",
+        categoryId: "food",
+        category: "餐飲",
+        amount: 180,
+        behavior: "normal",
+      },
+    ]);
+  });
   it("converts zero foreign amounts without requiring an exchange rate", () => {
     expect(activityAmountTwd(item({ amount: 0, currency: "HKD" }), {})).toBe(0);
     expect(activityAmountTwd(item({ amount: -0, currency: "HKD" }), {})).toBe(

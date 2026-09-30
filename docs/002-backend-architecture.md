@@ -100,6 +100,10 @@ flowchart TD
 
 ## Feature 內部結構
 
+### 投資持倉成本
+
+TDCC 的 `investment_positions` 為帶日期的快照，`source_id` 末尾包含快照日期。使用者輸入的成本單價獨立保存在 `investment_position_cost_overrides`，以 `connector_id` 與去除日期後的持倉鍵（券商帳戶＋標的）對應。`GET /api/investments` 在讀取最新快照時合併成本，並依最新股數計算成本基礎；`PUT /api/investments/:id/cost` 更新該持倉的成本單價。投資交易來源若沒有成交金額，不能以股數或佔位價格推算買賣收益。
+
 複雜 feature 通常採用以下結構：
 
 ```text
@@ -250,7 +254,9 @@ Drizzle 型別只留在 DB 與 Worker repository 層。`packages/core`、前端�
 
 Feature-specific 查詢應放在 feature 的 `repository.ts`，而不是持續擴大 `packages/db/src/index.ts`。一般 repository 以 Drizzle 為預設寫法；sync job、run／item、排程、通知批次及報告的一般讀取，以及同步 lease 與獨立 run 狀態更新已使用 Drizzle。selection 維持既有 row shape、排序與 LEFT JOIN null；staging promotion 與 durable item 寫入的 statement composition 保留整組原生 D1 batch。
 
-分類 repository 已轉換為 Drizzle；規則重排維持單一 batch，保留 NOCASE 分類唯一性、系統規則保護與 override conflict target。invoices、investments 與 bank 的一般列表／明細查詢已轉換為 Drizzle，保留游標分頁、LEFT JOIN null、pending／posted 可見性與 TEXT 日期邊界；銀行交易日條件維持可使用 `idx_bank_transactions_transaction_day`。dashboard、net-worth、activity 與 bank calculation／search 聚合已轉換為 Drizzle，保留計算值、跨來源去重、TEXT 日期與 activity search CTE；同步 lease／run 狀態更新以 Drizzle 保留單次條件 UPDATE 與 affected rows 判斷；staging promotion 保留原生 batch 的順序、計數 offset、finalize／cursor／cleanup 原子邊界。保留 SQL 的範圍與測試見下方維護約定。
+分類 repository 已轉換為 Drizzle；規則重排維持單一 batch，保留 NOCASE 分類唯一性、系統規則保護與 override conflict target。分類判定採兩層、可解釋的規則鏈：先以商家規則將交易或發票品項對應到商家，再只在該商家底下套用產品／服務規則，沒有品項規則時使用商家預設分類，最後才回退到既有全域分類規則。個別 override 仍優先於所有規則。這條鏈只使用正規化文字、`contains`／`equals`／`starts_with`／`regex` 與明確優先序，不使用 LLM 或 AI 推論；無法命中的資料保留「未分類」，方便使用者新增規則。商家、商家匹配規則與商家產品／服務規則分別存於 `classification_merchants`、`classification_merchant_rules` 與 `classification_merchant_product_rules`，並以 `target_type` 區分銀行交易與發票品項。
+
+invoices、investments 與 bank 的一般列表／明細查詢已轉換為 Drizzle，保留游標分頁、LEFT JOIN null、pending／posted 可見性與 TEXT 日期邊界；銀行交易日條件維持可使用 `idx_bank_transactions_transaction_day`。dashboard、net-worth、activity 與 bank calculation／search 聚合已轉換為 Drizzle，保留計算值、跨來源去重、TEXT 日期與 activity search CTE；同步 lease／run 狀態更新以 Drizzle 保留單次條件 UPDATE 與 affected rows 判斷；staging promotion 保留原生 batch 的順序、計數 offset、finalize／cursor／cleanup 原子邊界。保留 SQL 的範圍與測試見下方維護約定。
 
 資料庫 schema 與預設資料必須透過：
 

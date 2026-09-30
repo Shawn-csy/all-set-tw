@@ -18,15 +18,16 @@ export const manualAssets = sqliteTable(
     name: text("name").notNull(),
     category: text("category").notNull(),
     note: text("note"),
+    createdAt: text("created_at").notNull(),
+    currency: text("currency")
+      .notNull()
+      .default(sql`'TWD'`),
     symbol: text("symbol"),
     quantity: real("quantity"),
     marketPrice: real("market_price"),
     marketPriceAsOf: text("market_price_as_of"),
     marketPriceProvider: text("market_price_provider"),
-    createdAt: text("created_at").notNull(),
-    currency: text("currency")
-      .notNull()
-      .default(sql`'TWD'`),
+    costPerShare: real("cost_per_share"),
   },
   (table) => [primaryKey({ columns: [table.id] })],
 );

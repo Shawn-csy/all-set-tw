@@ -1,5 +1,12 @@
 <script lang="ts">
-  import { Clock3, Database, Settings, WalletCards } from "@lucide/svelte";
+  import {
+    Clock3,
+    Database,
+    ReceiptText,
+    Settings,
+    TrendingUp,
+    WalletCards,
+  } from "@lucide/svelte";
   import Card from "@/shared/ui/Card.svelte";
   import CardContent from "@/shared/ui/CardContent.svelte";
   import type { ApiClient } from "@/shared/api/client";
@@ -38,6 +45,11 @@
   const sources = connectorDefinitions;
   const configuredSources = $derived(
     jobs.filter((job) => job.configured && job.scope === "all"),
+  );
+  const visibleSources = $derived(
+    sources.filter((source) =>
+      configuredSources.some((job) => job.connectorId === source.id),
+    ),
   );
   const customRuleCount = $derived(
     rules.filter((rule) => !rule.isSystem).length,
@@ -94,7 +106,7 @@
               class="block text-sm text-ink/45">狀態、憑證、排程與重新驗證</span
             ></span
           ><span class="text-sm font-semibold text-steel"
-            >{sources.length} 個　›</span
+            >{sources.length} 種可管理　›</span
           ></button
         >
         <button
@@ -139,16 +151,49 @@
     >
   </section>
   <section>
+    <h2 class="mb-2 text-base font-semibold text-ink/50">深入分析</h2>
+    <Card
+      ><div class="divide-y divide-ink/8">
+        <button
+          class="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left"
+          onclick={() => navigate("purchases")}
+          ><span
+            class="flex size-10 items-center justify-center rounded-xl bg-steel/10 text-steel"
+            ><ReceiptText class="size-5" /></span
+          ><span class="flex-1"
+            ><span class="block font-semibold">購買品項</span><span
+              class="block text-sm text-ink/45"
+              >只看買了什麼，不混入銀行活動列表</span
+            ></span
+          ><span class="text-sm font-semibold text-steel">›</span></button
+        >
+        <button
+          class="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left"
+          onclick={() => navigate("investment-returns")}
+          ><span
+            class="flex size-10 items-center justify-center rounded-xl bg-steel/10 text-steel"
+            ><TrendingUp class="size-5" /></span
+          ><span class="flex-1"
+            ><span class="block font-semibold">投資收益</span><span
+              class="block text-sm text-ink/45"
+              >持倉損益、每月市值與投資交易</span
+            ></span
+          ><span class="text-sm font-semibold text-steel">›</span></button
+        >
+      </div></Card
+    >
+  </section>
+  <section>
     <div class="mb-2 flex items-center justify-between">
-      <h2 class="text-base font-semibold text-ink/50">資料來源</h2>
+      <h2 class="text-base font-semibold text-ink/50">目前來源狀態</h2>
       <button
         class="min-h-8 px-2 text-sm font-semibold text-steel"
-        onclick={() => navigate("data-sources")}>管理</button
+        onclick={() => navigate("data-sources")}>全部管理</button
       >
     </div>
     <Card
       ><div class="divide-y divide-ink/8">
-        {#each sources as source (source.id)}{@const job = jobs.find(
+        {#each visibleSources as source (source.id)}{@const job = jobs.find(
             (item) => item.connectorId === source.id,
           )}
           <button
@@ -167,7 +212,9 @@
                     : "text-ink/45"}
               >{getSyncSourceStatusLabel(getSyncSourceStatus(job))}</span
             >
-          </button>{/each}
+          </button>{:else}<p class="px-4 py-3 text-sm text-ink/45">
+            尚未設定資料來源。
+          </p>{/each}
       </div></Card
     >
   </section>

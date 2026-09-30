@@ -30,6 +30,7 @@ let mode:
   | "flag_otp"
   | "error_code_otp"
   | "stale_session"
+  | "stale_session_generic"
   | "otp_expired"
   | "pagination_incomplete"
   | "pagination_loop" = "flag_otp";
@@ -81,12 +82,14 @@ function errorResponse(returnCode: string) {
   }
   if (endpoint === "TR001") {
     if (
-      mode === "stale_session" &&
+      (mode === "stale_session" || mode === "stale_session_generic") &&
       body.requestHeader.tokenID === "STALE-TKN"
     ) {
       // session is dead; the connector should drop it and retry fresh, at which point
       // the token will no longer be "STALE-TKN" so this branch won't fire again
-      return errorResponse("D0006");
+      return errorResponse(
+        mode === "stale_session_generic" ? "D9993" : "D0006",
+      );
     }
     return respond("0000", {
       lastServerTime: "20240615",
@@ -331,6 +334,16 @@ async function main() {
     "a STAN appearing later must not change the transaction id",
   );
 
+  const summarizedTransaction = normalizeBankTransactionDetails([
+    {
+      txnDateTime: "20260821000000",
+      transferOutAmount: "102.0",
+      summary: "行動跨轉",
+      memo: "0017700400719978",
+    },
+  ])[0];
+  assert.equal(summarizedTransaction?.summary, "行動跨轉");
+
   const malformedDate = normalizeBankTransactionDetails([
     {
       stan: "",
@@ -477,6 +490,24 @@ async function main() {
     pageClient.getBankTransactionsPage("004", "1234567890", "TWD", "LOOP"),
     /PAGINATION_LOOP/,
     "a page API must reject an immediately repeated page token",
+  );
+  mode = "flag_otp";
+
+  const genericStaleCursor = JSON.stringify({
+    deviceId: "stale-device",
+    devType: "Android:14",
+    devModel: "SM-G991B",
+    session: { tokenId: "STALE-TKN", richUrl: null },
+  });
+  mode = "stale_session_generic";
+  const genericStaleResult = await connector.sync(
+    configWithOtp,
+    genericStaleCursor,
+  );
+  assert.equal(
+    genericStaleResult.records.length,
+    3,
+    "generic D9993 session failures should retry with a fresh login",
   );
   mode = "flag_otp";
 

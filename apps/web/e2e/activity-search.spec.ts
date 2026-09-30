@@ -85,6 +85,10 @@ for (const width of [1440, 390, 320]) {
     const month = page.getByLabel("選擇活動月份");
     await month.selectOption({ index: 1 });
     const selected = await month.inputValue();
+    await page
+      .locator("summary")
+      .filter({ hasText: "篩選來源與搜尋本月" })
+      .click();
     await page.getByRole("tab", { name: "信用卡", exact: true }).click();
     const monthlySearch = page.getByRole("searchbox", { name: "搜尋該月活動" });
     await monthlySearch.fill("月報關鍵字");
@@ -116,6 +120,10 @@ for (const width of [1440, 390, 320]) {
     await expect(search).toHaveValue("airbnb");
     await page.goBack();
     await expect(month).toHaveValue(selected);
+    await page
+      .locator("summary")
+      .filter({ hasText: "篩選來源與搜尋本月" })
+      .click();
     await expect(monthlySearch).toHaveValue("月報關鍵字");
     await page.goForward();
     await expect(search).toHaveValue("airbnb");
@@ -287,6 +295,10 @@ test("monthly search filters selected month without global requests", async ({
     .filter({ visible: true });
   await expect(coffee).toBeVisible();
   await expect(lunch).toBeVisible();
+  await page
+    .locator("summary")
+    .filter({ hasText: "篩選來源與搜尋本月" })
+    .click();
   const search = page.getByRole("searchbox", { name: "搜尋該月活動" });
   await search.fill("咖啡");
   await expect(coffee).toBeVisible();

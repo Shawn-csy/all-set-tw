@@ -87,6 +87,24 @@ describe("matchesClassificationRule", () => {
         },
       ),
     ).toBe(true);
+    expect(
+      matchesClassificationRule(
+        { field: "merchant_name", operator: "contains", pattern: "全聯" },
+        {
+          ...transaction,
+          merchantName: "全聯實業股份有限公司內湖德安分公司",
+        },
+      ),
+    ).toBe(true);
+    expect(
+      matchesClassificationRule(
+        { field: "any_text", operator: "contains", pattern: "全聯" },
+        {
+          ...transaction,
+          merchantName: "全聯實業股份有限公司內湖德安分公司",
+        },
+      ),
+    ).toBe(true);
   });
 
   it("treats invalid regular expressions as non-matches", () => {
@@ -246,6 +264,62 @@ describe("resolveClassifications", () => {
       behavior: "normal",
       source: "system_rule",
       ruleId: "system:bank:other-income-keywords",
+    });
+  });
+
+  it("applies invoice item system rules to merchant and product text", async () => {
+    const invoiceFoodRule = {
+      ...otherIncomeRule,
+      id: "system:invoice:food-keywords",
+      category_id: "food",
+      label: "餐飲",
+      target_type: "invoice_item",
+      operator: "regex",
+      pattern: "餐飲|BBQ|米酒",
+    };
+
+    expect(
+      matchesClassificationRule(invoiceFoodRule, {
+        id: "invoice-item-food",
+        sourceId: "invoice-1",
+        merchantName: "全聯實業股份有限公司內湖德安分公司",
+        description: "醬漬ＢＢＱ二翅",
+        amount: -53,
+      }),
+    ).toBe(true);
+
+    const result = await resolveClassifications(
+      createClassificationDb([invoiceFoodRule]),
+      [
+        {
+          id: "invoice-item-food",
+          sourceId: "invoice-1",
+          merchantName: "全聯實業股份有限公司內湖德安分公司",
+          description: "醬漬ＢＢＱ二翅",
+          amount: -53,
+        },
+        {
+          id: "invoice-item-restaurant",
+          sourceId: "invoice-2",
+          merchantName: "美麗華城市發展股份有限公司",
+          description: "餐飲",
+          amount: -480,
+        },
+      ],
+      "invoice_item",
+    );
+
+    expect(result.get("invoice-item-food")).toMatchObject({
+      categoryId: "food",
+      label: "餐飲",
+      source: "system_rule",
+      ruleId: "system:invoice:food-keywords",
+    });
+    expect(result.get("invoice-item-restaurant")).toMatchObject({
+      categoryId: "food",
+      label: "餐飲",
+      source: "system_rule",
+      ruleId: "system:invoice:food-keywords",
     });
   });
 

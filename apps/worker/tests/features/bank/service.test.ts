@@ -48,6 +48,7 @@ function bankTransactionRawValues(row: BankTransactionPageRow) {
     row.currency,
     row.description,
     row.counterparty,
+    row.sourceSummary ?? null,
     row.status,
     row.effectiveDate,
     row.updatedAt,

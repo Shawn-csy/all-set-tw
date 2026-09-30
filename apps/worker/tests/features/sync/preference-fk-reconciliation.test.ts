@@ -223,7 +223,7 @@ describe("legacy transaction merges on D1", () => {
       db.batch([
         ...reconcileSinopacLegacyTransactionStatements(db),
         db.prepare(
-            "INSERT INTO bank_transaction_preferences (transaction_id, excluded_from_calculation, created_at, updated_at) VALUES ('missing', 0, 't', 't')",
+          "INSERT INTO bank_transaction_preferences (transaction_id, excluded_from_calculation, created_at, updated_at) VALUES ('missing', 0, 't', 't')",
         ),
       ]),
     ).rejects.toThrow();

@@ -3,6 +3,8 @@ export interface NetWorthHistoryRow {
   netWorth: number;
   assetType: string;
   source: string;
+  /** Stable source-side series key; manual assets may share the same assetType. */
+  seriesId?: string;
 }
 
 export interface ExchangeRateRow {
@@ -18,6 +20,7 @@ export interface ManualAssetRow {
   note: string | null;
   symbol?: string | null;
   quantity?: number | null;
+  costPerShare?: number | null;
   marketPrice?: number | null;
   marketPriceAsOf?: string | null;
   marketPriceProvider?: string | null;

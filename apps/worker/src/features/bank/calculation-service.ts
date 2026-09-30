@@ -21,6 +21,8 @@ export type CalculationTransaction = {
     | "override"
     | "user_rule"
     | "system_rule"
+    | "merchant_product_rule"
+    | "merchant_default"
     | "auto_transfer"
     | "auto_offset"
     | "fallback"

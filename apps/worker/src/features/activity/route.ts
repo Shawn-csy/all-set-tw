@@ -6,21 +6,29 @@ import { honoFactory } from "../../platform/hono";
 import { jsonError, parseKeysetPagination } from "../../platform/http";
 import { validationHook } from "../../platform/validation";
 import { searchActivity } from "./search-service";
-import { listInvoiceTransactionPreferences } from "./repository";
+import {
+  listInvoicePaymentAccountRules,
+  listInvoicePaymentAccounts,
+  listInvoiceTransactionPreferences,
+} from "./repository";
 import {
   keepInvoiceSeparate,
   linkInvoiceToTransaction,
   markInvoiceAsCashPayment,
+  rememberInvoicePaymentAccount,
   MappingDateMismatchError,
   MappingInvoiceAlreadyLinkedError,
   MappingInvoiceNotFoundError,
   MappingTransactionNotExpenseError,
   MappingTransactionNotFoundError,
   MappingTransactionUnavailableError,
+  MappingPaymentAccountNotFoundError,
+  MappingPaymentAccountConflictError,
 } from "./service";
 
 const mappingSchema = z.union([
   z.object({ transactionId: z.string().trim().min(1) }),
+  z.object({ paymentAccountId: z.string().trim().min(1) }),
   z.object({ paymentMethod: z.literal("cash") }),
 ]);
 
@@ -69,6 +77,14 @@ function registerActivityRoutes(api: Hono<AppBindings>) {
     c.json(await listInvoiceTransactionPreferences(c.env.DB)),
   );
 
+  api.get("/activity/invoice-payment-rules", async (c) =>
+    c.json(await listInvoicePaymentAccountRules(c.env.DB)),
+  );
+
+  api.get("/activity/invoice-payment-accounts", async (c) =>
+    c.json(await listInvoicePaymentAccounts(c.env.DB)),
+  );
+
   api.put(
     "/activity/invoice-mappings/:invoiceId",
     zValidator(
@@ -81,11 +97,17 @@ function registerActivityRoutes(api: Hono<AppBindings>) {
       return c.json(
         "paymentMethod" in body
           ? await markInvoiceAsCashPayment(c.env.DB, c.req.param("invoiceId"))
-          : await linkInvoiceToTransaction(
-              c.env.DB,
-              c.req.param("invoiceId"),
-              body.transactionId,
-            ),
+          : "paymentAccountId" in body
+            ? await rememberInvoicePaymentAccount(
+                c.env.DB,
+                c.req.param("invoiceId"),
+                body.paymentAccountId,
+              )
+            : await linkInvoiceToTransaction(
+                c.env.DB,
+                c.req.param("invoiceId"),
+                body.transactionId,
+              ),
       );
     },
   );
@@ -119,8 +141,20 @@ function mappingError(error: unknown) {
   if (error instanceof MappingDateMismatchError)
     return jsonError(
       "MAPPING_DATE_MISMATCH",
-      "Invoice and bank transaction must be on the same day.",
+      "發票只能關聯同一天的銀行／信用卡交易。",
       400,
+    );
+  if (error instanceof MappingPaymentAccountNotFoundError)
+    return jsonError(
+      "PAYMENT_ACCOUNT_NOT_FOUND",
+      "找不到可用的信用卡帳戶。",
+      404,
+    );
+  if (error instanceof MappingPaymentAccountConflictError)
+    return jsonError(
+      "PAYMENT_ACCOUNT_CONFLICT",
+      "這張發票已關聯另一個帳戶的交易；請先解除關聯，再改用這張卡。",
+      409,
     );
   if (error instanceof MappingTransactionNotExpenseError)
     return jsonError(

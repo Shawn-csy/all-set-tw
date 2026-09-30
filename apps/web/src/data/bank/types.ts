@@ -36,6 +36,7 @@ export interface BankTransactionRow {
   currency: string;
   description?: string;
   counterparty?: string;
+  sourceSummary?: string;
   status: "pending" | "posted";
   excludedFromCalculation: boolean;
   cashWithdrawal?: boolean;
@@ -46,6 +47,8 @@ export interface BankTransactionRow {
       | "override"
       | "user_rule"
       | "system_rule"
+      | "merchant_product_rule"
+      | "merchant_default"
       | "auto_transfer"
       | "auto_offset"
       | "fallback";

@@ -13,6 +13,7 @@ export type ManualAssetRow = {
   note: string | null;
   symbol: string | null;
   quantity: number | null;
+  costPerShare: number | null;
   marketPrice: number | null;
   marketPriceAsOf: string | null;
   marketPriceProvider: string | null;
@@ -35,6 +36,7 @@ export async function listManualAssets(db: D1Database) {
       note: manualAssets.note,
       symbol: manualAssets.symbol,
       quantity: manualAssets.quantity,
+      costPerShare: manualAssets.costPerShare,
       marketPrice: manualAssets.marketPrice,
       marketPriceAsOf: manualAssets.marketPriceAsOf,
       marketPriceProvider: manualAssets.marketPriceProvider,
@@ -69,6 +71,7 @@ export async function createManualAsset(
     note: string | null;
     symbol?: string | null;
     quantity?: number | null;
+    costPerShare?: number | null;
     currency: string;
     value: number;
     date: string;
@@ -84,6 +87,7 @@ export async function createManualAsset(
       note: input.note,
       symbol: input.symbol ?? null,
       quantity: input.quantity ?? null,
+      costPerShare: input.costPerShare ?? null,
       currency: input.currency,
       createdAt: input.now,
     }),
@@ -106,6 +110,7 @@ export async function updateManualAsset(
     note?: string | null;
     symbol?: string | null;
     quantity?: number | null;
+    costPerShare?: number | null;
     currency?: string;
     value?: number;
     date?: string;
@@ -118,6 +123,7 @@ export async function updateManualAsset(
     note?: string | null;
     symbol?: string | null;
     quantity?: number | null;
+    costPerShare?: number | null;
     currency?: string;
   } = {};
   if (input.name) patch.name = input.name;
@@ -125,6 +131,7 @@ export async function updateManualAsset(
   if ("note" in input) patch.note = input.note ?? null;
   if ("symbol" in input) patch.symbol = input.symbol ?? null;
   if ("quantity" in input) patch.quantity = input.quantity ?? null;
+  if ("costPerShare" in input) patch.costPerShare = input.costPerShare ?? null;
   if (input.currency) patch.currency = input.currency;
 
   const database = createDrizzle(db);

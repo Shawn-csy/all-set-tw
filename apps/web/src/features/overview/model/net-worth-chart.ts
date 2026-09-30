@@ -60,7 +60,8 @@ const TIMEFRAME_MONTHS: Record<NetWorthTimeframe, number | null> = {
 };
 
 function matchesAssetType(row: NetWorthHistoryRow, type: NetWorthAssetType) {
-  if (type === "manual") return row.source === "manual";
+  if (type === "manual")
+    return row.source === "manual" && row.assetType !== "stock";
   if (type === "deposit")
     return row.source === "bank" && row.assetType === "deposit";
   return row.assetType === type;

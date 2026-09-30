@@ -71,19 +71,20 @@
       label: group.institution,
       group,
     })),
-    ...(($investments.data?.length ?? 0) > 0
-      ? ([{ key: "investments", kind: "investments", label: "投資" }] as const)
-      : []),
-    ...(($manual.data?.length ?? 0) > 0
-      ? ([
-          {
-            key: "manual-assets",
-            kind: "manual-assets",
-            label: "其他資產",
-          },
-        ] as const)
-      : []),
+    { key: "investments", kind: "investments", label: "投資" },
+    {
+      key: "manual-assets",
+      kind: "manual-assets",
+      label: "其他資產",
+    },
   ]);
+  const hasAssetData = $derived(
+    summary.institutionGroups.length > 0 ||
+      ($investments.data?.length ?? 0) > 0 ||
+      ($trades.data?.length ?? 0) > 0 ||
+      ($manual.data?.length ?? 0) > 0 ||
+      summary.cashTotal !== 0,
+  );
 
   let selectedKey = $state<string>();
   let expandedKey = $state<string | null>(null);
@@ -115,8 +116,7 @@
     body="部分必要資料目前無法取得，請稍後再試。"
   />
 {:else}
-  <div class="grid min-w-0 max-w-full gap-6">
-    <CashWalletPanel {api} />
+  <div class="grid min-w-0 max-w-full gap-4">
     {#if summary.missingCurrencies.length > 0}
       <div
         class="rounded-xl border border-coral/25 bg-coral/5 px-4 py-3 text-sm text-ink"
@@ -129,73 +129,51 @@
       </div>
     {/if}
 
-    <section class="min-w-0 pt-3 md:pt-2" aria-label="淨資產">
-      <div>
-        <p class="text-sm text-subtle">淨資產</p>
-        <p
-          class="mt-3 break-all text-[clamp(2rem,7vw,2.75rem)] leading-tight font-semibold tracking-tight tabular-nums"
-        >
-          {formatCurrency(summary.netWorth)}
-        </p>
-        <p class="mt-3 text-caption text-subtle">
-          {summary.hasUnknownCardBalance
-            ? "信用卡負債資料不完整"
-            : `已扣除 ${formatCurrency(summary.cardDebt)} 信用卡負債`}
-        </p>
-      </div>
-      <div class="mt-6 grid grid-cols-3 gap-3 md:gap-6">
+    <section class="min-w-0" aria-label="資產摘要">
+      <div class="grid grid-cols-3 gap-3 border-b border-ink/10 pb-3 md:gap-4">
         <div class="min-w-0">
           <p class="text-caption text-subtle">銀行與現金</p>
           <p
-            class="mt-2 text-lg font-medium tracking-tight tabular-nums md:hidden"
+            class="mt-1 text-lg font-medium tracking-tight tabular-nums md:hidden"
           >
             {formatCompactTwd(summary.bankTotal + summary.cashTotal)}
           </p>
           <p
-            class="mt-2 hidden break-all text-2xl font-semibold tracking-tight tabular-nums md:block"
+            class="mt-1 hidden break-all text-xl font-semibold tracking-tight tabular-nums md:block"
           >
             {formatCurrency(summary.bankTotal + summary.cashTotal)}
-          </p>
-          <p class="mt-1 text-caption text-subtle">
-            {summary.deposits.length} 個帳戶 · 現金 {formatCompactTwd(summary.cashTotal)}
           </p>
         </div>
         <div class="min-w-0">
           <p class="text-caption text-subtle">投資</p>
           <p
-            class="mt-2 text-lg font-medium tracking-tight tabular-nums md:hidden"
+            class="mt-1 text-lg font-medium tracking-tight tabular-nums md:hidden"
           >
             {formatCompactTwd(summary.investmentTotal)}
           </p>
           <p
-            class="mt-2 hidden break-all text-2xl font-semibold tracking-tight tabular-nums md:block"
+            class="mt-1 hidden break-all text-xl font-semibold tracking-tight tabular-nums md:block"
           >
             {formatCurrency(summary.investmentTotal)}
-          </p>
-          <p class="mt-1 text-caption text-subtle">
-            {$investments.data?.length ?? 0} 個持倉
           </p>
         </div>
         <div class="min-w-0">
           <p class="text-caption text-subtle">其他資產</p>
           <p
-            class="mt-2 text-lg font-medium tracking-tight tabular-nums md:hidden"
+            class="mt-1 text-lg font-medium tracking-tight tabular-nums md:hidden"
           >
             {formatCompactTwd(summary.manualTotal)}
           </p>
           <p
-            class="mt-2 hidden break-all text-2xl font-semibold tracking-tight tabular-nums md:block"
+            class="mt-1 hidden break-all text-xl font-semibold tracking-tight tabular-nums md:block"
           >
             {formatCurrency(summary.manualTotal)}
-          </p>
-          <p class="mt-1 text-caption text-subtle">
-            {$manual.data?.length ?? 0} 筆
           </p>
         </div>
       </div>
     </section>
 
-    {#if ledgerItems.length === 0}
+    {#if !hasAssetData}
       <EmptyState
         title="尚無資產資料"
         body="完成資料來源同步，或新增一筆其他資產後即可在此查看。"
@@ -264,43 +242,39 @@
               {/each}
             {/if}
 
-            {#if ($investments.data?.length ?? 0) > 0}
-              <button
-                class={`grid min-h-[68px] w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-ink/8 px-3 py-2 text-left transition hover:bg-ink/3 ${activeKey === "investments" ? "bg-ink/4 shadow-[inset_3px_0_0_var(--color-steel)]" : ""}`}
-                type="button"
-                aria-pressed={activeKey === "investments"}
-                onclick={() => (selectedKey = "investments")}
-              >
-                <span class="min-w-0">
-                  <strong class="block text-sm">投資</strong>
-                  <small class="mt-1 block text-caption text-subtle">
-                    {$investments.data?.length ?? 0} 個持倉 · 持倉與交易紀錄
-                  </small>
-                </span>
-                <strong class="text-sm tabular-nums text-steel">
-                  {formatCurrency(summary.investmentTotal)}
-                </strong>
-              </button>
-            {/if}
+            <button
+              class={`grid min-h-[68px] w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-ink/8 px-3 py-2 text-left transition hover:bg-ink/3 ${activeKey === "investments" ? "bg-ink/4 shadow-[inset_3px_0_0_var(--color-steel)]" : ""}`}
+              type="button"
+              aria-pressed={activeKey === "investments"}
+              onclick={() => (selectedKey = "investments")}
+            >
+              <span class="min-w-0">
+                <strong class="block text-sm">投資</strong>
+                <small class="mt-1 block text-caption text-subtle">
+                  {$investments.data?.length ?? 0} 個持倉 · 持倉與交易紀錄
+                </small>
+              </span>
+              <strong class="text-sm tabular-nums text-steel">
+                {formatCurrency(summary.investmentTotal)}
+              </strong>
+            </button>
 
-            {#if ($manual.data?.length ?? 0) > 0}
-              <button
-                class={`grid min-h-[68px] w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-ink/8 px-3 py-2 text-left transition hover:bg-ink/3 ${activeKey === "manual-assets" ? "bg-ink/4 shadow-[inset_3px_0_0_var(--color-steel)]" : ""}`}
-                type="button"
-                aria-pressed={activeKey === "manual-assets"}
-                onclick={() => (selectedKey = "manual-assets")}
-              >
-                <span class="min-w-0">
-                  <strong class="block text-sm">其他資產</strong>
-                  <small class="mt-1 block text-caption text-subtle">
-                    {$manual.data?.length ?? 0} 筆 · 手動維護估值
-                  </small>
-                </span>
-                <strong class="text-sm tabular-nums text-moss">
-                  {formatCurrency(summary.manualTotal)}
-                </strong>
-              </button>
-            {/if}
+            <button
+              class={`grid min-h-[68px] w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-ink/8 px-3 py-2 text-left transition hover:bg-ink/3 ${activeKey === "manual-assets" ? "bg-ink/4 shadow-[inset_3px_0_0_var(--color-steel)]" : ""}`}
+              type="button"
+              aria-pressed={activeKey === "manual-assets"}
+              onclick={() => (selectedKey = "manual-assets")}
+            >
+              <span class="min-w-0">
+                <strong class="block text-sm">其他資產</strong>
+                <small class="mt-1 block text-caption text-subtle">
+                  {$manual.data?.length ?? 0} 筆 · 手動維護估值
+                </small>
+              </span>
+              <strong class="text-sm tabular-nums text-moss">
+                {formatCurrency(summary.manualTotal)}
+              </strong>
+            </button>
           </div>
         </div>
 
@@ -314,6 +288,7 @@
             />
           {:else if activeItem?.kind === "investments"}
             <InvestmentWorkspace
+              {api}
               positions={$investments.data ?? []}
               trades={$trades.data ?? []}
               total={summary.investmentTotal}
@@ -402,31 +377,30 @@
           {/each}
         {/if}
 
-        {#if ($investments.data?.length ?? 0) > 0}
-          <div class="border-t border-ink/10 pt-5">
-            <div class="flex items-start justify-between gap-3 pb-1">
-              <div class="min-w-0">
-                <h2 class="text-base font-semibold">投資</h2>
-                <p class="mt-1 text-caption text-subtle">
-                  {$investments.data?.length ?? 0} 個持倉 · 交易紀錄
-                </p>
-              </div>
-              <strong
-                class="text-lg font-medium tracking-tight tabular-nums text-steel"
-              >
-                {formatCurrency(summary.investmentTotal)}
-              </strong>
+        <div class="border-t border-ink/10 pt-5">
+          <div class="flex items-start justify-between gap-3 pb-1">
+            <div class="min-w-0">
+              <h2 class="text-base font-semibold">投資</h2>
+              <p class="mt-1 text-caption text-subtle">
+                {$investments.data?.length ?? 0} 個持倉 · 交易紀錄
+              </p>
             </div>
-            <InvestmentWorkspace
-              positions={$investments.data ?? []}
-              trades={$trades.data ?? []}
-              total={summary.investmentTotal}
-              tradesPending={$trades.isPending}
-              tradesError={$trades.isError}
-              compact
-            />
+            <strong
+              class="text-lg font-medium tracking-tight tabular-nums text-steel"
+            >
+              {formatCurrency(summary.investmentTotal)}
+            </strong>
           </div>
-        {/if}
+          <InvestmentWorkspace
+            {api}
+            positions={$investments.data ?? []}
+            trades={$trades.data ?? []}
+            total={summary.investmentTotal}
+            tradesPending={$trades.isPending}
+            tradesError={$trades.isError}
+            compact
+          />
+        </div>
 
         <div class="border-t border-ink/10 pt-5">
           <div class="flex items-start justify-between gap-3 pb-1">
@@ -461,5 +435,18 @@
         </div>
       </section>
     {/if}
+    <details class="min-w-0 rounded-xl border border-ink/10 bg-white">
+      <summary
+        class="flex min-h-12 cursor-pointer items-center justify-between px-4 text-sm font-semibold"
+      >
+        <span>現金錢包與初始餘額設定</span>
+        <span class="tabular-nums text-steel"
+          >{formatCurrency(summary.cashTotal)}</span
+        >
+      </summary>
+      <div class="border-t border-ink/10 p-3">
+        <CashWalletPanel {api} />
+      </div>
+    </details>
   </div>
 {/if}

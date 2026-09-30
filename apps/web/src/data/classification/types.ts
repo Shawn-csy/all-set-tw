@@ -25,3 +25,44 @@ export interface ClassificationCategoryRow {
   isSystem: boolean;
   behavior: ClassificationBehavior;
 }
+
+export type ClassificationTargetType = "bank_transaction" | "invoice_item";
+
+export interface ClassificationMerchantRow {
+  id: string;
+  name: string;
+  normalizedName: string;
+  defaultCategoryId?: string | null;
+  defaultCategoryLabel?: string | null;
+  defaultCategoryBehavior?: ClassificationBehavior | null;
+  isSystem: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ClassificationMerchantRuleRow {
+  id: string;
+  merchantId: string;
+  merchantName: string;
+  targetType?: ClassificationTargetType | null;
+  field: string;
+  operator: string;
+  pattern: string;
+  priority: number;
+  enabled: boolean;
+  isSystem: boolean;
+  source: string;
+  description?: string | null;
+}
+
+export interface ClassificationMerchantProductRuleRow extends ClassificationMerchantRuleRow {
+  categoryId: string;
+  categoryLabel: string;
+  categoryBehavior: ClassificationBehavior;
+}
+
+export interface ClassificationMerchantsResponse {
+  merchants: ClassificationMerchantRow[];
+  merchantRules: ClassificationMerchantRuleRow[];
+  productRules: ClassificationMerchantProductRuleRow[];
+}

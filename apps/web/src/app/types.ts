@@ -1,6 +1,11 @@
 export type PrimaryView = "overview" | "assets" | "activity" | "settings";
 
-export type DetailView = "investments" | "manual-assets";
+export type DetailView =
+  | "investments"
+  | "manual-assets"
+  | "purchases"
+  | "investment-returns"
+  | "activity-analysis";
 
 export type MobileSettingsView =
   | "data-sources"

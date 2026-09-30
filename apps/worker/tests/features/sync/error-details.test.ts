@@ -45,7 +45,9 @@ describe("sync error details", () => {
 
   it("masks opaque upstream response values before persistence", () => {
     const message = safeErrorMessage(
-      new Error("新版電子發票 /mid/v1/login 回應錯誤（代碼 -151）：6AK+WczL2cVd8mCEjXd7EFuS"),
+      new Error(
+        "新版電子發票 /mid/v1/login 回應錯誤（代碼 -151）：6AK+WczL2cVd8mCEjXd7EFuS",
+      ),
     );
 
     expect(message).not.toContain("6AK+WczL2cVd8mCEjXd7EFuS");

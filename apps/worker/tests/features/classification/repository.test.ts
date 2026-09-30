@@ -76,6 +76,83 @@ describe("classification repository", () => {
     ).rejects.toThrow();
   });
 
+  it("renames custom categories and persists their complete display order", async () => {
+    const db = harness.binding;
+    await category("food", 1);
+    await category("travel", 2);
+    await category("other", 3);
+
+    await expect(
+      repository.updateClassificationCategory(db, "travel", "旅遊", later),
+    ).resolves.toBe(true);
+    await expect(
+      repository.updateClassificationCategory(db, "missing", "不存在", later),
+    ).resolves.toBe(false);
+    await db
+      .prepare(
+        "UPDATE classification_categories SET is_system = 1 WHERE id = 'other'",
+      )
+      .run();
+    await expect(
+      repository.updateClassificationCategory(db, "other", "其他", later),
+    ).resolves.toBe(false);
+
+    await repository.updateClassificationCategoryOrder(
+      db,
+      ["other", "travel", "food"],
+      later,
+    );
+    expect(
+      (await repository.listClassificationCategories(db)).map((row) => [
+        row.id,
+        row.label,
+        row.sortOrder,
+      ]),
+    ).toEqual([
+      ["other", "other", 1],
+      ["travel", "旅遊", 2],
+      ["food", "food", 3],
+    ]);
+  });
+
+  it("reassigns references atomically before removing a category", async () => {
+    const db = harness.binding;
+    await category("food");
+    await category("travel", 2);
+    await rule("rule");
+    await repository.upsertClassificationOverride(db, {
+      targetType: "bank_transaction",
+      targetId: "tx:1",
+      categoryId: "food",
+      now,
+    });
+
+    await repository.replaceClassificationCategoryReferences(
+      db,
+      "food",
+      "travel",
+      later,
+    );
+
+    await expect(
+      repository.findClassificationCategory(db, "food"),
+    ).resolves.toBeNull();
+    await expect(
+      db
+        .prepare(
+          "SELECT category_id FROM classification_rules WHERE id = 'rule'",
+        )
+        .first(),
+    ).resolves.toEqual({ category_id: "travel" });
+    await expect(
+      db
+        .prepare(
+          "SELECT category_id FROM classification_overrides WHERE target_id = 'tx:1'",
+        )
+        .first(),
+    ).resolves.toEqual({ category_id: "travel" });
+  });
+
   it("preserves rule precedence, nullable fields, partial updates and system-rule protection", async () => {
     const db = harness.binding;
     await category();

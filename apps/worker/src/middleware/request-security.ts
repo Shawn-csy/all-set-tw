@@ -173,6 +173,19 @@ function isAllowedOrigin(
     allowedOrigins.add(new URL(request.url).origin);
   }
 
+  const isLocalOrigin = (value: string) => {
+    if (!LOCAL_HOSTS.has(hostname)) return false;
+    try {
+      const originUrl = new URL(value);
+      return (
+        (originUrl.protocol === "http:" || originUrl.protocol === "https:") &&
+        LOCAL_HOSTS.has(originUrl.hostname)
+      );
+    } catch {
+      return false;
+    }
+  };
+
   if (origin === "null") {
     if (referer === null) return false;
     try {
@@ -182,11 +195,14 @@ function isAllowedOrigin(
     }
   }
 
-  if (origin !== null && !allowedOrigins.has(origin)) return false;
+  if (origin !== null && !allowedOrigins.has(origin) && !isLocalOrigin(origin))
+    return false;
 
   if (origin === null && referer !== null) {
     try {
-      if (!allowedOrigins.has(new URL(referer).origin)) return false;
+      const refererOrigin = new URL(referer).origin;
+      if (!allowedOrigins.has(refererOrigin) && !isLocalOrigin(refererOrigin))
+        return false;
     } catch {
       return false;
     }
@@ -195,10 +211,7 @@ function isAllowedOrigin(
 }
 
 function isLocalRateLimitEnvironment(
-  env: Pick<
-    AppBindings["Bindings"],
-    "DEPLOYMENT_MODE" | "LOCAL_DEV_MODE"
-  >,
+  env: Pick<AppBindings["Bindings"], "DEPLOYMENT_MODE" | "LOCAL_DEV_MODE">,
   hostname: string,
 ) {
   if (LOCAL_HOSTS.has(hostname)) return true;
@@ -245,7 +258,11 @@ function requestResource(pathname: string) {
   if (pathname.startsWith("/api/ocr/")) return "ocr";
   if (pathname.includes("/sync") || pathname.includes("/captcha"))
     return "sync";
-  if (pathname.startsWith("/api/manual-assets/quotes")) return "sync";
+  if (
+    pathname.startsWith("/api/manual-assets/quotes") ||
+    pathname.startsWith("/api/investments/quotes")
+  )
+    return "sync";
   if (pathname.startsWith("/api/notifications/test")) return "notifications";
   return "api";
 }

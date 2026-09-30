@@ -8,10 +8,10 @@
 
 ## 目錄
 
-- Tables：31
-- Explicit indexes：44
+- Tables：41
+- Explicit indexes：56
 - Other objects：0
-- Migrations：45
+- Migrations：63
 
 ## Tables
 
@@ -19,9 +19,14 @@
 | --- | --- | ---: | ---: | ---: |
 | [`bank_accounts`](#bank_accounts) | 各銀行與信用卡連接器同步回來的帳戶主檔；同一個實體帳戶可能同時存在多個來源記錄。 | 17 | 1 | 1 |
 | [`bank_balance_snapshots`](#bank_balance_snapshots) | 帳戶在特定時間點的餘額快照，供資產總值與歷史圖表計算。 | 15 | 1 | 2 |
-| [`bank_transaction_preferences`](#bank_transaction_preferences) | 使用者對銀行交易計算方式的個別偏好。 | 4 | 1 | 1 |
+| [`bank_transaction_preferences`](#bank_transaction_preferences) | 舊版銀行交易計算偏好的相容資料表。 | 5 | 1 | 1 |
 | [`bank_transactions`](#bank_transactions) | 銀行帳戶、信用卡與其他存款型連接器同步回來的交易明細。 | 17 | 3 | 7 |
-| [`classification_categories`](#classification_categories) | 交易與發票使用的分類字典，包含系統預設分類與使用者分類。 | 6 | 0 | 1 |
+| [`cash_wallet_settings`](#cash_wallet_settings) | 現金錢包的開戶餘額設定。 | 4 | 0 | 0 |
+| [`cash_withdrawal_preferences`](#cash_withdrawal_preferences) | 使用者對銀行交易是否屬於現金提款的偏好。 | 3 | 1 | 1 |
+| [`classification_categories`](#classification_categories) | 交易與發票使用的分類字典，包含系統預設分類與使用者分類。 | 7 | 0 | 2 |
+| [`classification_merchant_product_rules`](#classification_merchant_product_rules) | 商家底下產品或服務文字對應分類的規則。 | 14 | 2 | 2 |
+| [`classification_merchant_rules`](#classification_merchant_rules) | 將交易或發票品項匹配到商家的文字規則。 | 13 | 1 | 1 |
+| [`classification_merchants`](#classification_merchants) | 可被交易或發票品項匹配的商家主檔。 | 7 | 1 | 2 |
 | [`classification_overrides`](#classification_overrides) | 使用者對單筆目標資料指定的分類覆寫。 | 6 | 1 | 1 |
 | [`classification_rules`](#classification_rules) | 以文字條件自動判斷交易或其他資料分類的規則。 | 14 | 1 | 2 |
 | [`connector_settings`](#connector_settings) | 每個外部金融資料連接器的認證設定、公開設定與同步游標。 | 7 | 0 | 0 |
@@ -29,12 +34,17 @@
 | [`einvoice_sync_run_items`](#einvoice_sync_run_items) | 電子發票持久化同步中，每張發票的明細擷取工作與待寫入資料。 | 17 | 1 | 1 |
 | [`einvoice_sync_runs`](#einvoice_sync_runs) | 電子發票跨 Queue invocation 執行的持久化同步記錄。 | 21 | 2 | 2 |
 | [`exchange_rates`](#exchange_rates) | 將外幣換算為新台幣時使用的最新匯率。 | 3 | 0 | 0 |
+| [`investment_position_cost_overrides`](#investment_position_cost_overrides) | 使用者為同步持倉指定的每單位成本，依連接器及穩定持倉鍵保存，不隨每日快照更新而消失。 | 7 | 0 | 1 |
 | [`investment_positions`](#investment_positions) | 投資帳戶在特定日期的持倉與資產市值快照。 | 14 | 0 | 4 |
+| [`investment_transaction_amount_overrides`](#investment_transaction_amount_overrides) | 使用者補登投資交易成交總額的覆寫資料。 | 9 | 0 | 1 |
 | [`investment_transactions`](#investment_transactions) | 投資帳戶的買賣、配息或其他證券交易明細。 | 22 | 0 | 3 |
-| [`invoice_line_items`](#invoice_line_items) | 電子發票底下的商品或服務明細。 | 13 | 1 | 2 |
+| [`invoice_line_items`](#invoice_line_items) | 電子發票底下的商品或服務明細。 | 14 | 1 | 2 |
+| [`invoice_merchant_overrides`](#invoice_merchant_overrides) | 使用者對單張發票指定的分類商家覆寫。 | 4 | 2 | 1 |
+| [`invoice_payment_account_rules`](#invoice_payment_account_rules) | 依發票商家或其他匹配鍵指定付款銀行帳戶的規則。 | 4 | 1 | 1 |
+| [`invoice_payment_accounts`](#invoice_payment_accounts) | 個別發票實際使用的付款銀行帳戶。 | 4 | 2 | 1 |
 | [`invoice_transaction_preferences`](#invoice_transaction_preferences) | 使用者對電子發票與銀行交易是否關聯的決策。 | 5 | 2 | 2 |
 | [`invoices`](#invoices) | 電子發票的抬頭與總額主檔。 | 10 | 0 | 2 |
-| [`manual_assets`](#manual_assets) | 使用者手動登錄、無法由銀行或投資連接器同步的資產。 | 6 | 0 | 0 |
+| [`manual_assets`](#manual_assets) | 使用者手動登錄、無法由銀行或投資連接器同步的資產。 | 12 | 0 | 0 |
 | [`net_worth_history`](#net_worth_history) | 按日期保存的淨資產或資產類別歷史數值，用於圖表與歷史查詢。 | 6 | 0 | 2 |
 | [`notification_preferences`](#notification_preferences) | 此單一部署的同步推播偏好設定。 | 5 | 0 | 0 |
 | [`push_subscriptions`](#push_subscriptions) | 瀏覽器 Web Push 裝置訂閱資料。 | 6 | 0 | 0 |
@@ -176,8 +186,8 @@ CREATE TABLE "bank_balance_snapshots" (
 
 ### `bank_transaction_preferences`
 
-> 用途：使用者對銀行交易計算方式的個別偏好。
-> 注意：目前主要用來記錄交易是否排除於資產或支出計算之外；沒有偏好的交易不會建立記錄。 transaction_id 以 FK 參照 bank_transactions；NO ACTION 禁止刪除仍有偏好引用的交易，合併時須先移轉偏好。
+> 用途：舊版銀行交易計算偏好的相容資料表。
+> 注意：目前的分類行為由 classification_categories.behavior 決定；此表只為舊同步資料與既有 schema 相容保留，應用程式不再以它作為讀取來源。 transaction_id 以 FK 參照 bank_transactions。
 
 #### Columns
 
@@ -187,6 +197,7 @@ CREATE TABLE "bank_balance_snapshots" (
 | 2 | `excluded_from_calculation` | 是否將此交易排除於計算，0 表示納入、1 表示排除。 | INTEGER | NO | 0 | — | — |
 | 3 | `created_at` | 偏好首次建立的時間。 | TEXT | NO | — | — | — |
 | 4 | `updated_at` | 偏好最後更新的時間。 | TEXT | NO | — | — | — |
+| 5 | `cash_withdrawal` | 是否將此交易視為提款至現金，0 表示一般交易、1 表示提款。 | INTEGER | NO | 0 | — | — |
 
 #### Foreign keys
 
@@ -208,7 +219,8 @@ CREATE TABLE "bank_transaction_preferences" (
   excluded_from_calculation INTEGER NOT NULL DEFAULT 0 CHECK (excluded_from_calculation IN (0, 1)),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
-)
+, cash_withdrawal INTEGER NOT NULL DEFAULT 0
+  CHECK (cash_withdrawal IN (0, 1)))
 ```
 
 ### `bank_transactions`
@@ -283,6 +295,74 @@ CREATE TABLE "bank_transactions" (
 )
 ```
 
+### `cash_wallet_settings`
+
+> 用途：現金錢包的開戶餘額設定。
+> 注意：此表固定只有 id 為 default 的一筆 TWD 設定，供現金餘額計算使用。
+
+#### Columns
+
+| 順序 | 欄位 | 意義 | SQLite type | 可為 NULL | 預設值 | PK 順序 | Generated |
+| ---: | --- | --- | --- | :---: | --- | ---: | --- |
+| 1 | `id` | 固定為 default 的設定識別碼。 | TEXT | NO | — | 1 | — |
+| 2 | `opening_balance` | 現金錢包起始餘額。 | INTEGER | NO | 0 | — | — |
+| 3 | `currency` | 現金錢包使用的幣別，目前固定為 TWD。 | TEXT | NO | 'TWD' | — | — |
+| 4 | `updated_at` | 設定最後更新的時間。 | TEXT | NO | — | — | — |
+
+#### Foreign keys
+
+—
+
+#### Indexes
+
+—
+
+#### DDL
+
+```sql
+CREATE TABLE cash_wallet_settings (
+  id TEXT NOT NULL PRIMARY KEY CHECK (id = 'default'),
+  opening_balance INTEGER NOT NULL DEFAULT 0,
+  currency TEXT NOT NULL DEFAULT 'TWD' CHECK (currency = 'TWD'),
+  updated_at TEXT NOT NULL
+)
+```
+
+### `cash_withdrawal_preferences`
+
+> 用途：使用者對銀行交易是否屬於現金提款的偏好。
+> 注意：交易識別碼以 FK 參照 bank_transactions；分類行為仍由 cash_withdrawal 類別決定。
+
+#### Columns
+
+| 順序 | 欄位 | 意義 | SQLite type | 可為 NULL | 預設值 | PK 順序 | Generated |
+| ---: | --- | --- | --- | :---: | --- | ---: | --- |
+| 1 | `transaction_id` | 套用提款偏好的 bank_transactions 記錄識別碼。 | TEXT | NO | — | 1 | — |
+| 2 | `created_at` | 偏好首次建立的時間。 | TEXT | NO | — | — | — |
+| 3 | `updated_at` | 偏好最後更新的時間。 | TEXT | NO | — | — | — |
+
+#### Foreign keys
+
+| 欄位 | 參照表 | 參照欄位 | ON UPDATE | ON DELETE |
+| --- | --- | --- | --- | --- |
+| `transaction_id` | `bank_transactions` | `id` | NO ACTION | NO ACTION |
+
+#### Indexes
+
+| Index | Unique | Partial | 欄位 | 定義 |
+| --- | :---: | :---: | --- | --- |
+| `idx_cash_withdrawal_preferences_updated` | 否 | 否 | `updated_at` | `CREATE INDEX idx_cash_withdrawal_preferences_updated<br>  ON cash_withdrawal_preferences (updated_at)` |
+
+#### DDL
+
+```sql
+CREATE TABLE cash_withdrawal_preferences (
+  transaction_id TEXT NOT NULL PRIMARY KEY REFERENCES bank_transactions (id),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+)
+```
+
 ### `classification_categories`
 
 > 用途：交易與發票使用的分類字典，包含系統預設分類與使用者分類。
@@ -297,6 +377,7 @@ CREATE TABLE "bank_transactions" (
 | 4 | `is_system` | 是否為系統內建分類；1 表示不可視為一般使用者資料刪除。 | INTEGER | NO | 1 | — | — |
 | 5 | `created_at` | 分類建立的時間。 | TEXT | NO | — | — | — |
 | 6 | `updated_at` | 分類最後更新的時間。 | TEXT | NO | — | — | — |
+| 7 | `behavior` | 分類套用後的財務行為：normal 一般收支、asset_transfer 資產轉換、cash_withdrawal 提款至現金、excluded 不列入統計。 | TEXT | NO | 'normal' | — | — |
 
 #### Foreign keys
 
@@ -306,6 +387,7 @@ CREATE TABLE "bank_transactions" (
 
 | Index | Unique | Partial | 欄位 | 定義 |
 | --- | :---: | :---: | --- | --- |
+| `idx_classification_categories_behavior` | 否 | 否 | `behavior` | `CREATE INDEX idx_classification_categories_behavior<br>  ON classification_categories (behavior)` |
 | `idx_classification_categories_label_nocase` | 是 | 否 | `label` | `CREATE UNIQUE INDEX idx_classification_categories_label_nocase<br>  ON classification_categories (label COLLATE NOCASE)` |
 
 #### DDL
@@ -318,6 +400,181 @@ CREATE TABLE "classification_categories" (
   is_system INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
+, behavior TEXT NOT NULL DEFAULT 'normal'
+  CHECK (behavior IN ('normal', 'asset_transfer', 'cash_withdrawal', 'excluded')))
+```
+
+### `classification_merchant_product_rules`
+
+> 用途：商家底下產品或服務文字對應分類的規則。
+> 注意：只有先命中同一商家的商家規則才會套用；這層規則可將同一商家的不同產品或服務分到不同分類。
+
+#### Columns
+
+| 順序 | 欄位 | 意義 | SQLite type | 可為 NULL | 預設值 | PK 順序 | Generated |
+| ---: | --- | --- | --- | :---: | --- | ---: | --- |
+| 1 | `id` | 產品／服務分類規則的穩定識別碼。 | TEXT | NO | — | 1 | — |
+| 2 | `merchant_id` | 所屬 classification_merchants 識別碼。 | TEXT | NO | — | — | — |
+| 3 | `category_id` | 命中規則時套用的 classification_categories 識別碼。 | TEXT | NO | — | — | — |
+| 4 | `target_type` | 規則適用的資料類型；NULL 表示銀行交易與發票品項皆可用。 | TEXT | YES | — | — | — |
+| 5 | `field` | 要比對的欄位，例如 description、counterparty 或 any_text。 | TEXT | NO | — | — | — |
+| 6 | `operator` | 比對運算子，例如 contains 或 regex。 | TEXT | NO | — | — | — |
+| 7 | `pattern` | 運算子使用的產品或服務文字模式。 | TEXT | NO | — | — | — |
+| 8 | `priority` | 同一商家多個產品／服務規則命中時的優先序。 | INTEGER | NO | 100 | — | — |
+| 9 | `enabled` | 規則是否啟用。 | INTEGER | NO | 1 | — | — |
+| 10 | `is_system` | 是否為系統內建規則。 | INTEGER | NO | 0 | — | — |
+| 11 | `source` | 規則來源，例如 system 或 user。 | TEXT | NO | 'user' | — | — |
+| 12 | `description` | 規則用途的可讀說明。 | TEXT | YES | — | — | — |
+| 13 | `created_at` | 規則建立的時間。 | TEXT | NO | — | — | — |
+| 14 | `updated_at` | 規則最後更新的時間。 | TEXT | NO | — | — | — |
+
+#### Foreign keys
+
+| 欄位 | 參照表 | 參照欄位 | ON UPDATE | ON DELETE |
+| --- | --- | --- | --- | --- |
+| `category_id` | `classification_categories` | `id` | NO ACTION | NO ACTION |
+| `merchant_id` | `classification_merchants` | `id` | NO ACTION | NO ACTION |
+
+#### Indexes
+
+| Index | Unique | Partial | 欄位 | 定義 |
+| --- | :---: | :---: | --- | --- |
+| `idx_classification_merchant_product_rules_category` | 否 | 否 | `category_id` | `CREATE INDEX idx_classification_merchant_product_rules_category<br>  ON classification_merchant_product_rules (category_id)` |
+| `idx_classification_merchant_product_rules_lookup` | 否 | 否 | `merchant_id`, `enabled`, `target_type`, `priority` | `CREATE INDEX idx_classification_merchant_product_rules_lookup<br>  ON classification_merchant_product_rules (merchant_id, enabled, target_type, priority)` |
+
+#### DDL
+
+```sql
+CREATE TABLE classification_merchant_product_rules (
+  id TEXT NOT NULL PRIMARY KEY,
+  merchant_id TEXT NOT NULL,
+  category_id TEXT NOT NULL,
+  target_type TEXT CHECK (
+    target_type IS NULL OR target_type IN ('bank_transaction', 'invoice_item')
+  ),
+  field TEXT NOT NULL CHECK (
+    field IN ('description', 'counterparty', 'any_text', 'source_id')
+  ),
+  operator TEXT NOT NULL CHECK (
+    operator IN ('contains', 'equals', 'starts_with', 'regex')
+  ),
+  pattern TEXT NOT NULL,
+  priority INTEGER NOT NULL DEFAULT 100,
+  enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+  is_system INTEGER NOT NULL DEFAULT 0 CHECK (is_system IN (0, 1)),
+  source TEXT NOT NULL DEFAULT 'user',
+  description TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (merchant_id) REFERENCES classification_merchants (id),
+  FOREIGN KEY (category_id) REFERENCES classification_categories (id)
+)
+```
+
+### `classification_merchant_rules`
+
+> 用途：將交易或發票品項匹配到商家的文字規則。
+> 注意：規則只負責找出商家，不直接指定分類；命中後才會進入該商家的產品／服務規則。
+
+#### Columns
+
+| 順序 | 欄位 | 意義 | SQLite type | 可為 NULL | 預設值 | PK 順序 | Generated |
+| ---: | --- | --- | --- | :---: | --- | ---: | --- |
+| 1 | `id` | 商家匹配規則的穩定識別碼。 | TEXT | NO | — | 1 | — |
+| 2 | `merchant_id` | 要匹配的 classification_merchants 識別碼。 | TEXT | NO | — | — | — |
+| 3 | `target_type` | 規則適用的資料類型；NULL 表示銀行交易與發票品項皆可用。 | TEXT | YES | — | — | — |
+| 4 | `field` | 要比對的欄位，例如 merchant_name、description 或 any_text。 | TEXT | NO | — | — | — |
+| 5 | `operator` | 比對運算子，例如 contains 或 regex。 | TEXT | NO | — | — | — |
+| 6 | `pattern` | 運算子使用的商家文字模式。 | TEXT | NO | — | — | — |
+| 7 | `priority` | 同一交易多個商家規則命中時的優先序。 | INTEGER | NO | 100 | — | — |
+| 8 | `enabled` | 規則是否啟用。 | INTEGER | NO | 1 | — | — |
+| 9 | `is_system` | 是否為系統內建規則。 | INTEGER | NO | 0 | — | — |
+| 10 | `source` | 規則來源，例如 system 或 user。 | TEXT | NO | 'user' | — | — |
+| 11 | `description` | 規則用途的可讀說明。 | TEXT | YES | — | — | — |
+| 12 | `created_at` | 規則建立的時間。 | TEXT | NO | — | — | — |
+| 13 | `updated_at` | 規則最後更新的時間。 | TEXT | NO | — | — | — |
+
+#### Foreign keys
+
+| 欄位 | 參照表 | 參照欄位 | ON UPDATE | ON DELETE |
+| --- | --- | --- | --- | --- |
+| `merchant_id` | `classification_merchants` | `id` | NO ACTION | NO ACTION |
+
+#### Indexes
+
+| Index | Unique | Partial | 欄位 | 定義 |
+| --- | :---: | :---: | --- | --- |
+| `idx_classification_merchant_rules_merchant_priority` | 否 | 否 | `merchant_id`, `enabled`, `target_type`, `priority` | `CREATE INDEX idx_classification_merchant_rules_merchant_priority<br>  ON classification_merchant_rules (merchant_id, enabled, target_type, priority)` |
+
+#### DDL
+
+```sql
+CREATE TABLE classification_merchant_rules (
+  id TEXT NOT NULL PRIMARY KEY,
+  merchant_id TEXT NOT NULL,
+  target_type TEXT CHECK (
+    target_type IS NULL OR target_type IN ('bank_transaction', 'invoice_item')
+  ),
+  field TEXT NOT NULL CHECK (
+    field IN ('merchant_name', 'description', 'counterparty', 'any_text', 'source_id')
+  ),
+  operator TEXT NOT NULL CHECK (
+    operator IN ('contains', 'equals', 'starts_with', 'regex')
+  ),
+  pattern TEXT NOT NULL,
+  priority INTEGER NOT NULL DEFAULT 100,
+  enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+  is_system INTEGER NOT NULL DEFAULT 0 CHECK (is_system IN (0, 1)),
+  source TEXT NOT NULL DEFAULT 'user',
+  description TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (merchant_id) REFERENCES classification_merchants (id)
+)
+```
+
+### `classification_merchants`
+
+> 用途：可被交易或發票品項匹配的商家主檔。
+> 注意：normalized_name 用於去除大小寫、全半形與空白差異；default_category_id 是未命中產品／服務規則時的商家預設分類。
+
+#### Columns
+
+| 順序 | 欄位 | 意義 | SQLite type | 可為 NULL | 預設值 | PK 順序 | Generated |
+| ---: | --- | --- | --- | :---: | --- | ---: | --- |
+| 1 | `id` | 商家的穩定識別碼。 | TEXT | NO | — | 1 | — |
+| 2 | `name` | 前端顯示的商家名稱。 | TEXT | NO | — | — | — |
+| 3 | `normalized_name` | 用於唯一性與商家辨識的正規化名稱。 | TEXT | NO | — | — | — |
+| 4 | `default_category_id` | 商家未命中產品／服務規則時套用的分類識別碼；可為 NULL。 | TEXT | YES | — | — | — |
+| 5 | `is_system` | 是否為系統內建商家。 | INTEGER | NO | 0 | — | — |
+| 6 | `created_at` | 商家建立的時間。 | TEXT | NO | — | — | — |
+| 7 | `updated_at` | 商家最後更新的時間。 | TEXT | NO | — | — | — |
+
+#### Foreign keys
+
+| 欄位 | 參照表 | 參照欄位 | ON UPDATE | ON DELETE |
+| --- | --- | --- | --- | --- |
+| `default_category_id` | `classification_categories` | `id` | NO ACTION | NO ACTION |
+
+#### Indexes
+
+| Index | Unique | Partial | 欄位 | 定義 |
+| --- | :---: | :---: | --- | --- |
+| `idx_classification_merchants_default_category` | 否 | 否 | `default_category_id` | `CREATE INDEX idx_classification_merchants_default_category<br>  ON classification_merchants (default_category_id)` |
+| `idx_classification_merchants_normalized_name` | 是 | 否 | `normalized_name` | `CREATE UNIQUE INDEX idx_classification_merchants_normalized_name<br>  ON classification_merchants (normalized_name COLLATE NOCASE)` |
+
+#### DDL
+
+```sql
+CREATE TABLE classification_merchants (
+  id TEXT NOT NULL PRIMARY KEY,
+  name TEXT NOT NULL,
+  normalized_name TEXT NOT NULL,
+  default_category_id TEXT,
+  is_system INTEGER NOT NULL DEFAULT 0 CHECK (is_system IN (0, 1)),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (default_category_id) REFERENCES classification_categories (id)
 )
 ```
 
@@ -385,7 +642,7 @@ CREATE TABLE "classification_overrides" (
 | 11 | `description` | 規則用途的可讀說明。 | TEXT | YES | — | — | — |
 | 12 | `created_at` | 規則建立的時間。 | TEXT | NO | — | — | — |
 | 13 | `updated_at` | 規則最後更新的時間。 | TEXT | NO | — | — | — |
-| 14 | `excluded_from_calculation` | 符合規則的交易是否預設排除於計算，0 表示納入、1 表示排除。 | INTEGER | NO | 0 | — | — |
+| 14 | `excluded_from_calculation` | 舊版相容欄位；新的排除與現金流向行為由 category_id 對應分類的 behavior 決定。 | INTEGER | NO | 0 | — | — |
 
 #### Foreign keys
 
@@ -692,6 +949,48 @@ CREATE TABLE "exchange_rates" (
 )
 ```
 
+### `investment_position_cost_overrides`
+
+> 用途：使用者為同步持倉指定的每單位成本，依連接器及穩定持倉鍵保存，不隨每日快照更新而消失。
+> 注意：成本基礎由最新持倉數量乘上 cost_per_share 計算；此表不修改連接器原始持倉資料。
+
+#### Columns
+
+| 順序 | 欄位 | 意義 | SQLite type | 可為 NULL | 預設值 | PK 順序 | Generated |
+| ---: | --- | --- | --- | :---: | --- | ---: | --- |
+| 1 | `id` | 成本覆寫的穩定識別碼。 | TEXT | NO | — | 1 | — |
+| 2 | `connector_id` | 持倉所屬連接器。 | TEXT | NO | — | — | — |
+| 3 | `holding_key` | 持倉的穩定鍵；TDCC 使用券商帳戶與標的代碼，不包含快照日期。 | TEXT | NO | — | — | — |
+| 4 | `cost_per_share` | 使用者提供的每股或每單位平均成本。 | REAL | NO | — | — | — |
+| 5 | `currency` | 成本單價幣別。 | TEXT | NO | 'TWD' | — | — |
+| 6 | `created_at` | 首次建立時間。 | TEXT | NO | — | — | — |
+| 7 | `updated_at` | 最後更新時間。 | TEXT | NO | — | — | — |
+
+#### Foreign keys
+
+—
+
+#### Indexes
+
+| Index | Unique | Partial | 欄位 | 定義 |
+| --- | :---: | :---: | --- | --- |
+| `idx_investment_position_cost_overrides_source` | 否 | 否 | `connector_id`, `holding_key` | `CREATE INDEX idx_investment_position_cost_overrides_source<br>  ON investment_position_cost_overrides (connector_id, holding_key)` |
+
+#### DDL
+
+```sql
+CREATE TABLE investment_position_cost_overrides (
+  id TEXT NOT NULL PRIMARY KEY,
+  connector_id TEXT NOT NULL,
+  holding_key TEXT NOT NULL,
+  cost_per_share REAL NOT NULL CHECK (cost_per_share > 0),
+  currency TEXT NOT NULL DEFAULT 'TWD',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE (connector_id, holding_key)
+)
+```
+
 ### `investment_positions`
 
 > 用途：投資帳戶在特定日期的持倉與資產市值快照。
@@ -748,6 +1047,49 @@ CREATE TABLE "investment_positions" (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   UNIQUE (connector_id, source_id, as_of_date)
+)
+```
+
+### `investment_transaction_amount_overrides`
+
+> 用途：使用者補登投資交易成交總額的覆寫資料。
+> 注意：不修改連接器同步的原始 amount；查詢時以此表的 amount 優先，清除覆寫即可恢復原始資料。
+
+#### Columns
+
+| 順序 | 欄位 | 意義 | SQLite type | 可為 NULL | 預設值 | PK 順序 | Generated |
+| ---: | --- | --- | --- | :---: | --- | ---: | --- |
+| 1 | `id` | 覆寫記錄的系統識別碼。 | TEXT | NO | — | 1 | — |
+| 2 | `transaction_id` | 被補登成交總額的 investment_transactions 記錄識別碼。 | TEXT | NO | — | — | — |
+| 3 | `amount` | 使用者補登的成交總額，必須為正整數。 | INTEGER | NO | — | — | — |
+| 4 | `created_at` | 覆寫首次建立的時間。 | TEXT | NO | — | — | — |
+| 5 | `updated_at` | 覆寫最後更新的時間。 | TEXT | NO | — | — | — |
+| 6 | `source` | 成交總額的來源：manual 使用者補登，historical-close 依交易日收盤價估算。 | TEXT | NO | 'manual' | — | — |
+| 7 | `reference_price` | 估算成交額使用的參考單價；實際手動補登時為空。 | REAL | YES | — | — | — |
+| 8 | `price_date` | 參考價格所屬的交易日期。 | TEXT | YES | — | — | — |
+| 9 | `provider` | 參考價格資料來源，例如 twse。 | TEXT | YES | — | — | — |
+
+#### Foreign keys
+
+—
+
+#### Indexes
+
+| Index | Unique | Partial | 欄位 | 定義 |
+| --- | :---: | :---: | --- | --- |
+| `idx_investment_transaction_amount_overrides_transaction` | 否 | 否 | `transaction_id` | `CREATE INDEX idx_investment_transaction_amount_overrides_transaction<br>  ON investment_transaction_amount_overrides (transaction_id)` |
+
+#### DDL
+
+```sql
+CREATE TABLE investment_transaction_amount_overrides (
+  id TEXT NOT NULL PRIMARY KEY,
+  transaction_id TEXT NOT NULL,
+  amount INTEGER NOT NULL CHECK (amount > 0),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL, source TEXT NOT NULL DEFAULT 'manual'
+  CHECK (source IN ('manual', 'historical-close')), reference_price REAL, price_date TEXT, provider TEXT,
+  UNIQUE (transaction_id)
 )
 ```
 
@@ -845,6 +1187,7 @@ CREATE TABLE "investment_transactions" (
 | 11 | `raw_payload` | 連接器回傳的原始或正規化 JSON。 | TEXT | YES | — | — | — |
 | 12 | `created_at` | 明細首次寫入的時間。 | TEXT | NO | — | — | — |
 | 13 | `updated_at` | 明細最後更新的時間。 | TEXT | NO | — | — | — |
+| 14 | `line_type` | 明細的金額語意：item 商品、allowance 折讓／折抵、refund 退貨／退款、fee 費用。 | TEXT | NO | 'item' | — | — |
 
 #### Foreign keys
 
@@ -875,9 +1218,127 @@ CREATE TABLE "invoice_line_items" (
   amount INTEGER NOT NULL,
   raw_payload TEXT,
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL, line_type TEXT NOT NULL DEFAULT 'item'
+  CHECK (line_type IN ('item', 'allowance', 'refund', 'fee')),
   FOREIGN KEY (invoice_id) REFERENCES "invoices" (id) ON DELETE CASCADE,
   UNIQUE (connector_id, invoice_source_id, source_id)
+)
+```
+
+### `invoice_merchant_overrides`
+
+> 用途：使用者對單張發票指定的分類商家覆寫。
+> 注意：覆寫只影響該張發票；清除後恢復使用發票原始 seller_name，商家的產品規則仍由分類商家層管理。
+
+#### Columns
+
+| 順序 | 欄位 | 意義 | SQLite type | 可為 NULL | 預設值 | PK 順序 | Generated |
+| ---: | --- | --- | --- | :---: | --- | ---: | --- |
+| 1 | `invoice_id` | 被指定商家的發票識別碼。 | TEXT | NO | — | 1 | — |
+| 2 | `merchant_id` | 使用者指定的 classification_merchants 識別碼。 | TEXT | NO | — | — | — |
+| 3 | `created_at` | 覆寫建立的時間。 | TEXT | NO | — | — | — |
+| 4 | `updated_at` | 覆寫最後更新的時間。 | TEXT | NO | — | — | — |
+
+#### Foreign keys
+
+| 欄位 | 參照表 | 參照欄位 | ON UPDATE | ON DELETE |
+| --- | --- | --- | --- | --- |
+| `merchant_id` | `classification_merchants` | `id` | NO ACTION | CASCADE |
+| `invoice_id` | `invoices` | `id` | NO ACTION | CASCADE |
+
+#### Indexes
+
+| Index | Unique | Partial | 欄位 | 定義 |
+| --- | :---: | :---: | --- | --- |
+| `idx_invoice_merchant_overrides_merchant` | 否 | 否 | `merchant_id` | `CREATE INDEX idx_invoice_merchant_overrides_merchant<br>  ON invoice_merchant_overrides (merchant_id)` |
+
+#### DDL
+
+```sql
+CREATE TABLE invoice_merchant_overrides (
+  invoice_id TEXT NOT NULL PRIMARY KEY,
+  merchant_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
+  FOREIGN KEY (merchant_id) REFERENCES classification_merchants(id) ON DELETE CASCADE
+)
+```
+
+### `invoice_payment_account_rules`
+
+> 用途：依發票商家或其他匹配鍵指定付款銀行帳戶的規則。
+
+#### Columns
+
+| 順序 | 欄位 | 意義 | SQLite type | 可為 NULL | 預設值 | PK 順序 | Generated |
+| ---: | --- | --- | --- | :---: | --- | ---: | --- |
+| 1 | `match_key` | 發票付款帳戶匹配用的唯一鍵。 | TEXT | NO | — | 1 | — |
+| 2 | `account_id` | 套用的 bank_accounts 帳戶識別碼。 | TEXT | NO | — | — | — |
+| 3 | `created_at` | 規則建立的時間。 | TEXT | NO | — | — | — |
+| 4 | `updated_at` | 規則最後更新的時間。 | TEXT | NO | — | — | — |
+
+#### Foreign keys
+
+| 欄位 | 參照表 | 參照欄位 | ON UPDATE | ON DELETE |
+| --- | --- | --- | --- | --- |
+| `account_id` | `bank_accounts` | `id` | NO ACTION | NO ACTION |
+
+#### Indexes
+
+| Index | Unique | Partial | 欄位 | 定義 |
+| --- | :---: | :---: | --- | --- |
+| `idx_invoice_payment_account_rules_account` | 否 | 否 | `account_id` | `CREATE INDEX idx_invoice_payment_account_rules_account<br>  ON invoice_payment_account_rules (account_id)` |
+
+#### DDL
+
+```sql
+CREATE TABLE invoice_payment_account_rules (
+  match_key TEXT NOT NULL PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (account_id) REFERENCES bank_accounts(id)
+)
+```
+
+### `invoice_payment_accounts`
+
+> 用途：個別發票實際使用的付款銀行帳戶。
+> 注意：發票刪除時一併刪除對應的付款帳戶設定。
+
+#### Columns
+
+| 順序 | 欄位 | 意義 | SQLite type | 可為 NULL | 預設值 | PK 順序 | Generated |
+| ---: | --- | --- | --- | :---: | --- | ---: | --- |
+| 1 | `invoice_id` | 所屬 invoices 記錄的識別碼。 | TEXT | NO | — | 1 | — |
+| 2 | `account_id` | 付款用的 bank_accounts 帳戶識別碼。 | TEXT | NO | — | — | — |
+| 3 | `created_at` | 付款帳戶關聯建立的時間。 | TEXT | NO | — | — | — |
+| 4 | `updated_at` | 付款帳戶關聯最後更新的時間。 | TEXT | NO | — | — | — |
+
+#### Foreign keys
+
+| 欄位 | 參照表 | 參照欄位 | ON UPDATE | ON DELETE |
+| --- | --- | --- | --- | --- |
+| `account_id` | `bank_accounts` | `id` | NO ACTION | NO ACTION |
+| `invoice_id` | `invoices` | `id` | NO ACTION | CASCADE |
+
+#### Indexes
+
+| Index | Unique | Partial | 欄位 | 定義 |
+| --- | :---: | :---: | --- | --- |
+| `idx_invoice_payment_accounts_account` | 否 | 否 | `account_id` | `CREATE INDEX idx_invoice_payment_accounts_account<br>  ON invoice_payment_accounts (account_id)` |
+
+#### DDL
+
+```sql
+CREATE TABLE invoice_payment_accounts (
+  invoice_id TEXT NOT NULL PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
+  FOREIGN KEY (account_id) REFERENCES bank_accounts(id)
 )
 ```
 
@@ -916,12 +1377,12 @@ CREATE TABLE "invoice_line_items" (
 CREATE TABLE "invoice_transaction_preferences" (
   invoice_id TEXT NOT NULL PRIMARY KEY REFERENCES invoices (id),
   transaction_id TEXT REFERENCES bank_transactions (id),
-  decision TEXT NOT NULL CHECK (decision IN ('linked', 'separate')),
+  decision TEXT NOT NULL CHECK (decision IN ('linked', 'separate', 'cash')),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   CHECK (
     (decision = 'linked' AND transaction_id IS NOT NULL)
-    OR decision = 'separate'
+    OR decision IN ('separate', 'cash')
   )
 )
 ```
@@ -990,6 +1451,12 @@ CREATE TABLE "invoices" (
 | 4 | `note` | 使用者補充的備註。 | TEXT | YES | — | — | — |
 | 5 | `created_at` | 手動資產建立的時間。 | TEXT | NO | — | — | — |
 | 6 | `currency` | 資產估值使用的幣別，預設為 TWD。 | TEXT | NO | 'TWD' | — | — |
+| 7 | `symbol` | 可選的市場代號，例如美股 AAPL 或 ETF VOO。 | TEXT | YES | — | — | — |
+| 8 | `quantity` | 可選的持有數量，供未來以市場價格更新估值。 | REAL | YES | — | — | — |
+| 9 | `market_price` | 行情提供者最近回傳的單股價格。 | REAL | YES | — | — | — |
+| 10 | `market_price_as_of` | 最近一次行情價格的擷取時間。 | TEXT | YES | — | — | — |
+| 11 | `market_price_provider` | 行情價格來源，例如 twelve-data。 | TEXT | YES | — | — | — |
+| 12 | `cost_per_share` | 手動證券持倉的每股平均成本，與 quantity 一起計算成本基準。 | REAL | YES | — | — | — |
 
 #### Foreign keys
 
@@ -1008,7 +1475,7 @@ CREATE TABLE "manual_assets" (
   category TEXT NOT NULL,
   note TEXT,
   created_at TEXT NOT NULL
-, currency TEXT NOT NULL DEFAULT 'TWD')
+, currency TEXT NOT NULL DEFAULT 'TWD', symbol TEXT, quantity REAL, market_price REAL, market_price_as_of TEXT, market_price_provider TEXT, cost_per_share REAL)
 ```
 
 ### `net_worth_history`
@@ -1679,6 +2146,24 @@ Migration 是 schema 演進的 source of truth；若要了解某欄位的變更�
 - [`0045_preference_foreign_keys.sql`](../packages/db/migrations/0045_preference_foreign_keys.sql)
 - [`0046_transaction_self_foreign_keys.sql`](../packages/db/migrations/0046_transaction_self_foreign_keys.sql)
 - [`0047_sync_activity_details.sql`](../packages/db/migrations/0047_sync_activity_details.sql)
+- [`0048_expand_bank_classification_keywords.sql`](../packages/db/migrations/0048_expand_bank_classification_keywords.sql)
+- [`0049_cash_invoice_payment.sql`](../packages/db/migrations/0049_cash_invoice_payment.sql)
+- [`0050_bank_cash_withdrawal.sql`](../packages/db/migrations/0050_bank_cash_withdrawal.sql)
+- [`0051_cash_withdrawal_preferences.sql`](../packages/db/migrations/0051_cash_withdrawal_preferences.sql)
+- [`0052_classification_behaviors.sql`](../packages/db/migrations/0052_classification_behaviors.sql)
+- [`0053_manual_asset_market_metadata.sql`](../packages/db/migrations/0053_manual_asset_market_metadata.sql)
+- [`0054_manual_asset_market_quotes.sql`](../packages/db/migrations/0054_manual_asset_market_quotes.sql)
+- [`0055_invoice_payment_account_rules.sql`](../packages/db/migrations/0055_invoice_payment_account_rules.sql)
+- [`0056_invoice_payment_accounts.sql`](../packages/db/migrations/0056_invoice_payment_accounts.sql)
+- [`0057_classification_merchant_layers.sql`](../packages/db/migrations/0057_classification_merchant_layers.sql)
+- [`0058_manual_asset_cost_basis.sql`](../packages/db/migrations/0058_manual_asset_cost_basis.sql)
+- [`0059_invoice_line_semantics.sql`](../packages/db/migrations/0059_invoice_line_semantics.sql)
+- [`0060_backfill_tdcc_transaction_summary.sql`](../packages/db/migrations/0060_backfill_tdcc_transaction_summary.sql)
+- [`0061_normalize_invoice_allowances.sql`](../packages/db/migrations/0061_normalize_invoice_allowances.sql)
+- [`0062_investment_position_cost_overrides.sql`](../packages/db/migrations/0062_investment_position_cost_overrides.sql)
+- [`0063_invoice_item_default_rules.sql`](../packages/db/migrations/0063_invoice_item_default_rules.sql)
+- [`0064_investment_transaction_amount_overrides.sql`](../packages/db/migrations/0064_investment_transaction_amount_overrides.sql)
+- [`0065_investment_transaction_amount_override_metadata.sql`](../packages/db/migrations/0065_investment_transaction_amount_override_metadata.sql)
 
 ## 程式碼導覽
 

@@ -28,7 +28,49 @@ export async function getManualAssets(db: D1Database) {
   const valueMap = Object.fromEntries(
     history.map((row) => [row.assetId, { value: row.value, date: row.date }]),
   );
-  return assets.map((asset) => ({ ...asset, ...valueMap[asset.id] }));
+  return assets
+    .filter((asset) => asset.category !== "us_stock")
+    .map((asset) => ({ ...asset, ...valueMap[asset.id] }));
+}
+
+export async function getManualInvestmentHoldings(db: D1Database) {
+  const [assets, history] = await Promise.all([
+    listManualAssetRecords(db),
+    listLatestManualAssetValues(db),
+  ]);
+  const valueMap = new Map(
+    history.map((row) => [row.assetId, { value: row.value, date: row.date }]),
+  );
+
+  return assets
+    .filter((asset) => asset.category === "us_stock")
+    .map((asset) => {
+      const latest = valueMap.get(asset.id);
+      return {
+        id: asset.id,
+        assetType: "stock" as const,
+        symbol: asset.symbol,
+        name: asset.name,
+        quantity: asset.quantity,
+        marketValue:
+          latest?.value ??
+          (asset.quantity != null && asset.costPerShare != null
+            ? Math.round(asset.quantity * asset.costPerShare)
+            : null),
+        cashBalance: 0,
+        currency: asset.currency,
+        asOfDate: latest?.date ?? asset.createdAt.slice(0, 10),
+        costPerShare: asset.costPerShare,
+        costBasis:
+          asset.quantity != null && asset.costPerShare != null
+            ? Math.round(asset.quantity * asset.costPerShare)
+            : null,
+        marketPrice: asset.marketPrice,
+        marketPriceAsOf: asset.marketPriceAsOf,
+        marketPriceProvider: asset.marketPriceProvider,
+        isManual: true as const,
+      };
+    });
 }
 
 export async function addManualAsset(
@@ -39,6 +81,7 @@ export async function addManualAsset(
     note?: string;
     symbol?: string | null;
     quantity?: number | null;
+    costPerShare?: number | null;
     currency: string;
     value: number;
     date: string;
@@ -63,12 +106,70 @@ export function editManualAsset(
     note?: string | null;
     symbol?: string | null;
     quantity?: number | null;
+    costPerShare?: number | null;
     currency?: string;
     value?: number;
     date?: string;
   },
 ) {
   return updateManualAssetRecord(db, id, input, new Date().toISOString());
+}
+
+export async function addManualInvestmentHolding(
+  db: D1Database,
+  input: {
+    name: string;
+    symbol: string;
+    quantity: number;
+    costPerShare: number;
+    note?: string;
+  },
+) {
+  const now = new Date();
+  return addManualAsset(db, {
+    name: input.name,
+    category: "us_stock",
+    note: input.note,
+    symbol: input.symbol.toUpperCase(),
+    quantity: input.quantity,
+    costPerShare: input.costPerShare,
+    currency: "USD",
+    value: Math.round(input.quantity * input.costPerShare),
+    date: taipeiDate(now),
+  });
+}
+
+export function editManualInvestmentHolding(
+  db: D1Database,
+  id: string,
+  input: {
+    name?: string;
+    symbol?: string;
+    quantity?: number;
+    costPerShare?: number;
+    note?: string | null;
+  },
+) {
+  const now = new Date();
+  return updateManualAssetRecord(
+    db,
+    id,
+    {
+      name: input.name,
+      symbol: input.symbol,
+      quantity: input.quantity,
+      costPerShare: input.costPerShare,
+      note: input.note,
+      currency: "USD",
+      ...(input.quantity !== undefined && input.costPerShare !== undefined
+        ? {
+            value: Math.round(input.quantity * input.costPerShare),
+            date: taipeiDate(now),
+          }
+        : {}),
+    },
+    now.toISOString(),
+  );
 }
 
 export function removeManualAsset(db: D1Database, id: string) {
@@ -86,14 +187,20 @@ export async function refreshManualAssetQuotes(
   db: D1Database,
   apiKey: string | undefined,
   fetcher: typeof fetch = fetch,
-  options: { force?: boolean; now?: Date } = {},
+  options: {
+    force?: boolean;
+    now?: Date;
+    ids?: readonly string[];
+  } = {},
 ): Promise<ManualAssetQuoteRefreshResult> {
   if (!apiKey?.trim()) {
     return { status: "not_configured", updated: 0, skipped: 0, failed: 0 };
   }
 
   const assets = await listManualAssetRecords(db);
-  const candidates = assets.filter((asset) => asset.symbol);
+  const candidates = assets.filter(
+    (asset) => asset.symbol && (!options.ids || options.ids.includes(asset.id)),
+  );
   if (candidates.length === 0) {
     return { status: "nothing_to_update", updated: 0, skipped: 0, failed: 0 };
   }
@@ -106,7 +213,8 @@ export async function refreshManualAssetQuotes(
     if (
       !options.force &&
       asset.marketPriceAsOf &&
-      now.getTime() - new Date(asset.marketPriceAsOf).getTime() < QUOTE_MAX_AGE_MS
+      now.getTime() - new Date(asset.marketPriceAsOf).getTime() <
+        QUOTE_MAX_AGE_MS
     ) {
       skipped += 1;
       continue;

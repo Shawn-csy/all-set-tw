@@ -1,5 +1,11 @@
 import type { ConnectorId } from "@taiwan-fin-hub/core";
-import { createDrizzle, invoiceLineItems, invoices } from "@taiwan-fin-hub/db";
+import {
+  classificationMerchants,
+  createDrizzle,
+  invoiceLineItems,
+  invoiceMerchantOverrides,
+  invoices,
+} from "@taiwan-fin-hub/db";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import type { MonthDateRange } from "../../platform/month-range";
 
@@ -32,18 +38,23 @@ export type InvoiceRow = {
   invoiceDate: string;
   sellerName: string | null;
   amount: number;
+  classificationMerchantId?: string | null;
+  classificationMerchantName?: string | null;
   updatedAt: string;
 };
 
 export type InvoiceItemRow = {
   id: string;
   invoiceId: string;
+  merchantId: string | null;
+  merchantName: string | null;
   sourceId: string;
   lineNumber: number;
   description: string;
   quantity: number | null;
   unitPrice: number | null;
   amount: number;
+  lineType: "item" | "allowance" | "refund" | "fee";
 };
 
 export async function listInvoices(
@@ -104,14 +115,28 @@ export async function listInvoiceItems(db: D1Database, invoiceIds: string[]) {
     .select({
       id: invoiceLineItems.id,
       invoiceId: invoiceLineItems.invoiceId,
+      merchantId: invoiceMerchantOverrides.merchantId,
+      merchantName: sql<
+        string | null
+      >`COALESCE(${classificationMerchants.name}, ${invoices.sellerName})`,
       sourceId: invoiceLineItems.sourceId,
       lineNumber: invoiceLineItems.lineNumber,
       description: invoiceLineItems.description,
       quantity: invoiceLineItems.quantity,
       unitPrice: invoiceLineItems.unitPrice,
       amount: invoiceLineItems.amount,
+      lineType: sql<InvoiceItemRow["lineType"]>`${invoiceLineItems.lineType}`,
     })
     .from(invoiceLineItems)
+    .innerJoin(invoices, eq(invoices.id, invoiceLineItems.invoiceId))
+    .leftJoin(
+      invoiceMerchantOverrides,
+      eq(invoiceMerchantOverrides.invoiceId, invoiceLineItems.invoiceId),
+    )
+    .leftJoin(
+      classificationMerchants,
+      eq(classificationMerchants.id, invoiceMerchantOverrides.merchantId),
+    )
     .where(
       sql`${invoiceLineItems.invoiceId} IN (SELECT value FROM json_each(${JSON.stringify(invoiceIds)}))`,
     )
@@ -126,10 +151,54 @@ export async function listInvoiceItems(db: D1Database, invoiceIds: string[]) {
 export async function findInvoice(db: D1Database, invoiceId: string) {
   return (
     (await createDrizzle(db)
-      .select(invoiceSummaryColumns)
+      .select({
+        ...invoiceSummaryColumns,
+        classificationMerchantId: invoiceMerchantOverrides.merchantId,
+        classificationMerchantName: classificationMerchants.name,
+      })
       .from(invoices)
+      .leftJoin(
+        invoiceMerchantOverrides,
+        eq(invoiceMerchantOverrides.invoiceId, invoices.id),
+      )
+      .leftJoin(
+        classificationMerchants,
+        eq(classificationMerchants.id, invoiceMerchantOverrides.merchantId),
+      )
       .where(eq(invoices.id, invoiceId))
       .limit(1)
       .get()) ?? null
   );
+}
+
+export async function upsertInvoiceMerchantOverride(
+  db: D1Database,
+  input: { invoiceId: string; merchantId: string; now: string },
+) {
+  await createDrizzle(db)
+    .insert(invoiceMerchantOverrides)
+    .values({
+      invoiceId: input.invoiceId,
+      merchantId: input.merchantId,
+      createdAt: input.now,
+      updatedAt: input.now,
+    })
+    .onConflictDoUpdate({
+      target: invoiceMerchantOverrides.invoiceId,
+      set: {
+        merchantId: input.merchantId,
+        updatedAt: input.now,
+      },
+    })
+    .run();
+}
+
+export async function deleteInvoiceMerchantOverride(
+  db: D1Database,
+  invoiceId: string,
+) {
+  await createDrizzle(db)
+    .delete(invoiceMerchantOverrides)
+    .where(eq(invoiceMerchantOverrides.invoiceId, invoiceId))
+    .run();
 }

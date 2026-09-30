@@ -108,6 +108,9 @@ const TEXT_PRIMARY_KEY_COLUMNS: Array<{ table: string; column: string }> = [
   { table: "bank_transaction_preferences", column: "transaction_id" },
   { table: "bank_transactions", column: "id" },
   { table: "classification_categories", column: "id" },
+  { table: "classification_merchants", column: "id" },
+  { table: "classification_merchant_product_rules", column: "id" },
+  { table: "classification_merchant_rules", column: "id" },
   { table: "classification_overrides", column: "id" },
   { table: "classification_rules", column: "id" },
   { table: "connector_settings", column: "id" },
@@ -116,8 +119,11 @@ const TEXT_PRIMARY_KEY_COLUMNS: Array<{ table: string; column: string }> = [
   { table: "einvoice_sync_runs", column: "id" },
   { table: "exchange_rates", column: "currency" },
   { table: "investment_positions", column: "id" },
+  { table: "investment_position_cost_overrides", column: "id" },
   { table: "investment_transactions", column: "id" },
   { table: "invoice_line_items", column: "id" },
+  { table: "invoice_payment_account_rules", column: "match_key" },
+  { table: "invoice_payment_accounts", column: "invoice_id" },
   { table: "invoice_transaction_preferences", column: "invoice_id" },
   { table: "invoices", column: "id" },
   { table: "manual_assets", column: "id" },
@@ -215,7 +221,7 @@ describe("Drizzle schema parity", () => {
         }
       }
       const expected = inspect(migrated);
-      expect(expected).toHaveLength(33);
+      expect(expected).toHaveLength(41);
       expect(inspect(generated)).toEqual(expected);
       expect(generated.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
       // An unchanged schema must never produce an initialization migration.

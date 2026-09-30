@@ -133,6 +133,15 @@ test.beforeEach(async ({ page }) => {
       ];
     else if (path === "/api/manual-assets" && method === "GET")
       body = manualAssets;
+    else if (path === "/api/cash-wallet")
+      body = {
+        openingBalance: 0,
+        cashWithdrawals: 0,
+        cashExpenses: 0,
+        balance: 0,
+        currency: "TWD",
+        updatedAt: null,
+      };
     else if (path === "/api/manual-assets" && method === "POST") {
       const input = route.request().postDataJSON();
       const id = `manual-${manualAssets.length + 1}`;
@@ -239,7 +248,9 @@ test("keeps the mobile ledger readable and expandable", async ({ page }) => {
   await taishin.click();
   await expect(taishin).toHaveAttribute("aria-expanded", "true");
   await expect(ledger.getByText("薪轉戶", { exact: true })).toBeVisible();
-  await expect(page.getByText(/已扣除 .+ 信用卡負債/)).toBeVisible();
+  await expect(page.getByRole("region", { name: "資產摘要" })).toContainText(
+    "銀行與現金",
+  );
   await expect(ledger.getByText("元大台灣50")).toBeVisible();
   await expect(ledger.getByRole("button", { name: /^自住房屋/ })).toBeVisible();
   await expect(

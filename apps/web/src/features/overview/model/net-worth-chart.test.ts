@@ -102,6 +102,28 @@ describe("net worth chart data", () => {
     ]);
   });
 
+  it("treats manually entered US stocks as stock history", () => {
+    const points = buildNetWorthChartData(
+      [
+        ...rows,
+        {
+          date: "2026-01-04",
+          netWorth: 300,
+          assetType: "stock",
+          source: "manual",
+        },
+      ],
+      ["stock", "manual"],
+      "ALL",
+    );
+
+    expect(points.at(-1)).toMatchObject({
+      stock: 410,
+      manual: 250,
+      selectedTotal: 660,
+    });
+  });
+
   it("reports the asset types that have history", () => {
     expect([...getAvailableNetWorthAssets(rows)]).toEqual([
       "stock",

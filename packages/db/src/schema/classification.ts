@@ -110,3 +110,160 @@ export const classificationRules = sqliteTable(
     ),
   ],
 );
+
+export const classificationMerchants = sqliteTable(
+  "classification_merchants",
+  {
+    id: text("id").notNull(),
+    name: text("name").notNull(),
+    normalizedName: text("normalized_name").notNull(),
+    defaultCategoryId: text("default_category_id"),
+    isSystem: integer("is_system")
+      .notNull()
+      .default(sql`0`),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.id] }),
+    uniqueIndex("idx_classification_merchants_normalized_name").on(
+      sql`normalized_name COLLATE NOCASE`,
+    ),
+    index("idx_classification_merchants_default_category").on(
+      table.defaultCategoryId,
+    ),
+    foreignKey({
+      columns: [table.defaultCategoryId],
+      foreignColumns: [classificationCategories.id],
+    }),
+    check("classification_merchants_check_is_system", sql`is_system IN (0, 1)`),
+  ],
+);
+
+export const classificationMerchantRules = sqliteTable(
+  "classification_merchant_rules",
+  {
+    id: text("id").notNull(),
+    merchantId: text("merchant_id").notNull(),
+    targetType: text("target_type"),
+    field: text("field").notNull(),
+    operator: text("operator").notNull(),
+    pattern: text("pattern").notNull(),
+    priority: integer("priority")
+      .notNull()
+      .default(sql`100`),
+    enabled: integer("enabled")
+      .notNull()
+      .default(sql`1`),
+    isSystem: integer("is_system")
+      .notNull()
+      .default(sql`0`),
+    source: text("source")
+      .notNull()
+      .default(sql`'user'`),
+    description: text("description"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.id] }),
+    index("idx_classification_merchant_rules_merchant_priority").on(
+      table.merchantId,
+      table.enabled,
+      table.targetType,
+      table.priority,
+    ),
+    foreignKey({
+      columns: [table.merchantId],
+      foreignColumns: [classificationMerchants.id],
+    }),
+    check(
+      "classification_merchant_rules_check_enabled",
+      sql`enabled IN (0, 1)`,
+    ),
+    check(
+      "classification_merchant_rules_check_is_system",
+      sql`is_system IN (0, 1)`,
+    ),
+    check(
+      "classification_merchant_rules_check_target_type",
+      sql`target_type IS NULL OR target_type IN ('bank_transaction', 'invoice_item')`,
+    ),
+    check(
+      "classification_merchant_rules_check_field",
+      sql`field IN ('merchant_name', 'description', 'counterparty', 'any_text', 'source_id')`,
+    ),
+    check(
+      "classification_merchant_rules_check_operator",
+      sql`operator IN ('contains', 'equals', 'starts_with', 'regex')`,
+    ),
+  ],
+);
+
+export const classificationMerchantProductRules = sqliteTable(
+  "classification_merchant_product_rules",
+  {
+    id: text("id").notNull(),
+    merchantId: text("merchant_id").notNull(),
+    categoryId: text("category_id").notNull(),
+    targetType: text("target_type"),
+    field: text("field").notNull(),
+    operator: text("operator").notNull(),
+    pattern: text("pattern").notNull(),
+    priority: integer("priority")
+      .notNull()
+      .default(sql`100`),
+    enabled: integer("enabled")
+      .notNull()
+      .default(sql`1`),
+    isSystem: integer("is_system")
+      .notNull()
+      .default(sql`0`),
+    source: text("source")
+      .notNull()
+      .default(sql`'user'`),
+    description: text("description"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.id] }),
+    index("idx_classification_merchant_product_rules_lookup").on(
+      table.merchantId,
+      table.enabled,
+      table.targetType,
+      table.priority,
+    ),
+    index("idx_classification_merchant_product_rules_category").on(
+      table.categoryId,
+    ),
+    foreignKey({
+      columns: [table.merchantId],
+      foreignColumns: [classificationMerchants.id],
+    }),
+    foreignKey({
+      columns: [table.categoryId],
+      foreignColumns: [classificationCategories.id],
+    }),
+    check(
+      "classification_merchant_product_rules_check_enabled",
+      sql`enabled IN (0, 1)`,
+    ),
+    check(
+      "classification_merchant_product_rules_check_is_system",
+      sql`is_system IN (0, 1)`,
+    ),
+    check(
+      "classification_merchant_product_rules_check_target_type",
+      sql`target_type IS NULL OR target_type IN ('bank_transaction', 'invoice_item')`,
+    ),
+    check(
+      "classification_merchant_product_rules_check_field",
+      sql`field IN ('description', 'counterparty', 'any_text', 'source_id')`,
+    ),
+    check(
+      "classification_merchant_product_rules_check_operator",
+      sql`operator IN ('contains', 'equals', 'starts_with', 'regex')`,
+    ),
+  ],
+);

@@ -62,6 +62,7 @@ export function invoiceLineItemRecord(
       quantity: item.quantity ?? null,
       unit_price: item.unitPrice ?? null,
       amount: item.amount,
+      line_type: item.lineType ?? "item",
       raw_payload: JSON.stringify(item.raw ?? item),
       created_at: now,
       updated_at: now,

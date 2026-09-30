@@ -36,6 +36,7 @@ export async function findActivitySearchDays(
       JOIN bank_accounts account ON account.id = txn.account_id
       WHERE account.canonical_account_id IS NULL AND (txn.status <> 'pending' OR txn.matched_transaction_id IS NULL) AND (
         instr(lower(COALESCE(txn.description, '') || ' ' || COALESCE(txn.counterparty, '') || ' ' ||
+          COALESCE(json_extract(txn.raw_payload, '$.summary'), '') || ' ' ||
           COALESCE(account.institution_name, '') || ' ' || COALESCE(account.account_name, '') || ' ' ||
           COALESCE(account.account_last4, '') || ' 銀行 信用卡'), ${q}) > 0
         OR account.id IN (SELECT value FROM json_each(${matchingIds}))
@@ -47,6 +48,13 @@ export async function findActivitySearchDays(
         ELSE invoice_date END AS day
       FROM invoices
       WHERE instr(lower(COALESCE(seller_name, '') || ' ' || COALESCE(invoice_number, '') || ' 電子發票'), ${q}) > 0
+        OR EXISTS (SELECT 1 FROM invoice_line_items line WHERE line.invoice_id = invoices.id AND instr(lower(line.description), ${q}) > 0)
+        OR EXISTS (SELECT 1 FROM classification_categories WHERE instr(lower(label), ${q}) > 0)
+        OR EXISTS (
+          SELECT 1 FROM invoice_payment_accounts payment
+          WHERE payment.invoice_id = invoices.id
+            AND payment.account_id IN (SELECT value FROM json_each(${matchingIds}))
+        )
       UNION ALL
       SELECT substr(effective_date, 1, 10) AS day FROM investment_transactions
       WHERE instr(lower(COALESCE(name, '') || ' ' || COALESCE(symbol, '') || ' ' ||

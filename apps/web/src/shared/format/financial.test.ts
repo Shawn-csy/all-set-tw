@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   bankAccountLast5,
   formatBankAccountName,
+  formatCurrency,
   formatNumber,
   missingExchangeRateCurrencies,
   normalizeFinancialDate,
@@ -13,6 +14,8 @@ import {
 describe("financial formatting helpers", () => {
   it("formats numbers using the Taiwan locale", () => {
     expect(formatNumber(1234567)).toBe("1,234,567");
+    expect(formatCurrency(55.01, "TWD", 6)).toBe("NT$55.01");
+    expect(formatCurrency(220.4126, "USD", 6)).toBe("US$220.4126");
   });
 
   it("extracts the last five digits from supported bank source ids", () => {

@@ -6,18 +6,22 @@
     class: className = "",
     active = false,
     disabled = false,
+    onclick,
     ...rest
   }: {
     children?: Snippet;
     class?: string;
     active?: boolean;
     disabled?: boolean;
+    onclick?: (event: MouseEvent) => void;
     [key: string]: unknown;
   } = $props();
 </script>
 
 <button
   {...rest}
+  onclick={(event) => onclick?.(event)}
+  type="button"
   role="tab"
   aria-selected={active}
   {disabled}

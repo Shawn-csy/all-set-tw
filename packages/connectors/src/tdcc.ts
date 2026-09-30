@@ -202,6 +202,9 @@ const SESSION_EXPIRED_CODES = new Set([
   "A0001",
   "A0002",
   "T8000",
+  // TDCC may return the generic operation error for a cached session that
+  // was invalidated after the server or App version changed.
+  "D9993",
 ]);
 // The stored OTP timed out before this sync ran; it's now dead, so the caller
 // must drop it from config and have the user request a fresh one.
@@ -789,10 +792,11 @@ async function loginWithDeviceVerification(
 
 function wrapTdccError(error: unknown): never {
   if (error instanceof EPassbookError) {
-    const message = `TDCC 登入或同步失敗（${error.code}）：${error.message}`;
+    const endpoint = error.endpoint ? `（API ${error.endpoint}）` : "";
+    const message = `${error.message}${endpoint}`;
     if (OTP_EXPIRED_CODES.has(error.code))
       throw new TdccOtpExpiredError(message);
-    throw new TdccConnectionError(error.code, error.message);
+    throw new TdccConnectionError(error.code, message);
   }
   throw error;
 }

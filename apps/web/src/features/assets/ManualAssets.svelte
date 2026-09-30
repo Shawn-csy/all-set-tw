@@ -79,7 +79,6 @@
     real_estate: "不動產",
     insurance: "保險",
     vehicle: "交通工具",
-    us_stock: "美股",
     other: "其他",
   };
   const currencies = ["TWD", "USD", "JPY", "EUR"] as const;
@@ -370,9 +369,11 @@
               variant="secondary"
               disabled={$refreshQuotes.isPending}
               onclick={() => $refreshQuotes.mutate()}
-            >{#if $refreshQuotes.isPending}<RefreshCw
+              >{#if $refreshQuotes.isPending}<RefreshCw
                   class="size-4 animate-spin"
-                />更新中…{:else}<RefreshCw class="size-4" />更新行情{/if}</Button
+                />更新中…{:else}<RefreshCw
+                  class="size-4"
+                />更新行情{/if}</Button
             >{/if}
           {#if variant === "embedded"}
             <Button
@@ -393,7 +394,9 @@
     {#if quoteMessage}<p
         class={`px-4 text-sm ${quoteMessage.includes("失敗") ? "text-coral" : "text-subtle"}`}
         role="status"
-      >{quoteMessage}</p>{/if}
+      >
+        {quoteMessage}
+      </p>{/if}
     <Card class="border-0 bg-transparent shadow-none">
       {#if !hideSummary}
         <CardHeader class={variant === "embedded" ? "px-4" : ""}
@@ -425,9 +428,11 @@
                       >
                         {categories[
                           asset.category as keyof typeof categories
-                      ] ?? asset.category} · {asset.currency} · {asset.date
+                        ] ?? asset.category} · {asset.currency} · {asset.date
                           ? formatDate(asset.date)
-                          : "尚未估值"}{asset.symbol ? ` · ${asset.symbol}` : ""}{asset.quantity != null
+                          : "尚未估值"}{asset.symbol
+                          ? ` · ${asset.symbol}`
+                          : ""}{asset.quantity != null
                           ? ` · ${asset.quantity} 股`
                           : ""}{asset.marketPrice != null
                           ? ` · 最新價 ${formatCurrency(asset.marketPrice, asset.currency)}`
@@ -592,28 +597,6 @@
                     value={key}>{label}</option
                   >{/each}</Select
               ></label
-            >{#if form.category === "us_stock"}<div
-                class="grid gap-3 rounded-lg bg-paper/70 p-3"
-              >
-                <p class="text-xs leading-5 text-subtle">
-                  先手動輸入持倉資料；接上行情 API 後可用股票代號與股數更新估值。
-                </p>
-                <label class="grid gap-1 text-sm">
-                  股票代號<Input
-                    maxlength="16"
-                    placeholder="例如 AAPL、VOO"
-                    bind:value={form.symbol}
-                  />
-                </label>
-                <label class="grid gap-1 text-sm">
-                  持有股數<Input
-                    min="0"
-                    step="any"
-                    type="number"
-                    bind:value={form.quantity}
-                  />
-                </label>
-              </div>{/if}
             ><label class="grid gap-1 text-sm"
               >幣別<Select bind:value={form.currency}
                 >{#each currencies as currency (currency)}<option

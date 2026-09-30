@@ -26,12 +26,14 @@ const symbolSchema = z
   .regex(/^[A-Za-z0-9._-]+$/)
   .transform((value) => value.toUpperCase());
 const quantitySchema = z.number().finite().nonnegative();
+const costPerShareSchema = z.number().finite().nonnegative();
 const createSchema = z.object({
   name: z.string().trim().min(1).max(120),
   category: z.string().trim().min(1).max(64),
   note: z.string().max(1_000).optional(),
   symbol: symbolSchema.nullable().optional(),
   quantity: quantitySchema.nullable().optional(),
+  costPerShare: costPerShareSchema.nullable().optional(),
   currency: currencySchema.default("TWD"),
   value: z.number().finite(),
   date: isoDateSchema,
@@ -43,6 +45,7 @@ const updateSchema = z
     note: z.string().max(1_000).nullable().optional(),
     symbol: symbolSchema.nullable().optional(),
     quantity: quantitySchema.nullable().optional(),
+    costPerShare: costPerShareSchema.nullable().optional(),
     currency: currencySchema.optional(),
     value: z.number().finite().optional(),
     date: isoDateSchema.optional(),

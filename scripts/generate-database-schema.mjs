@@ -69,6 +69,10 @@ function runWrangler(args) {
       cwd: projectRoot,
       env,
       encoding: "utf8",
+      // A fresh temporary D1 applies every migration and Wrangler prints the
+      // complete migration table; the default 1 MiB buffer is too small for
+      // the current schema history.
+      maxBuffer: 64 * 1024 * 1024,
       stdio: ["ignore", "pipe", "pipe"],
     });
   } catch (error) {

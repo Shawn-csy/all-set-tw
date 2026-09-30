@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { bankTransactions } from "./bank";
+import { bankAccounts, bankTransactions } from "./bank";
+import { classificationMerchants } from "./classification";
 import {
   sqliteTable,
   text,
@@ -57,6 +58,7 @@ export const invoiceLineItems = sqliteTable(
     rawPayload: text("raw_payload"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
+    lineType: text("line_type").notNull().default("item"),
   },
   (table) => [
     primaryKey({ columns: [table.id] }),
@@ -70,6 +72,10 @@ export const invoiceLineItems = sqliteTable(
       columns: [table.invoiceId],
       foreignColumns: [invoices.id],
     }).onDelete("cascade"),
+    check(
+      "invoice_line_items_check_line_type",
+      sql`line_type IN ('item', 'allowance', 'refund', 'fee')`,
+    ),
   ],
 );
 
@@ -109,5 +115,67 @@ export const invoiceTransactionPreferences = sqliteTable(
     OR decision IN ('separate', 'cash')
   `,
     ),
+  ],
+);
+
+export const invoiceMerchantOverrides = sqliteTable(
+  "invoice_merchant_overrides",
+  {
+    invoiceId: text("invoice_id").notNull(),
+    merchantId: text("merchant_id").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.invoiceId] }),
+    index("idx_invoice_merchant_overrides_merchant").on(table.merchantId),
+    foreignKey({
+      columns: [table.invoiceId],
+      foreignColumns: [invoices.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.merchantId],
+      foreignColumns: [classificationMerchants.id],
+    }).onDelete("cascade"),
+  ],
+);
+
+export const invoicePaymentAccountRules = sqliteTable(
+  "invoice_payment_account_rules",
+  {
+    matchKey: text("match_key").notNull(),
+    accountId: text("account_id").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.matchKey] }),
+    index("idx_invoice_payment_account_rules_account").on(table.accountId),
+    foreignKey({
+      columns: [table.accountId],
+      foreignColumns: [bankAccounts.id],
+    }),
+  ],
+);
+
+export const invoicePaymentAccounts = sqliteTable(
+  "invoice_payment_accounts",
+  {
+    invoiceId: text("invoice_id").notNull(),
+    accountId: text("account_id").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.invoiceId] }),
+    index("idx_invoice_payment_accounts_account").on(table.accountId),
+    foreignKey({
+      columns: [table.invoiceId],
+      foreignColumns: [invoices.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.accountId],
+      foreignColumns: [bankAccounts.id],
+    }),
   ],
 );

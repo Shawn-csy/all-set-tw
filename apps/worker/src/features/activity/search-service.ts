@@ -15,7 +15,11 @@ import { getBankRange } from "../bank/service";
 import { getInvoicesRange } from "../invoices/service";
 import { getInvestmentTransactionsRange } from "../investments/service";
 import { encodePageCursor } from "../../platform/http";
-import { listInvoiceTransactionPreferences } from "./repository";
+import {
+  listInvoiceTransactionPreferences,
+  listInvoicePaymentAccountRules,
+  listInvoicePaymentAccounts,
+} from "./repository";
 import {
   findActivitySearchDays,
   type ActivitySearchInput,
@@ -28,10 +32,13 @@ export async function searchActivity(
   input: ActivitySearchInput,
   cursor?: ActivityOrderKey,
 ) {
-  const [accountRows, preferences] = await Promise.all([
-    listBankAccounts(db),
-    listInvoiceTransactionPreferences(db),
-  ]);
+  const [accountRows, preferences, paymentRules, paymentAccounts] =
+    await Promise.all([
+      listBankAccounts(db),
+      listInvoiceTransactionPreferences(db),
+      listInvoicePaymentAccountRules(db),
+      listInvoicePaymentAccounts(db),
+    ]);
   const accounts = accountRows.map(normalizeBankAccountDisplay);
   const accountMap = new Map(
     accounts.map((account) => [
@@ -77,6 +84,8 @@ export async function searchActivity(
       transactions,
       invoiceBatch,
       preferences,
+      paymentRules,
+      paymentAccounts,
     );
     const items = buildActivityItems(
       transactions,

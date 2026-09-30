@@ -1,20 +1,24 @@
 import type { ActivityItem } from "@taiwan-fin-hub/core";
+import type { RuleInputMode } from "@/shared/classification-rule-pattern";
 export type { ActivityItem } from "@taiwan-fin-hub/core";
 
 export interface PendingCategoryUpdate {
   item: ActivityItem;
+  targetType: "bank_transaction" | "invoice_item";
+  targetId: string;
   categoryId: string;
   addRule: boolean;
   pattern: string;
-  operator: "contains" | "equals";
+  operator: RuleInputMode;
 }
 
 export interface CategoryUpdateInput {
-  transactionId: string;
+  targetType: "bank_transaction" | "invoice_item";
+  targetId: string;
   categoryId: string;
   addRule: boolean;
   pattern: string;
-  operator: "contains" | "equals";
+  operator: RuleInputMode;
 }
 
 export interface PendingCalculationUpdate {

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   deduplicateBankTransactions,
+  invoicePaymentMatchKey,
   invoiceTransactionCandidates,
   matchInvoicesToTransactions,
 } from "@/data/activity/matching";
+import { buildActivityItems } from "@taiwan-fin-hub/core";
 import type { BankTransactionRow } from "@/data/bank/types";
 import type { InvoiceSummaryRow } from "@/data/invoices/types";
 
@@ -43,6 +45,124 @@ function invoice(
 }
 
 describe("invoice transaction matching", () => {
+  it("does not confuse a credit-card bill settlement with a purchase", () => {
+    const settlement = transaction({
+      id: "card-bill",
+      accountId: "bank-1",
+      accountType: "deposit",
+      description: "繳富邦信用卡款",
+      counterparty: undefined,
+    });
+    const target = invoice();
+    const result = matchInvoicesToTransactions([settlement], [target]);
+    expect(result.invoiceToTransactionId.size).toBe(0);
+    expect(invoiceTransactionCandidates([settlement], target)).toEqual([]);
+    expect(
+      matchInvoicesToTransactions(
+        [settlement],
+        [target],
+        [
+          {
+            invoiceId: target.id,
+            transactionId: settlement.id,
+            decision: "linked",
+          },
+        ],
+      ).invoiceToTransactionId.size,
+    ).toBe(0);
+  });
+
+  it("does not use excluded or transfer rows as invoice payments", () => {
+    const transfer = transaction({
+      id: "bank-transfer",
+      description: "銀行扣款",
+      counterparty: undefined,
+      classification: {
+        categoryId: "transfer",
+        label: "轉帳",
+        behavior: "asset_transfer",
+        source: "user_rule",
+      },
+    });
+    expect(
+      matchInvoicesToTransactions([transfer], [invoice()])
+        .invoiceToTransactionId.size,
+    ).toBe(0);
+  });
+
+  it("counts investment cash flow while keeping withdrawals and transfers excluded", () => {
+    const investment = transaction({
+      id: "investment-cash",
+      accountId: "bank-1",
+      accountType: "deposit",
+      amount: -1000,
+      description: "證券交割款",
+      counterparty: undefined,
+      excludedFromCalculation: true,
+      classification: {
+        categoryId: "investment",
+        label: "投資",
+        behavior: "asset_transfer",
+        source: "system_rule",
+      },
+    });
+    const withdrawal = transaction({
+      id: "cash-withdrawal",
+      accountId: "bank-1",
+      accountType: "deposit",
+      amount: -500,
+      description: "ATM提款",
+      counterparty: undefined,
+      classification: {
+        categoryId: "cash-withdrawal",
+        label: "提領現金",
+        behavior: "cash_withdrawal",
+        source: "system_rule",
+      },
+    });
+    const transfer = transaction({
+      id: "asset-transfer",
+      accountId: "bank-1",
+      accountType: "deposit",
+      amount: -800,
+      description: "銀行轉帳",
+      counterparty: undefined,
+      classification: {
+        categoryId: "transfer",
+        label: "轉帳",
+        behavior: "asset_transfer",
+        source: "system_rule",
+      },
+    });
+    const items = buildActivityItems(
+      [investment, withdrawal, transfer],
+      [],
+      [],
+      new Map(),
+      matchInvoicesToTransactions([investment, withdrawal, transfer], []),
+    );
+
+    expect(items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          transactionId: "investment-cash",
+          cashFlowType: "investment_expense",
+          excludedFromCalculation: false,
+        }),
+        expect.objectContaining({
+          transactionId: "cash-withdrawal",
+          cashFlowType: "asset_transfer",
+          excludedFromCalculation: true,
+        }),
+        expect.objectContaining({
+          transactionId: "asset-transfer",
+          cashFlowType: "asset_transfer",
+          excludedFromCalculation: true,
+        }),
+      ]),
+    );
+  });
+
   it("matches the same day and amount without checking the merchant", () => {
     const result = matchInvoicesToTransactions(
       [transaction({ counterparty: "完全不同的商家" })],
@@ -81,6 +201,220 @@ describe("invoice transaction matching", () => {
     );
 
     expect(result.invoiceToTransactionId.size).toBe(0);
+  });
+
+  it("reuses the card learned from an earlier invoice on the same day", () => {
+    const result = matchInvoicesToTransactions(
+      [
+        transaction({
+          id: "spotify-card",
+          accountId: "card-spotify",
+          postedDate: "2026-07-10",
+          authorizedAt: undefined,
+          amount: -298,
+          counterparty: "SPOTIFY AB",
+        }),
+        transaction({
+          id: "other-card",
+          accountId: "card-other",
+          postedDate: "2026-07-10",
+          authorizedAt: undefined,
+          amount: -298,
+          counterparty: "其他服務",
+        }),
+      ],
+      [
+        invoice({
+          id: "spotify-next",
+          invoiceDate: "2026-07-10",
+          sellerName: "Spotify AB",
+          amount: 298,
+        }),
+      ],
+      [],
+      [
+        {
+          matchKey: "spotifyab",
+          accountId: "card-spotify",
+          updatedAt: "2026-07-01T00:00:00.000Z",
+        },
+      ],
+    );
+
+    expect(result.invoiceToTransactionId.get("spotify-next")).toBe(
+      "spotify-card",
+    );
+    expect(result.learnedAccountByInvoice.get("spotify-next")).toBe(
+      "card-spotify",
+    );
+  });
+
+  it("keeps an explicitly selected card on the invoice and never auto-links another card", () => {
+    const target = invoice({
+      id: "spotify",
+      sellerName: "Spotify AB",
+      amount: 298,
+    });
+    const otherCard = transaction({
+      id: "other-card",
+      accountId: "card-other",
+      amount: -298,
+    });
+    const matches = matchInvoicesToTransactions(
+      [otherCard],
+      [target],
+      [],
+      [{ matchKey: "spotifyab", accountId: "card-old" }],
+      [{ invoiceId: target.id, accountId: "card-selected" }],
+    );
+
+    expect(matches.invoiceToTransactionId.size).toBe(0);
+    expect(matches.learnedAccountByInvoice.get(target.id)).toBe(
+      "card-selected",
+    );
+    const items = buildActivityItems(
+      [otherCard],
+      [target],
+      [],
+      new Map([
+        [
+          "card-selected",
+          {
+            id: "card-selected",
+            accountType: "credit",
+            institutionName: "國泰世華",
+            accountLast4: "1234",
+          },
+        ],
+      ]),
+      matches,
+    );
+    expect(
+      items.find(
+        (item) => item.invoiceId === target.id && item.source === "invoice",
+      ),
+    ).toMatchObject({
+      invoicePaymentMethod: "card",
+      invoicePaymentAccountId: "card-selected",
+      invoicePaymentAccountSource: "selected",
+      institutionName: "國泰世華",
+    });
+  });
+
+  it("does not infer a card for an invoice marked as cash", () => {
+    const target = invoice({ sellerName: "Spotify AB", amount: 298 });
+    const matches = matchInvoicesToTransactions(
+      [],
+      [target],
+      [{ invoiceId: target.id, transactionId: null, decision: "cash" }],
+      [{ matchKey: "spotifyab", accountId: "card-1" }],
+    );
+    expect(matches.learnedAccountByInvoice.has(target.id)).toBe(false);
+    expect(
+      buildActivityItems([], [target], [], new Map(), matches)[0],
+    ).toMatchObject({ invoicePaymentMethod: "cash" });
+  });
+
+  it("learns identical item content without assigning another item from the same merchant", () => {
+    const matchKey = invoicePaymentMatchKey("蝦皮", ["服務費", "音樂訂閱"]);
+    const matches = matchInvoicesToTransactions(
+      [],
+      [
+        invoice({ id: "same", sellerName: "蝦皮", paymentMatchKey: matchKey }),
+        invoice({
+          id: "other",
+          sellerName: "蝦皮",
+          paymentMatchKey: invoicePaymentMatchKey("蝦皮", ["生活用品"]),
+        }),
+      ],
+      [],
+      [{ matchKey, accountId: "card-1" }],
+    );
+    expect(matches.learnedAccountByInvoice.get("same")).toBe("card-1");
+    expect(matches.learnedAccountByInvoice.has("other")).toBe(false);
+  });
+
+  it("shows item-level categories on an unmatched invoice, then keeps them after a card match", () => {
+    const target = invoice({
+      id: "mixed-invoice",
+      amount: 300,
+      items: [
+        {
+          id: "food",
+          sourceId: "food",
+          lineNumber: 1,
+          description: "便當",
+          amount: 100,
+          classification: {
+            categoryId: "food",
+            label: "餐飲",
+            behavior: "normal",
+            source: "override",
+          },
+        },
+        {
+          id: "shopping",
+          sourceId: "shopping",
+          lineNumber: 2,
+          description: "用品",
+          amount: 200,
+          classification: {
+            categoryId: "shopping",
+            label: "購物",
+            behavior: "normal",
+            source: "override",
+          },
+        },
+      ],
+    });
+    const standalone = buildActivityItems(
+      [],
+      [target],
+      [],
+      new Map(),
+      matchInvoicesToTransactions([], [target]),
+    );
+    expect(standalone[0]).toMatchObject({
+      category: "多分類",
+      categoryId: "mixed",
+      categoryParts: [
+        expect.objectContaining({ category: "餐飲", amount: 100 }),
+        expect.objectContaining({ category: "購物", amount: 200 }),
+      ],
+    });
+    const card = transaction({
+      id: "card-mixed",
+      accountType: "credit",
+      amount: -270,
+      classification: {
+        categoryId: "transfer",
+        label: "轉帳",
+        behavior: "asset_transfer",
+        source: "user_rule",
+      },
+    });
+    const linked = buildActivityItems(
+      [card],
+      [target],
+      [],
+      new Map(),
+      matchInvoicesToTransactions(
+        [card],
+        [target],
+        [{ invoiceId: target.id, transactionId: card.id, decision: "linked" }],
+      ),
+    );
+    expect(linked).toHaveLength(1);
+    expect(linked[0]).toMatchObject({
+      source: "card",
+      category: "多分類",
+      categoryParts: [
+        expect.objectContaining({ category: "餐飲", amount: 90 }),
+        expect.objectContaining({ category: "購物", amount: 180 }),
+      ],
+    });
+    expect(linked[0]?.cashFlowType).toBeUndefined();
+    expect(linked[0]?.excludedFromCalculation).toBe(false);
   });
 
   it("still offers same-day expenses with different amounts for manual mapping", () => {
@@ -249,7 +583,9 @@ describe("invoice transaction matching", () => {
         .invoiceToTransactionId.size,
     ).toBe(0);
     expect(
-      invoiceTransactionCandidates([nextTaipeiDay], targetInvoice),
+      invoiceTransactionCandidates([nextTaipeiDay], targetInvoice).map(
+        ({ id }) => id,
+      ),
     ).toEqual([]);
   });
 

@@ -45,6 +45,7 @@ describe("net worth repository", () => {
     database.exec(`
       CREATE TABLE manual_assets (
         id TEXT PRIMARY KEY,
+        category TEXT NOT NULL,
         currency TEXT NOT NULL
       );
       CREATE TABLE exchange_rates (
@@ -58,14 +59,18 @@ describe("net worth repository", () => {
         asset_type TEXT NOT NULL,
         source TEXT NOT NULL
       );
-      INSERT INTO manual_assets (id, currency)
-      VALUES ('manual:usd-policy', 'USD'), ('manual:home', 'TWD');
+      INSERT INTO manual_assets (id, category, currency)
+      VALUES
+        ('manual:usd-policy', 'other', 'USD'),
+        ('manual:home', 'real_estate', 'TWD'),
+        ('manual:aapl', 'us_stock', 'USD');
       INSERT INTO exchange_rates (currency, rate_to_twd) VALUES ('USD', 32);
       INSERT INTO net_worth_history
         (id, date, net_worth, asset_type, source)
       VALUES
         ('usd', '2026-08-01', 100, 'manual:usd-policy', 'manual'),
-        ('twd', '2026-08-01', 5000, 'manual:home', 'manual');
+        ('twd', '2026-08-01', 5000, 'manual:home', 'manual'),
+        ('stock', '2026-08-01', 10, 'manual:aapl', 'manual');
     `);
     const db = {
       prepare(sql: string) {
@@ -76,12 +81,21 @@ describe("net worth repository", () => {
     await expect(listNetWorthChartHistory(db)).resolves.toEqual([
       {
         date: "2026-08-01",
+        seriesId: "manual:aapl",
+        netWorth: 320,
+        assetType: "stock",
+        source: "manual",
+      },
+      {
+        date: "2026-08-01",
+        seriesId: "manual:home",
         netWorth: 5000,
         assetType: "manual:home",
         source: "manual",
       },
       {
         date: "2026-08-01",
+        seriesId: "manual:usd-policy",
         netWorth: 3200,
         assetType: "manual:usd-policy",
         source: "manual",

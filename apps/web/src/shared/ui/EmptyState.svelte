@@ -7,7 +7,7 @@
 </script>
 
 <section
-  class="min-w-0 py-16"
+  class="min-w-0 py-10"
   aria-live={alert ? "assertive" : "polite"}
   role={alert ? "alert" : undefined}
 >

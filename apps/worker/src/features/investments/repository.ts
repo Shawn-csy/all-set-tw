@@ -1,10 +1,18 @@
 import {
   createDrizzle,
+  investmentTransactionAmountOverrides,
+  investmentPositionCostOverrides,
   investmentPositions,
   investmentTransactions,
 } from "@taiwan-fin-hub/db";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import type { MonthDateRange } from "../../platform/month-range";
+
+const amountOverride = alias(
+  investmentTransactionAmountOverrides,
+  "amount_override",
+);
 
 const investmentTransactionColumns = {
   id: investmentTransactions.id,
@@ -23,7 +31,23 @@ const investmentTransactionColumns = {
   transactionName: investmentTransactions.transactionName,
   quantity: investmentTransactions.quantity,
   price: investmentTransactions.price,
-  amount: investmentTransactions.amount,
+  amount: sql<
+    number | null
+  >`COALESCE(${amountOverride.amount}, ${investmentTransactions.amount})`.as(
+    "amount",
+  ),
+  rawAmount: investmentTransactions.amount,
+  amountSource: sql<"synced" | "manual" | "historical-close" | "missing">`CASE
+    WHEN ${amountOverride.amount} IS NOT NULL
+      AND ${amountOverride.source} = 'historical-close'
+      THEN 'historical-close'
+    WHEN ${amountOverride.amount} IS NOT NULL THEN 'manual'
+    WHEN ${investmentTransactions.amount} IS NOT NULL THEN 'synced'
+    ELSE 'missing'
+  END`.as("amountSource"),
+  amountReferencePrice: amountOverride.referencePrice,
+  amountPriceDate: amountOverride.priceDate,
+  amountProvider: amountOverride.provider,
   currency: investmentTransactions.currency,
   effectiveDate: sql<string>`${investmentTransactions.effectiveDate}`,
   updatedAt: investmentTransactions.updatedAt,
@@ -44,6 +68,8 @@ export type TransactionPageCursor = {
 
 export type InvestmentPositionRow = {
   id: string;
+  connectorId: string;
+  sourceId: string;
   assetType: string;
   symbol: string | null;
   name: string;
@@ -52,6 +78,7 @@ export type InvestmentPositionRow = {
   cashBalance: number | null;
   currency: string;
   asOfDate: string;
+  costPerShare: number | null;
 };
 
 export async function listLatestInvestmentPositions(
@@ -62,6 +89,8 @@ export async function listLatestInvestmentPositions(
   return createDrizzle(db)
     .select({
       id: investmentPositions.id,
+      connectorId: investmentPositions.connectorId,
+      sourceId: investmentPositions.sourceId,
       assetType: investmentPositions.assetType,
       symbol: investmentPositions.symbol,
       name: investmentPositions.name,
@@ -70,8 +99,22 @@ export async function listLatestInvestmentPositions(
       cashBalance: investmentPositions.cashBalance,
       currency: investmentPositions.currency,
       asOfDate: investmentPositions.asOfDate,
+      costPerShare: investmentPositionCostOverrides.costPerShare,
     })
     .from(investmentPositions)
+    .leftJoin(
+      investmentPositionCostOverrides,
+      and(
+        eq(
+          investmentPositionCostOverrides.connectorId,
+          investmentPositions.connectorId,
+        ),
+        eq(
+          investmentPositionCostOverrides.holdingKey,
+          sql`substr(${investmentPositions.sourceId}, 1, length(${investmentPositions.sourceId}) - length(${investmentPositions.asOfDate}) - 1)`,
+        ),
+      ),
+    )
     .where(
       and(
         // Latest as_of_date is per connector + asset type, not a global max.
@@ -106,6 +149,116 @@ export async function listLatestInvestmentPositions(
     .all();
 }
 
+export async function findInvestmentPositionById(db: D1Database, id: string) {
+  return createDrizzle(db)
+    .select({
+      id: investmentPositions.id,
+      connectorId: investmentPositions.connectorId,
+      sourceId: investmentPositions.sourceId,
+      asOfDate: investmentPositions.asOfDate,
+      currency: investmentPositions.currency,
+    })
+    .from(investmentPositions)
+    .where(eq(investmentPositions.id, id))
+    .get();
+}
+
+export async function upsertInvestmentPositionCost(
+  db: D1Database,
+  input: {
+    connectorId: string;
+    holdingKey: string;
+    costPerShare: number;
+    currency: string;
+  },
+) {
+  const now = new Date().toISOString();
+  await createDrizzle(db)
+    .insert(investmentPositionCostOverrides)
+    .values({
+      id: `cost:${input.connectorId}:${input.holdingKey}`,
+      connectorId: input.connectorId,
+      holdingKey: input.holdingKey,
+      costPerShare: input.costPerShare,
+      currency: input.currency,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: [
+        investmentPositionCostOverrides.connectorId,
+        investmentPositionCostOverrides.holdingKey,
+      ],
+      set: {
+        costPerShare: input.costPerShare,
+        currency: input.currency,
+        updatedAt: now,
+      },
+    })
+    .run();
+}
+
+export async function upsertInvestmentTransactionAmount(
+  db: D1Database,
+  input: {
+    transactionId: string;
+    amount: number;
+    source?: "manual" | "historical-close";
+    referencePrice?: number;
+    priceDate?: string;
+    provider?: string;
+  },
+) {
+  const database = createDrizzle(db);
+  const transaction = await database
+    .select({ id: investmentTransactions.id })
+    .from(investmentTransactions)
+    .where(eq(investmentTransactions.id, input.transactionId))
+    .get();
+  if (!transaction) return false;
+
+  const now = new Date().toISOString();
+  await database
+    .insert(investmentTransactionAmountOverrides)
+    .values({
+      id: `amount:${input.transactionId}`,
+      transactionId: input.transactionId,
+      amount: Math.round(input.amount),
+      source: input.source ?? "manual",
+      referencePrice: input.referencePrice ?? null,
+      priceDate: input.priceDate ?? null,
+      provider: input.provider ?? null,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: investmentTransactionAmountOverrides.transactionId,
+      set: {
+        amount: Math.round(input.amount),
+        source: input.source ?? "manual",
+        referencePrice: input.referencePrice ?? null,
+        priceDate: input.priceDate ?? null,
+        provider: input.provider ?? null,
+        updatedAt: now,
+      },
+    })
+    .run();
+  return true;
+}
+
+export async function deleteInvestmentTransactionAmount(
+  db: D1Database,
+  transactionId: string,
+) {
+  const result = await createDrizzle(db)
+    .delete(investmentTransactionAmountOverrides)
+    .where(
+      eq(investmentTransactionAmountOverrides.transactionId, transactionId),
+    )
+    .run();
+  return result.meta.changes > 0;
+}
+
 export async function listInvestmentTransactions(
   db: D1Database,
   limit: number,
@@ -114,6 +267,10 @@ export async function listInvestmentTransactions(
   return createDrizzle(db)
     .select(investmentTransactionColumns)
     .from(investmentTransactions)
+    .leftJoin(
+      amountOverride,
+      eq(amountOverride.transactionId, investmentTransactions.id),
+    )
     .where(
       cursor
         ? sql`(${investmentTransactions.effectiveDate}, ${investmentTransactions.updatedAt}, ${investmentTransactions.id}) < (${cursor.effectiveDate}, ${cursor.updatedAt}, ${cursor.id})`
@@ -136,6 +293,10 @@ export async function listInvestmentTransactionsInRange(
   return createDrizzle(db)
     .select(investmentTransactionColumns)
     .from(investmentTransactions)
+    .leftJoin(
+      amountOverride,
+      eq(amountOverride.transactionId, investmentTransactions.id),
+    )
     .where(
       days
         ? sql`substr(${investmentTransactions.effectiveDate}, 1, 10) IN (SELECT value FROM json_each(${JSON.stringify(days)}))`

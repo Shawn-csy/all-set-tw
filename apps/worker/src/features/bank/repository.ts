@@ -49,6 +49,11 @@ const bankTransactionColumns = {
   currency: sql<string>`${txn.currency}`.as("currency"),
   description: sql<string | null>`${txn.description}`.as("description"),
   counterparty: sql<string | null>`${txn.counterparty}`.as("counterparty"),
+  sourceSummary: sql<string | null>`COALESCE(
+    json_extract(${txn.rawPayload}, '$.summary'),
+    json_extract(${txn.rawPayload}, '$.sourceSummary'),
+    json_extract(${txn.rawPayload}, '$.transactionType')
+  )`.as("sourceSummary"),
   status: sql<"pending" | "posted">`${txn.status}`.as("status"),
   effectiveDate: sql<string>`${txn.effectiveDate}`.as("effectiveDate"),
   updatedAt: sql<string>`${txn.updatedAt}`.as("updatedAt"),
@@ -95,6 +100,7 @@ export type BankTransactionPageRow = {
   currency: string;
   description: string | null;
   counterparty: string | null;
+  sourceSummary?: string | null;
   status: "pending" | "posted";
   effectiveDate: string;
   updatedAt: string;

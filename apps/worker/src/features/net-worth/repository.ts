@@ -26,6 +26,7 @@ export async function listNetWorthChartHistory(db: D1Database) {
   return createDrizzle(db)
     .select({
       date: history.date,
+      seriesId: history.assetType,
       netWorth: sql<number>`CASE
            WHEN ${history.source} != 'manual' OR ${asset.currency} = 'TWD'
              THEN ${history.netWorth}
@@ -33,7 +34,11 @@ export async function listNetWorthChartHistory(db: D1Database) {
              THEN ${history.netWorth} * ${rate.rateToTwd}
            ELSE 0
          END`.as("netWorth"),
-      assetType: history.assetType,
+      assetType: sql<string>`CASE
+        WHEN ${history.source} = 'manual' AND ${asset.category} = 'us_stock'
+          THEN 'stock'
+        ELSE ${history.assetType}
+      END`.as("assetType"),
       source: history.source,
     })
     .from(history)

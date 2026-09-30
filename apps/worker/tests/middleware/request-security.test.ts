@@ -94,6 +94,22 @@ describe("request security middleware", () => {
     expect(response.status).toBe(200);
   });
 
+  it("accepts a local frontend origin when the Worker runs on localhost", async () => {
+    const limiter = {
+      limit: vi.fn().mockResolvedValue({ success: true }),
+    } as unknown as RateLimit;
+    const response = await testApp().request(
+      "http://127.0.0.1:8787/api/sync",
+      {
+        method: "POST",
+        headers: { Origin: "http://127.0.0.1:5173" },
+      },
+      testEnv(limiter),
+    );
+
+    expect(response.status).toBe(200);
+  });
+
   it("accepts an opaque origin when the referer is configured", async () => {
     const limiter = {
       limit: vi.fn().mockResolvedValue({ success: true }),

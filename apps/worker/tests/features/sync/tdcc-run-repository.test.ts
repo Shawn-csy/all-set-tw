@@ -46,8 +46,9 @@ class SqliteStatement {
 
   async raw() {
     const statement = this.database.prepare(this.sql);
-    statement.setReturnArrays(true);
-    return statement.all(...(this.values as never[]));
+    return statement
+      .all(...(this.values as never[]))
+      .map((row) => Object.values(row));
   }
 
   async first<T>() {

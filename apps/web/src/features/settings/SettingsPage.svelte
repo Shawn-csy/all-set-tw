@@ -20,6 +20,7 @@
   import type { ConnectorId } from "@/data/connectors/types";
   import { formatDateTime } from "@/shared/format/financial";
   import ClassificationRulesPanel from "./components/ClassificationRulesPanel.svelte";
+  import MerchantClassificationPanel from "./components/MerchantClassificationPanel.svelte";
   import DefaultSchedulePanel from "./components/DefaultSchedulePanel.svelte";
   import ExchangeRatesPanel from "./components/ExchangeRatesPanel.svelte";
   import MobileMore from "./components/MobileMore.svelte";
@@ -49,19 +50,13 @@
     "週五",
     "週六",
   ];
-  const settingTabs = [
-    { view: "settings" as const, label: "總覽" },
-    { view: "data-sources" as const, label: "資料來源" },
-    { view: "sync-notifications" as const, label: "同步與通知" },
-    { view: "exchange-rates" as const, label: "匯率" },
-    { view: "classification-rules" as const, label: "分類規則" },
-  ];
   const jobs = createQuery(syncJobsQuery(() => api));
   const rules = createQuery(classificationRulesQuery(() => api));
   const bank = createQuery(bankQuery(() => api));
   const rates = createQuery(exchangeRatesQuery(() => api));
   const notifications = createQuery(notificationConfigQuery(() => api));
   let selectedConnector = $state<ConnectorId | null | undefined>(undefined);
+  let classificationSection = $state<"rules" | "merchants">("rules");
   const activeConnector = $derived(
     selectedConnector === undefined
       ? (connectorTarget ?? null)
@@ -74,6 +69,9 @@
   const needsActionJobs = $derived(getActionableSyncJobs(syncJobRows));
   const pendingSyncJobs = $derived(getPendingSyncJobs(syncJobRows));
   const configuredSources = $derived(getConfiguredSyncJobs(syncJobRows));
+  const configuredSourceIds = $derived(
+    new Set(configuredSources.map((job) => job.connectorId)),
+  );
   const healthySources = $derived(getHealthySyncJobs(syncJobRows));
   const needsAction = $derived(needsActionJobs.length);
   const pendingSources = $derived(pendingSyncJobs.length);
@@ -129,10 +127,7 @@
   const rulesSummary = $derived(
     $rules.isPending
       ? "載入中…"
-      : `${customRuleCount} 條自訂規則 · 含自動分類與配對`,
-  );
-  const enabledRuleCount = $derived(
-    ($rules.data ?? []).filter((rule) => !rule.isSystem && rule.enabled).length,
+      : `${customRuleCount} 條自訂規則 · 銀行與發票品項`,
   );
   const recentJobs = $derived(getConfiguredSyncJobs(syncJobRows));
   const recentSuccessCount = $derived(
@@ -180,28 +175,9 @@
       destroy: cancelScheduledScroll,
     };
   }
-
-  function isActiveTab(tabView: (typeof settingTabs)[number]["view"]) {
-    return tabView === "settings"
-      ? !mobileView || mobileView === "more"
-      : mobileView === tabView;
-  }
 </script>
 
-<div class="grid min-w-0 gap-5">
-  <nav
-    aria-label="設定分類"
-    class="no-scrollbar hidden overflow-x-auto border-b border-border bg-card md:flex md:gap-1 md:px-1"
-  >
-    {#each settingTabs as tab (tab.view)}
-      <button
-        class={`min-h-11 shrink-0 rounded-t-lg px-4 text-sm font-semibold transition ${isActiveTab(tab.view) ? "bg-muted text-steel" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"}`}
-        aria-current={isActiveTab(tab.view) ? "page" : undefined}
-        onclick={() => navigate(tab.view)}>{tab.label}</button
-      >
-    {/each}
-  </nav>
-
+<div class="grid min-w-0 gap-4">
   {#if mobileView === "more"}
     <MobileMore
       {demoMode}
@@ -246,7 +222,7 @@
 
         <section
           aria-label="連接器詳情"
-          class="min-h-[520px] min-w-0 rounded-xl border border-border bg-card p-5 shadow-xs"
+          class="min-h-[420px] min-w-0 rounded-xl border border-border bg-card p-4 shadow-xs"
         >
           {#if activeConnector}
             {@const selectedSource = sources.find(
@@ -415,53 +391,27 @@
     </div>
   {:else if mobileView === "classification-rules"}
     <div class="grid min-w-0 gap-4">
-      <div class="hidden items-center justify-between gap-4 md:flex">
-        <div>
-          <h2 class="text-2xl font-bold tracking-tight">分類規則</h2>
-          <p class="mt-1 text-sm text-muted-foreground">管理自訂分類規則。</p>
-        </div>
-      </div>
-
-      <section
-        aria-label="分類規則摘要"
-        class="hidden min-w-0 gap-3 md:grid md:grid-cols-2"
-      >
-        <div class="rounded-xl border border-border bg-card p-3.5 shadow-xs">
-          <p class="text-sm font-semibold text-muted-foreground">自訂規則</p>
-          <p class="mt-1 text-lg font-bold">{customRuleCount}</p>
-        </div>
-        <div class="rounded-xl border border-border bg-card p-3.5 shadow-xs">
-          <p class="text-sm font-semibold text-muted-foreground">已啟用自訂</p>
-          <p class="mt-1 text-lg font-bold text-moss">{enabledRuleCount}</p>
-        </div>
-      </section>
-
-      <div
-        class="hidden gap-4 md:grid lg:grid-cols-[minmax(0,690px)_minmax(0,1fr)]"
-      >
-        <ClassificationRulesPanel {api} />
-        <aside
-          class="min-w-0 rounded-xl border border-border bg-card p-5 shadow-xs"
-          aria-label="規則如何運作"
+      <div class="flex flex-wrap gap-2" role="group" aria-label="分類設定區域">
+        <button
+          type="button"
+          class={`min-h-10 rounded-lg px-3 text-sm font-semibold ${classificationSection === "rules" ? "bg-steel text-white" : "bg-card text-steel"}`}
+          aria-pressed={classificationSection === "rules"}
+          onclick={() => (classificationSection = "rules")}
+          >一般規則與分類</button
         >
-          <h2 class="text-base font-bold">規則如何運作</h2>
-          <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
-            同步完成後，系統由上到下檢查規則。第一個符合條件的規則會套用到交易。
-          </p>
-          <div class="mt-5 rounded-lg bg-muted p-3">
-            <p class="text-sm font-bold">優先順序很重要</p>
-            <p class="mt-1 text-sm leading-relaxed text-muted-foreground">
-              將條件較精確的規則放在前面；可在下方調整規則順序。
-            </p>
-          </div>
-          <p class="mt-5 text-sm leading-relaxed text-muted-foreground">
-            儲存規則後，交易資料重新載入時會依目前順序重新判定；已手動分類的交易仍以手動覆寫為準。
-          </p>
-        </aside>
+        <button
+          type="button"
+          class={`min-h-10 rounded-lg px-3 text-sm font-semibold ${classificationSection === "merchants" ? "bg-steel text-white" : "bg-card text-steel"}`}
+          aria-pressed={classificationSection === "merchants"}
+          onclick={() => (classificationSection = "merchants")}
+          >商家與產品規則</button
+        >
       </div>
-      <div class="w-full min-w-0 md:hidden">
+      {#if classificationSection === "rules"}
         <ClassificationRulesPanel {api} />
-      </div>
+      {:else}
+        <MerchantClassificationPanel {api} />
+      {/if}
     </div>
   {:else}
     <div class="grid min-w-0 gap-4">
@@ -480,12 +430,10 @@
         </p>
       </section>
 
-      <section
-        aria-label="資料狀態"
-        class="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]"
-      >
+      <section aria-label="資料狀態" class="grid min-w-0 gap-4">
         <div
-          class={`min-w-0 rounded-xl border bg-card p-5 shadow-xs ${needsAction ? "border-coral/70 border-l-4" : pendingSources ? "border-amber-200 border-l-4" : "border-border"}`}
+          aria-label="資料健康度"
+          class={`min-w-0 rounded-xl border bg-card p-4 shadow-xs ${needsAction ? "border-coral/70 border-l-4" : pendingSources ? "border-amber-200 border-l-4" : "border-border"}`}
         >
           <div class="flex items-center justify-between gap-3">
             <p
@@ -561,41 +509,6 @@
             >
           {/if}
         </div>
-
-        <div
-          class="min-w-0 rounded-xl border border-border bg-card p-5 shadow-xs"
-          aria-label="資料健康度"
-        >
-          <div class="flex items-center justify-between gap-3">
-            <p class="text-sm font-semibold text-muted-foreground">
-              資料健康度
-            </p>
-            <span
-              class={`text-sm font-semibold ${needsAction || syncJobsState === "error" ? "text-coral" : pendingSources ? "text-amber-700" : "text-muted-foreground"}`}
-              >{#if syncJobsState === "loading"}載入中…{:else if syncJobsState === "error"}無法載入{:else if needsAction}需要處理{:else if pendingSources}等待首次同步{:else if configuredSources.length === 0}尚未設定{:else}大致正常{/if}</span
-            >
-          </div>
-          <p class="mt-2 text-3xl font-bold">
-            {#if syncJobsState !== "ready"}
-              —
-            {:else if configuredSources.length === 0}
-              尚未設定
-            {:else}
-              {healthySources.length} / {configuredSources.length}
-            {/if}
-          </p>
-          <p class="mt-1 text-sm text-muted-foreground">
-            {#if syncJobsState === "loading"}
-              正在讀取資料來源狀態。
-            {:else if syncJobsState === "error"}
-              無法取得資料來源狀態。
-            {:else}
-              {inheritedJobCount} 個排程啟用 · {latestSuccessAt
-                ? `最近成功 ${formatDateTime(latestSuccessAt)}`
-                : "尚無成功紀錄"}
-            {/if}
-          </p>
-        </div>
       </section>
 
       <section
@@ -613,7 +526,7 @@
             >
           </div>
           <div class="mt-2">
-            {#each sources as source (source.id)}
+            {#each sources.filter( (source) => configuredSourceIds.has(source.id) ) as source (source.id)}
               <SourceCard
                 {api}
                 {...source}
@@ -623,6 +536,10 @@
                 selected={false}
                 onConfigure={() => openConnector(source.id)}
               />
+            {:else}
+              <p class="py-3 text-sm text-muted-foreground">
+                尚未連接資料來源。從「管理全部」新增。
+              </p>
             {/each}
           </div>
         </div>

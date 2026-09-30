@@ -15,6 +15,7 @@
     mobilePrimaryViews,
     mobileSettingsLabels,
     navItems,
+    workspaceTabs,
   } from "./navigation-config";
   import { parseViewHash, viewHash } from "./navigation";
   import { queryClient } from "./query-client";
@@ -29,12 +30,22 @@
 
   type LazyView = Exclude<View, "overview">;
   type PageKey =
-    "assets" | "activity" | "investments" | "manual-assets" | "settings";
+    | "assets"
+    | "activity"
+    | "investments"
+    | "manual-assets"
+    | "purchases"
+    | "investment-returns"
+    | "activity-analysis"
+    | "settings";
   type LazyPageModule =
     | typeof import("@/features/assets/AssetsPage.svelte")
     | typeof import("@/features/activity/ActivityPage.svelte")
     | typeof import("@/features/assets/Investments.svelte")
     | typeof import("@/features/assets/ManualAssets.svelte")
+    | typeof import("@/features/purchases/PurchasesPage.svelte")
+    | typeof import("@/features/investment-returns/InvestmentReturnsPage.svelte")
+    | typeof import("@/features/activity/ActivityAnalysisPage.svelte")
     | typeof import("@/features/settings/SettingsPage.svelte");
 
   const pageLoaders = {
@@ -42,6 +53,11 @@
     activity: () => import("@/features/activity/ActivityPage.svelte"),
     investments: () => import("@/features/assets/Investments.svelte"),
     "manual-assets": () => import("@/features/assets/ManualAssets.svelte"),
+    purchases: () => import("@/features/purchases/PurchasesPage.svelte"),
+    "investment-returns": () =>
+      import("@/features/investment-returns/InvestmentReturnsPage.svelte"),
+    "activity-analysis": () =>
+      import("@/features/activity/ActivityAnalysisPage.svelte"),
     settings: () => import("@/features/settings/SettingsPage.svelte"),
   } satisfies Record<PageKey, () => Promise<LazyPageModule>>;
   const pagePromises: Partial<Record<PageKey, Promise<LazyPageModule>>> = {};
@@ -57,7 +73,9 @@
     view === "more" || isMobileSetting(view)
       ? "settings"
       : isDetail(view)
-        ? "assets"
+        ? view === "purchases" || view === "activity-analysis"
+          ? "activity"
+          : "assets"
         : (view as PrimaryView),
   );
   const currentView = $derived(
@@ -67,13 +85,19 @@
   const mobileSetting = $derived(
     isMobileSetting(view) ? mobileSettingsLabels[view] : undefined,
   );
+  const activeWorkspaceTabs = $derived(
+    view === "more" ? [] : (workspaceTabs[primaryView] ?? []),
+  );
 
   function pageKey(next: LazyView): PageKey {
     if (
       next === "assets" ||
       next === "activity" ||
       next === "investments" ||
-      next === "manual-assets"
+      next === "manual-assets" ||
+      next === "purchases" ||
+      next === "investment-returns" ||
+      next === "activity-analysis"
     )
       return next;
     return "settings";
@@ -146,7 +170,12 @@
     scrollToTop();
   }
   function navigateBack() {
-    if (isDetail(view)) navigate("assets");
+    if (isDetail(view))
+      navigate(
+        view === "purchases" || view === "activity-analysis"
+          ? "activity"
+          : "assets",
+      );
     else if (isMobileSetting(view)) navigate("more");
   }
   function toggleMoneyVisibility() {
@@ -167,7 +196,7 @@
     }}
   >
     <aside
-      class="hidden border-r border-white/10 bg-ink px-6 py-7 text-white xl:sticky xl:top-0 xl:flex xl:h-screen xl:flex-col"
+      class="hidden border-r border-white/10 bg-ink px-5 py-5 text-white xl:sticky xl:top-0 xl:flex xl:h-screen xl:flex-col"
     >
       <div class="px-2">
         <h1 class="text-xl font-semibold tracking-normal">不用記帳</h1>
@@ -177,15 +206,15 @@
           ALL SET
         </p>
       </div>
-      <nav class="mt-6 grid gap-1">
+      <nav class="mt-7 grid gap-1" aria-label="主要工作區">
         {#each navItems as item (item.view)}
           {@const NavIcon = item.icon}
           <button
-            class={`flex min-h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium transition ${primaryView === item.view ? "bg-white/10 text-white" : "text-white/65 hover:bg-white/5 hover:text-white"}`}
+            class={`flex min-h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium transition ${primaryView === item.view ? "bg-white/12 text-white" : "text-white/65 hover:bg-white/5 hover:text-white"}`}
             aria-current={primaryView === item.view ? "page" : undefined}
             onclick={() => navigate(item.view)}
           >
-            <NavIcon class="size-[22px] shrink-0 stroke-[1.8]" />{item.label}
+            <NavIcon class="size-[21px] shrink-0 stroke-[1.8]" />{item.label}
           </button>
         {/each}
       </nav>
@@ -208,7 +237,7 @@
         class="sticky top-0 z-20 border-b border-ink/10 bg-paper/95 backdrop-blur-sm xl:static xl:bg-transparent xl:backdrop-blur-0"
       >
         <div
-          class="mx-auto flex max-w-[1440px] flex-col gap-3 px-4 py-4 sm:px-6 xl:px-8 xl:py-6"
+          class="mx-auto flex max-w-[1600px] flex-col px-4 py-2 sm:px-6 xl:px-8 xl:py-3"
         >
           <div class="flex items-center justify-between gap-3">
             <div class="min-w-0">
@@ -220,40 +249,38 @@
                     onclick={() => navigate("more")}>←</button
                   >
                   <h1
-                    class="truncate text-2xl font-semibold tracking-tight xl:text-3xl"
+                    class="truncate text-xl font-semibold tracking-tight xl:text-2xl"
                   >
                     <span class="md:hidden">{mobileSetting.label}</span>
-                    <span class="hidden md:inline">設定</span>
+                    <span class="hidden md:inline"
+                      >設定 / {mobileSetting.label}</span
+                    >
                   </h1>
                 </div>
               {:else}
-                {#if detail}<button
-                    class="mb-1 inline-flex items-center gap-1 text-xs font-medium text-steel"
-                    onclick={() => navigate("assets")}>← 返回資產</button
-                  >{/if}
+                {#if detail && view !== "activity-analysis"}<button
+                    class="mb-1 inline-flex items-center gap-1 text-xs font-medium text-steel xl:hidden"
+                    onclick={() =>
+                      navigate(view === "purchases" ? "activity" : "assets")}
+                    >← 返回{view === "purchases" ? "帳務" : "資產"}</button
+                  >
+                  <p class="mb-1 hidden text-caption text-subtle xl:block">
+                    {detail.label}
+                  </p>{/if}
                 <h1
-                  class="truncate text-2xl font-semibold tracking-tight xl:text-3xl"
+                  class="truncate text-xl font-semibold tracking-tight xl:text-2xl"
                 >
                   <span class="md:hidden"
                     >{view === "more"
                       ? "更多"
-                      : primaryView === "overview"
-                        ? "資產總覽"
-                        : primaryView === "activity"
-                          ? "所有活動"
-                          : (currentView.pageTitle ?? currentView.label)}</span
+                      : (detail?.label ??
+                        currentView.pageTitle ??
+                        currentView.label)}</span
                   ><span class="hidden md:inline"
-                    >{detail?.label ??
-                      currentView.pageTitle ??
-                      currentView.label}</span
+                    >{currentView.pageTitle ?? currentView.label}</span
                   >
                 </h1>
               {/if}
-              <p class="mt-1 hidden text-sm leading-6 text-subtle md:block">
-                {detail?.description ??
-                  mobileSetting?.description ??
-                  currentView.description}
-              </p>
             </div>
             <div class="flex shrink-0 items-center gap-2">
               <Button
@@ -274,8 +301,27 @@
         </div>
       </header>
 
+      {#if activeWorkspaceTabs.length > 1}
+        <div
+          class="no-scrollbar overflow-x-auto border-b border-ink/10 bg-paper"
+        >
+          <nav
+            class="mx-auto flex max-w-[1600px] gap-1 px-4 sm:px-6 xl:px-8"
+            aria-label={`${currentView.label}分頁`}
+          >
+            {#each activeWorkspaceTabs as tab (tab.view)}
+              <button
+                class={`min-h-11 shrink-0 border-b-2 px-3 text-sm font-semibold transition ${view === tab.view ? "border-steel text-steel" : "border-transparent text-subtle hover:border-ink/20 hover:text-ink"}`}
+                aria-current={view === tab.view ? "page" : undefined}
+                onclick={() => navigate(tab.view)}>{tab.label}</button
+              >
+            {/each}
+          </nav>
+        </div>
+      {/if}
+
       <main
-        class="mx-auto max-w-[1440px] px-4 pb-5 pt-0 sm:px-6 md:py-5 xl:px-8 xl:py-6"
+        class="mx-auto max-w-[1600px] px-4 pb-4 pt-0 sm:px-6 md:py-4 xl:px-8 xl:py-5"
       >
         {#if view === "overview"}
           <Overview {api} {navigate} />
@@ -300,6 +346,18 @@
                 {@const Page =
                   module.default as typeof import("@/features/assets/ManualAssets.svelte").default}
                 <Page {api} />
+              {:else if view === "purchases"}
+                {@const Page =
+                  module.default as typeof import("@/features/purchases/PurchasesPage.svelte").default}
+                <Page {api} />
+              {:else if view === "investment-returns"}
+                {@const Page =
+                  module.default as typeof import("@/features/investment-returns/InvestmentReturnsPage.svelte").default}
+                <Page {api} />
+              {:else if view === "activity-analysis"}
+                {@const Page =
+                  module.default as typeof import("@/features/activity/ActivityAnalysisPage.svelte").default}
+                <Page {api} />
               {:else}
                 {@const Page =
                   module.default as typeof import("@/features/settings/SettingsPage.svelte").default}
@@ -317,7 +375,7 @@
               {/if}
             {/if}
           {:catch}
-            <section class="min-w-0 py-16" role="alert" aria-live="assertive">
+            <section class="min-w-0 py-10" role="alert" aria-live="assertive">
               <h2 class="text-base font-semibold tracking-tight">
                 頁面載入失敗
               </h2>
@@ -330,11 +388,11 @@
         {/if}
       </main>
       <footer
-        class="mx-auto hidden max-w-[1440px] border-t border-ink/8 px-4 py-6 sm:px-6 md:block xl:px-8"
+        class="mx-auto hidden max-w-[1600px] border-t border-ink/8 px-4 py-4 sm:px-6 md:block xl:px-8"
       >
-        <p class="text-xs leading-relaxed text-ink/35">
-          <strong class="font-medium text-ink/50">免責聲明：</strong
-          >本程式僅供個人研究與自用，未與臺灣集中保管結算所、財政部、金融監督管理委員會、各銀行或任何金融機構合作，亦未獲前述機構授權或背書。本程式所呈現的資料以您自行提供之憑證取得，作者不保證資料的即時性、正確性與完整性，亦不對因使用本程式所產生的任何直接或間接損失負責。請勿將本程式用於任何商業用途。
+        <p class="text-xs text-ink/35">
+          <strong class="font-medium text-ink/50">免責聲明：</strong>
+          僅供個人研究；資料可能有延遲或誤差。
         </p>
       </footer>
     </div>

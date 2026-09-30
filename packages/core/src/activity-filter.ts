@@ -41,15 +41,22 @@ export function filterActivities(
         .includes(normalizedSearch);
     const matchesCategory =
       !filters.category ||
-      (item.category === filters.category.category &&
-        itemFlow === filters.category.flow);
+      (itemFlow === filters.category.flow &&
+        (item.category === filters.category.category ||
+          item.categoryParts?.some(
+            (part) =>
+              part.category === filters.category?.category && part.amount > 0,
+          )));
 
     return (
       activityDateKey(item).startsWith(filters.month) &&
       (!filters.from || activityDateKey(item) >= filters.from) &&
       (!filters.to || activityDateKey(item) <= filters.to) &&
       (!filters.categoryId ||
-        (item.categoryId ?? item.source) === filters.categoryId) &&
+        (item.categoryId ?? item.source) === filters.categoryId ||
+        item.categoryParts?.some(
+          (part) => part.categoryId === filters.categoryId && part.amount > 0,
+        )) &&
       matchesFlow &&
       matchesSource &&
       matchesSearch &&

@@ -27,6 +27,9 @@ function createDb(options: { existingLabel?: boolean } = {}) {
             return { id: values[0] };
           return null;
         },
+        async all() {
+          return { results: [] };
+        },
         async run() {
           return { meta: { changes: 1 } };
         },
@@ -109,6 +112,27 @@ describe("classification categories", () => {
 });
 
 describe("classification rule actions", () => {
+  it("keeps the complete invoice item id when saving an item category", async () => {
+    const { calls, db } = createDb();
+    const itemId = "einvoice:receipt/line 1";
+    const response = await classificationRoutes.request(
+      `/classification/overrides/invoice_item/${encodeURIComponent(itemId)}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ categoryId: "food" }),
+      },
+      { DB: db } as Env,
+    );
+
+    expect(response.status).toBe(200);
+    const insert = calls.find(({ sql }) =>
+      sql.includes("INSERT INTO CLASSIFICATION_OVERRIDES"),
+    );
+    expect(insert?.values).toContain(itemId);
+    expect(insert?.values).toContain("invoice_item");
+  });
+
   it("uses the selected category as the calculation behavior for a new rule", async () => {
     const { calls, db } = createDb();
     const response = await classificationRoutes.request(
@@ -133,6 +157,43 @@ describe("classification rule actions", () => {
     );
     expect(insert?.values).toContain("excluded");
     expect(insert?.values.at(-1)).toBe(0);
+  });
+
+  it("accepts large generated keyword alternations but bounds raw regexes", async () => {
+    const keywordPattern = `(?:${"A".repeat(250)}|${"B".repeat(250)})`;
+    const accepted = await classificationRoutes.request(
+      "/classification/rules",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          categoryId: "food",
+          targetType: "invoice_item",
+          field: "description",
+          operator: "regex",
+          pattern: keywordPattern,
+        }),
+      },
+      { DB: createDb().db } as Env,
+    );
+    expect(accepted.status).toBe(200);
+
+    const rejected = await classificationRoutes.request(
+      "/classification/rules",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          categoryId: "food",
+          targetType: "invoice_item",
+          field: "description",
+          operator: "regex",
+          pattern: "a".repeat(301),
+        }),
+      },
+      { DB: createDb().db } as Env,
+    );
+    expect(rejected.status).toBe(400);
   });
 
   it("updates an editable rule's category and matching condition", async () => {

@@ -145,10 +145,18 @@ export function formatActivityDateGroup(dateKey: string) {
 export function activityStatusLabel(
   item: Pick<
     ActivityItem,
-    "invoiceId" | "source" | "status" | "invoicePaymentMethod"
+    | "invoiceId"
+    | "source"
+    | "status"
+    | "invoicePaymentMethod"
+    | "invoicePaymentAccountSource"
   >,
 ) {
   if (item.invoicePaymentMethod === "cash") return "現金支付";
+  if (item.invoicePaymentMethod === "card")
+    return item.invoicePaymentAccountSource === "selected"
+      ? "已指定卡 · 待核對"
+      : "推定卡 · 待確認";
   if (item.invoiceId && item.source !== "invoice") return "已配對發票";
   if (item.status === "pending") return "待入帳";
   if (item.status === "posted") return "已入帳";

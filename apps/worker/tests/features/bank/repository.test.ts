@@ -88,13 +88,13 @@ function createDb() {
 
     INSERT INTO bank_transactions
       (id, connector_id, account_id, source_id, posted_date, amount, currency,
-       status, created_at, updated_at)
+       status, raw_payload, created_at, updated_at)
     VALUES
-      ('out', 'tdcc', 'account-a', 'out', '2026-08-22', -10000, 'TWD', 'posted', '2026-08-22', '2026-08-22'),
-      ('in', 'tdcc', 'account-b', 'in', '2026-08-22', 10000, 'TWD', 'posted', '2026-08-22', '2026-08-22'),
-      ('late', 'tdcc', 'account-c', 'late', '2026-08-22T21:00:00.000Z', 10000, 'TWD', 'posted', '2026-08-22', '2026-08-22'),
-      ('other-day', 'tdcc', 'account-c', 'other-day', '2026-08-23', 10000, 'TWD', 'posted', '2026-08-23', '2026-08-23'),
-      ('pending', 'tdcc', 'account-c', 'pending', '2026-08-22', -10000, 'TWD', 'pending', '2026-08-22', '2026-08-22');
+      ('out', 'tdcc', 'account-a', 'out', '2026-08-22', -10000, 'TWD', 'posted', '{"summary":"行動跨轉"}', '2026-08-22', '2026-08-22'),
+      ('in', 'tdcc', 'account-b', 'in', '2026-08-22', 10000, 'TWD', 'posted', NULL, '2026-08-22', '2026-08-22'),
+      ('late', 'tdcc', 'account-c', 'late', '2026-08-22T21:00:00.000Z', 10000, 'TWD', 'posted', NULL, '2026-08-22', '2026-08-22'),
+      ('other-day', 'tdcc', 'account-c', 'other-day', '2026-08-23', 10000, 'TWD', 'posted', NULL, '2026-08-23', '2026-08-23'),
+      ('pending', 'tdcc', 'account-c', 'pending', '2026-08-22', -10000, 'TWD', 'pending', NULL, '2026-08-22', '2026-08-22');
   `);
   return db;
 }
@@ -248,6 +248,9 @@ describe("bank list and detail queries", () => {
     });
     expect(rows.find((row) => row.id === "open-pending")).toMatchObject({
       status: "pending",
+    });
+    expect(rows.find((row) => row.id === "out")).toMatchObject({
+      sourceSummary: "行動跨轉",
     });
     expect(rows.some((row) => row.id === "pending")).toBe(false);
     const next = await listBankTransactions(db as unknown as D1Database, 2, {

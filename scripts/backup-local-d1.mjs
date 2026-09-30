@@ -21,6 +21,9 @@ export const BACKUP_TABLES = [
   "cash_wallet_settings",
   "cash_withdrawal_preferences",
   "classification_categories",
+  "classification_merchants",
+  "classification_merchant_rules",
+  "classification_merchant_product_rules",
   "classification_overrides",
   "classification_rules",
   "connector_settings",
@@ -29,6 +32,7 @@ export const BACKUP_TABLES = [
   "einvoice_sync_runs",
   "exchange_rates",
   "investment_positions",
+  "investment_position_cost_overrides",
   "investment_transactions",
   "invoice_line_items",
   "invoice_transaction_preferences",
@@ -65,9 +69,9 @@ export function buildRestoreSql(localExport) {
   const dataSql = localExport
     .split(/\r?\n/)
     .filter((line) => {
-      const match = line.trim().match(
-        /^(?:INSERT|REPLACE) INTO [\"`]?([^\"` (]+)[\"`]?/i,
-      );
+      const match = line
+        .trim()
+        .match(/^(?:INSERT|REPLACE) INTO [\"`]?([^\"` (]+)[\"`]?/i);
       return !match || !WRANGLER_METADATA_TABLES.has(match[1]);
     })
     .join("\n")

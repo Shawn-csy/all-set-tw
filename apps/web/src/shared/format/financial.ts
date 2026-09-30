@@ -8,11 +8,15 @@ type AccountBalance = {
   availableBalance?: number;
 };
 
-export function formatCurrency(value: number, currency = "TWD") {
+export function formatCurrency(
+  value: number,
+  currency = "TWD",
+  maximumFractionDigits = 0,
+) {
   if (moneyState.hidden) return "••••••";
   const sign = value < 0 ? "−" : "";
   const number = new Intl.NumberFormat("zh-TW", {
-    maximumFractionDigits: 0,
+    maximumFractionDigits,
   }).format(Math.abs(value));
   const symbols: Record<string, string> = {
     TWD: "NT$",
