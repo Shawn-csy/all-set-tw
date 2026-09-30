@@ -11,7 +11,8 @@ export type MobileSettingsView =
   | "data-sources"
   | "sync-notifications"
   | "exchange-rates"
-  | "classification-rules";
+  | "classification-rules"
+  | "ai-export";
 
 export type View = PrimaryView | DetailView | MobileSettingsView | "more";
 

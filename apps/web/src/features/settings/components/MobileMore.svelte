@@ -2,6 +2,7 @@
   import {
     Clock3,
     Database,
+    Download,
     ReceiptText,
     Settings,
     TrendingUp,
@@ -146,6 +147,19 @@
           ><span class="text-sm font-semibold text-steel"
             >{customRuleCount} 條自訂　›</span
           ></button
+        >
+        <button
+          class="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left"
+          onclick={() => navigate("ai-export")}
+          ><span
+            class="flex size-10 items-center justify-center rounded-xl bg-steel/10 text-steel"
+            ><Download class="size-5" /></span
+          ><span class="flex-1"
+            ><span class="block font-semibold">AI 匯出</span><span
+              class="block text-sm text-ink/45"
+              >下載交給 ChatGPT 分析的財務 JSON</span
+            ></span
+          ><span class="text-sm font-semibold text-steel">›</span></button
         >
       </div></Card
     >

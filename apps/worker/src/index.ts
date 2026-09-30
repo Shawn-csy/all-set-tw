@@ -1,4 +1,5 @@
 import { activityRoutes } from "./features/activity/route";
+import { aiFinancialContextRoutes } from "./features/ai-financial-context/route";
 import { bankCalculationRoutes } from "./features/bank/calculation-route";
 import { bankRoutes } from "./features/bank/route";
 import { cashWalletRoutes } from "./features/cash-wallet/route";
@@ -45,6 +46,7 @@ api.route("/", exchangeRateRoutes);
 api.route("/", invoiceRoutes);
 api.route("/", classificationRoutes);
 api.route("/", activityRoutes);
+api.route("/", aiFinancialContextRoutes);
 api.route("/", bankCalculationRoutes);
 api.route("/", cashWalletRoutes);
 api.route("/", dashboardRoutes);

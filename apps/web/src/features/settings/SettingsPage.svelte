@@ -148,6 +148,39 @@
     navigate("data-sources");
   }
 
+  function formatDateInput(date: Date) {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Taipei",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(date);
+  }
+
+  function daysBetween(from: string, to: string) {
+    return Math.round(
+      (Date.parse(`${to}T00:00:00.000Z`) -
+        Date.parse(`${from}T00:00:00.000Z`)) /
+        86_400_000,
+    );
+  }
+
+  const today = new Date();
+  const oneYearAgo = new Date(today);
+  oneYearAgo.setFullYear(today.getFullYear() - 1);
+  let exportFrom = $state(formatDateInput(oneYearAgo));
+  let exportTo = $state(formatDateInput(today));
+  const exportRangeError = $derived.by(() => {
+    if (!exportFrom || !exportTo) return "請選擇起訖日期。";
+    const days = daysBetween(exportFrom, exportTo);
+    if (days < 0) return "開始日期不可晚於結束日期。";
+    if (days > 366) return "下載區間不可超過 367 天。";
+    return "";
+  });
+  const financialContextHref = $derived(
+    `/api/ai/financial-context?from=${exportFrom}&to=${exportTo}`,
+  );
+
   function scrollSelectedConnector(node: HTMLElement, selected: boolean) {
     let firstFrame: number | undefined;
     let secondFrame: number | undefined;
@@ -412,6 +445,51 @@
       {:else}
         <MerchantClassificationPanel {api} />
       {/if}
+    </div>
+  {:else if mobileView === "ai-export"}
+    <div class="grid min-w-0 gap-4">
+      <section
+        aria-label="AI 財務 JSON 匯出"
+        class="min-w-0 rounded-xl border border-border bg-card p-[18px] shadow-xs"
+      >
+        <div
+          class="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end"
+        >
+          <label class="grid gap-1.5 text-sm font-semibold text-ink">
+            開始日期
+            <input
+              type="date"
+              bind:value={exportFrom}
+              max={exportTo}
+              class="min-h-10 rounded-lg border border-border bg-paper px-3 font-normal text-ink outline-none transition focus:border-steel focus:ring-2 focus:ring-steel/20"
+            />
+          </label>
+          <label class="grid gap-1.5 text-sm font-semibold text-ink">
+            結束日期
+            <input
+              type="date"
+              bind:value={exportTo}
+              min={exportFrom}
+              class="min-h-10 rounded-lg border border-border bg-paper px-3 font-normal text-ink outline-none transition focus:border-steel focus:ring-2 focus:ring-steel/20"
+            />
+          </label>
+          <a
+            href={financialContextHref}
+            download
+            aria-disabled={exportRangeError ? "true" : undefined}
+            tabindex={exportRangeError ? -1 : undefined}
+            class={`inline-flex min-h-10 items-center justify-center rounded-lg px-3.5 py-2 text-sm font-semibold text-white transition ${exportRangeError ? "pointer-events-none bg-muted text-muted-foreground" : "bg-steel hover:bg-steel/90"}`}
+            onclick={(event) => {
+              if (exportRangeError) event.preventDefault();
+            }}>下載 JSON</a
+          >
+        </div>
+        {#if exportRangeError}
+          <p class="mt-3 text-sm font-semibold text-coral" role="alert">
+            {exportRangeError}
+          </p>
+        {/if}
+      </section>
     </div>
   {:else}
     <div class="grid min-w-0 gap-4">

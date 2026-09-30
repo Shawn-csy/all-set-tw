@@ -9,6 +9,7 @@ describe("view hash navigation", () => {
     expect(parseViewHash("#/investment-returns")).toBe("investment-returns");
     expect(parseViewHash("#classification-rules")).toBe("classification-rules");
     expect(parseViewHash("#/sync-notifications")).toBe("sync-notifications");
+    expect(parseViewHash("#/ai-export")).toBe("ai-export");
   });
 
   it("rejects unknown routes and formats valid views", () => {
@@ -35,6 +36,14 @@ describe("view hash navigation", () => {
     expect(workspaceTabs.assets?.map((tab) => tab.label)).toEqual([
       "資產清冊",
       "投資收益",
+    ]);
+    expect(workspaceTabs.settings?.map((tab) => tab.label)).toEqual([
+      "設定總覽",
+      "資料來源",
+      "同步與通知",
+      "匯率",
+      "分類規則",
+      "AI 匯出",
     ]);
   });
 });

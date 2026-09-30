@@ -616,6 +616,7 @@ export function isConnectorId(value: string): value is ConnectorId {
 }
 
 export * from "./activity-types";
+export * from "./financial-context";
 export * from "./activity-list";
 export * from "./activity-flow";
 export * from "./activity-filter";

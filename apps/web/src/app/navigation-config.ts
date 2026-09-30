@@ -70,6 +70,7 @@ export const workspaceTabs: Partial<Record<PrimaryView, WorkspaceTab[]>> = {
     { view: "sync-notifications", label: "同步與通知" },
     { view: "exchange-rates", label: "匯率" },
     { view: "classification-rules", label: "分類規則" },
+    { view: "ai-export", label: "AI 匯出" },
   ],
 };
 
@@ -121,5 +122,9 @@ export const mobileSettingsLabels: Record<
   "classification-rules": {
     label: "分類規則",
     description: "讓銀行交易依條件自動分類。",
+  },
+  "ai-export": {
+    label: "AI 匯出",
+    description: "下載可交給 ChatGPT 或其他 AI 的財務 JSON。",
   },
 };

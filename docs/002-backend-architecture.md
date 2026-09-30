@@ -25,6 +25,7 @@ apps/
     │   ├── index.ts
     │   ├── features/
     │   │   ├── activity/
+    │   │   ├── ai-financial-context/
     │   │   ├── bank/
     │   │   ├── classification/
     │   │   ├── connectors/
@@ -368,6 +369,12 @@ Request
 ```
 
 非 `/api` 路徑交由 `ASSETS` binding 提供前端靜態檔案。
+
+### AI 財務摘要匯出
+
+`GET /api/ai/financial-context` 由 `ai-financial-context` feature 組合銀行交易、電子發票、投資交易、最新持倉、手動資產、帳戶餘額與匯率，回傳版本化的 `taiwan-fin-hub.ai-financial-context` JSON。預設涵蓋最近 12 個月，也可用 `from=YYYY-MM-DD&to=YYYY-MM-DD` 指定最多 367 天的區間。
+
+匯出資料保留原始幣別並提供可取得時的 TWD 參考值；消費彙總會沿用現有發票配對、分類與資產轉移排除規則。完整帳號、券商帳號、`sourceId`、`connectorId` 與 `rawPayload` 不會輸出。投資決策欄位只保存由交易代碼／名稱推定的 buy、sell、dividend、fee 等訊號，以及使用者已填寫的持倉備註；系統沒有保存的投資理由必須由 `limitations` 明確揭露，不能由匯出功能自行推論。
 
 ## Request 驗證
 
