@@ -39,7 +39,6 @@ const imageTag = sanitizeTag(
 );
 const image = `finance-worker-production:${imageTag}`;
 
-ensureCloudflareApiToken();
 await prepareProductionRoot();
 await ensureWranglerAuth();
 await ensureProductionVars();
@@ -110,14 +109,6 @@ async function prepareProductionRoot() {
   });
 }
 
-function ensureCloudflareApiToken() {
-  if (!process.env.CLOUDFLARE_API_TOKEN?.trim()) {
-    throw new Error(
-      "CLOUDFLARE_API_TOKEN is required to deploy the local Worker against the remote production D1.",
-    );
-  }
-}
-
 async function ensureProductionVars() {
   try {
     await stat(productionVars);
@@ -146,13 +137,6 @@ async function ensureWranglerAuth() {
     "config",
     "default.toml",
   );
-  try {
-    await stat(target);
-    return;
-  } catch (error) {
-    if (error?.code !== "ENOENT") throw error;
-  }
-
   const source = path.join(
     projectRoot,
     ".wrangler-config",

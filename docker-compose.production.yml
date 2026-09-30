@@ -14,7 +14,6 @@ services:
       WRANGLER_DEV_PORT: 8787
       WRANGLER_CONFIG: wrangler.production.local.toml
       XDG_CONFIG_HOME: /workspace/.wrangler-config
-      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:?Set CLOUDFLARE_API_TOKEN for the remote D1}
       SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
     volumes:
       - ${FINANCE_PRODUCTION_ROOT:?Set FINANCE_PRODUCTION_ROOT}/state:/workspace/apps/worker/.wrangler

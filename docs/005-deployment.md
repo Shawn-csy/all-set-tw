@@ -156,7 +156,7 @@ npm run db:migrate:remote
 
 ## 部署至既有 D1
 
-若要從本機部署至既有 D1，可在 repository 根目錄複製 `wrangler.toml` 為被忽略的 `wrangler.private.toml`，填入正確的 `database_id`，再執行：
+若要從本機部署至既有 D1，可在 repository 根目錄複製 `wrangler.toml` 為被忽略的 `wrangler.private.toml`，填入正確的 `database_id`，並使用已登入的 Wrangler OAuth，再執行：
 
 ```bash
 XDG_CONFIG_HOME=.wrangler-config npx wrangler d1 migrations apply DB \

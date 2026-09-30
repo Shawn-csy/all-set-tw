@@ -25,11 +25,6 @@ if [ -z "$CONFIG_ENCRYPTION_KEY" ]; then
   exit 1
 fi
 
-if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
-  echo "CLOUDFLARE_API_TOKEN is required for the remote production D1" >&2
-  exit 1
-fi
-
 export CONFIG_ENCRYPTION_KEY
 export X_BROWSER_HEADFUL="${X_BROWSER_HEADFUL:-false}"
 export WRANGLER_CONFIG="$wrangler_config"

@@ -46,7 +46,6 @@ export FINANCE_PRODUCTION_ROOT="$HOME/.local/share/taiwan-fin-hub-production"
 mkdir -p "$FINANCE_PRODUCTION_ROOT/vars"
 cp apps/worker/.dev.vars.example "$FINANCE_PRODUCTION_ROOT/vars/.dev.vars"
 # 編輯正式的 TEAM_DOMAIN、POLICY_AUD、VAPID 與其他必要設定
-export CLOUDFLARE_API_TOKEN="<remote D1 deploy token>"
 npm run deploy:local-production
 ```
 
@@ -56,7 +55,7 @@ npm run deploy:local-production
 
 正式設定中的 D1 binding 使用現有 `taiwan-fin-hub` Cloudflare D1 與 `remote = true`。正式容器啟動時只執行 remote migrations，不會建立或使用 production local D1。
 
-`CLOUDFLARE_API_TOKEN` 必須存在於手動 deploy shell 或 self-hosted runner environment；Wrangler 在 non-interactive container 中需要它才能存取 remote D1。
+部署會沿用 repository 的 `XDG_CONFIG_HOME=.wrangler-config` Wrangler OAuth 登入狀態，並把登入設定複製到獨立的 production root；不需要把 API token 放進 shell 或 Docker Compose。若 OAuth refresh token 已過期，先在 repo root 執行一次 `XDG_CONFIG_HOME=.wrangler-config npx wrangler whoami` 完成瀏覽器重新授權，再重新部署。
 
 正式容器以 `finance` 名稱執行，固定提供 `127.0.0.1:8787`。Cloudflare Tunnel 若要對外提供 `finance.shawnup.com`，仍只需指向這個主機埠；Tunnel 不會改變正式 D1 的位置。
 
