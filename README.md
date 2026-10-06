@@ -6,7 +6,7 @@
 
 **ALL SET — 自動同步銀行、信用卡、投資與電子發票的自架個人財務整合工具。**
 
-**可免費自架：** `main` 版本可透過 [Cloudflare Workers Free Plan](https://developers.cloudflare.com/workers/platform/pricing/) 一鍵部署；`local-first-backup` 分支則改為本地 Worker + 本地 D1，雲端 D1 僅作備份。
+**可免費自架：** `main` 以地端優先與雲端備份為主要部署模式：本地 Worker + 本地 D1 負責日常使用，Cloudflare D1 保存備份。Cloudflare Worker 仍可透過 [Cloudflare Workers Free Plan](https://developers.cloudflare.com/workers/platform/pricing/) 部署，但公開 `wrangler.toml` 預設為唯讀的 `cloud-backup` 模式。
 
 ## 目前介面
 
@@ -45,15 +45,15 @@
 - 部分銀行自動登入可能中斷你正在使用的官方 App 或網銀工作階段。
 - 資料更新時間與完整性取決於外部服務，不應視為銀行、券商或財政部的即時正式對帳資料。
 
-## 免費部署
+## 雲端部署與備份
 
-本專案使用的 Workers、D1、Queues、Workers AI 與 Browser Run 均提供免費額度。各項免費額度並非無限；超過服務限制時，相關功能可能暫停至額度重置。
+本專案使用的 Workers、D1、Queues、Workers AI 與 Browser Run 均提供免費額度。各項免費額度並非無限；超過服務限制時，相關功能可能暫停至額度重置。日常資料寫入與銀行／發票同步應由地端 Worker 執行，Cloudflare Worker 只讀取雲端備份。
 
 **需要：** [Cloudflare 帳號](https://dash.cloudflare.com/signup)、[GitHub 帳號](https://github.com/signup)
 
-### 步驟一：一鍵部署
+### 步驟一：部署唯讀雲端 Worker（選用）
 
-點擊下方按鈕。Cloudflare 會在你的 GitHub 帳號建立新的 repository、自動建立 D1 Database，並部署至 Cloudflare Workers：
+若需要在雲端檢查備份資料，可點擊下方按鈕。Cloudflare 會在你的 GitHub 帳號建立新的 repository、自動建立 D1 Database，並部署預設的唯讀 `cloud-backup` Worker：
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/TedLin1993/all-set-tw)
 
@@ -92,11 +92,11 @@ openssl rand -hex 32
 
 <img src="images/deploy-secrets.png" alt="設定 Cloudflare Access Secrets" width="700">
 
-### 步驟三：確認部署
+### 步驟三：確認雲端備份部署
 
-1. 開啟 `https://finance.shawnup.com`，確認會先要求 Cloudflare Access 登入
-2. 登入後前往「設定 → 資料來源」設定連接器
-3. 點擊同步以取得最新資料
+1. 開啟雲端 Worker 的網址，確認會先要求 Cloudflare Access 登入
+2. 登入後確認可以讀取已上傳的雲端備份資料
+3. 連接器設定、資料寫入與同步請改在下方的地端 Worker 執行；雲端 `cloud-backup` Worker 會拒絕寫入、排程同步與 Queue 消費
 
 ### 步驟四：調整登入方式與有效期限（選用）
 
@@ -148,17 +148,18 @@ git push
 
 ## 本機開發
 
-建立不納入版本控制的私人設定，將 `wrangler.local.toml` 的 D1 Database ID 換成開發用資料庫，並在 `.dev.vars` 設定自己的 `CONFIG_ENCRYPTION_KEY`：
+建立不納入版本控制的私人設定；`wrangler.local.toml` 使用本地模擬 D1，請不要填入正式 D1 的 `database_id`，並在 `.dev.vars` 設定自己的 `CONFIG_ENCRYPTION_KEY`：
 
 ```bash
 cp apps/worker/wrangler.local.toml.example apps/worker/wrangler.local.toml
 cp apps/worker/.dev.vars.example apps/worker/.dev.vars
 npm install
 npx wrangler login
+npm run db:migrate:local -w @taiwan-fin-hub/worker
 npm run dev
 ```
 
-範例設定的 D1 使用本地模擬資源，Workers AI 使用 Cloudflare remote binding；請勿在 dev 設定中指向正式資料庫。常用驗證指令：
+範例設定的 D1 使用本地模擬資源，Workers AI 使用 Cloudflare remote binding；請勿在 dev 設定中指向正式資料庫。`wrangler login` 也供雲端備份與 Workers AI remote binding 使用。常用驗證指令：
 
 ```bash
 npm run format:check
@@ -180,9 +181,19 @@ npm run dev:orbstack
 
 這會啟動 `finance-dev`，提供 `127.0.0.1:8788`；正式服務 `finance` 固定使用 `127.0.0.1:8787`。push 到 `main` 後，GitHub Actions 在同一台主機的 self-hosted runner 上建置並更新正式容器。完整說明請參考[OrbStack 本機開發 Worker](docs/007-orbstack-local-worker.md)與[本機開發／正式分離](docs/008-local-development-production.md)。
 
-## 地端優先版本
+## 地端優先與雲端備份
 
-若要讓地端資料庫成為日常主資料、再定期備份到雲端 D1，請使用 `local-first-backup` 分支。這個版本的地端 Worker 負責頁面、銀行／發票同步與所有寫入；雲端 Worker 設為唯讀備份模式，不會啟動排程或 Queue 同步。完整設定與還原流程請參考[地端優先與雲端備份](docs/006-local-first-backup.md)。
+若要讓地端資料庫成為日常主資料、再定期備份到雲端 D1，直接使用 `main` 的地端優先設定即可，不需要切換 branch。地端 Worker 負責頁面、銀行／發票同步與所有寫入；雲端 Worker 設為唯讀備份模式，不會啟動排程或 Queue 同步。
+
+```bash
+cp apps/worker/wrangler.local.toml.example apps/worker/wrangler.local.toml
+cp apps/worker/.dev.vars.example apps/worker/.dev.vars
+npm install
+npm run db:migrate:local -w @taiwan-fin-hub/worker
+npm run dev
+```
+
+備份前請準備被 Git 忽略的 `wrangler.private.toml`，確認它指向雲端 D1；再執行 `npm run backup:local -- --confirm`。若要以雲端快照重建本地 D1，執行 `npm run restore:local -- --confirm`。完整的 Tunnel、Access、備份排程與還原注意事項請參考[地端優先與雲端備份](docs/006-local-first-backup.md)。
 
 ## 技術架構
 

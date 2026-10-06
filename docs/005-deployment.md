@@ -28,6 +28,8 @@ openssl rand -hex 32
 
 Deploy to Cloudflare 會建立部署用 repository、D1 並設定 Workers Builds。本專案的 build 與 deploy script 也會檢查排程同步所需的 `taiwan-fin-hub-sync` Queue，缺少時自動建立；部署 script 會保留既有 VAPID 金鑰，初次部署則自動產生。
 
+目前 repository 的公開 `wrangler.toml` 將 `DEPLOYMENT_MODE` 設為 `cloud-backup`。因此這個一鍵部署出的 Worker 只提供雲端備份資料的讀取與檢查，不接受應用程式寫入，也不會執行排程同步或 Queue 工作；日常連接器設定與同步請使用[地端優先與雲端備份](006-local-first-backup.md)。若要把 Cloudflare D1 作為主資料庫，必須在獨立且經確認的部署設定中明確設為 `DEPLOYMENT_MODE = "cloud-primary"`，並自行評估該模式的資料安全與備份策略。
+
 若使用 Cloudflare Workers Builds 自動產生的 API token，請確認它具有帳戶層級的 **Queues Read** 與 **Queues Edit** 權限，否則 Queue 檢查或建立會失敗。
 
 ## Cloudflare Access
@@ -131,13 +133,14 @@ workflow 會：
 
 ## 本機開發
 
-建立私人設定檔並填入開發用 D1 Database ID 與加密金鑰：
+建立私人設定檔；`wrangler.local.toml` 使用 local simulation，不要填入正式 D1 的 `database_id`，並在 `.dev.vars` 設定開發用加密金鑰：
 
 ```bash
 cp apps/worker/wrangler.local.toml.example apps/worker/wrangler.local.toml
 cp apps/worker/.dev.vars.example apps/worker/.dev.vars
 npm install
 npx wrangler login
+npm run db:migrate:local -w @taiwan-fin-hub/worker
 npm run dev
 ```
 
