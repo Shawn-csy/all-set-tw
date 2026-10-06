@@ -8,6 +8,7 @@ dist/
 **/.wrangler/
 .wrangler-config/
 **/.wrangler-config/
+.wrangler-demo/
 
 .dev.vars
 .dev.vars.*

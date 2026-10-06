@@ -179,6 +179,17 @@ npm run build
 
 本機 relay、資料庫遷移與既有 D1 部署方式請參考[進階部署與更新](docs/005-deployment.md)。
 
+### 互動 Demo
+
+根網址現在是公開入口，會分流到正式登入或 Demo。要在本機啟動一份可操作、但完全不碰既有本地 D1 的 Demo：
+
+```bash
+npx wrangler login
+npm run demo
+```
+
+啟動後開啟 `http://127.0.0.1:8787/`，選擇「瀏覽互動 Demo」即可。Demo 使用獨立的 `.wrangler-demo` 持久化目錄與 `packages/db/seeds/demo.sql`，每次啟動都會重建示範資料；`DEMO_MODE` 會停用登入需求與所有寫入、同步操作。要直接操作假 D1 工作區可使用 `http://127.0.0.1:8787/#/demo/overview`；正式主程式仍使用 `http://127.0.0.1:8787/#/overview`。
+
 ### 使用容器化環境執行
 
 macOS 的本機容器環境分成開發與正式兩個 stack。開發容器使用完整工具鏈與 local dev D1，正式容器使用 runtime-only image 並連線既有的 Cloudflare D1：

@@ -1,5 +1,7 @@
-import { mount } from "svelte";
+import { mount, unmount } from "svelte";
 import App from "./app/App.svelte";
+import DemoPage from "./features/demo/DemoPage.svelte";
+import EntryPage from "./features/demo/EntryPage.svelte";
 import { isStandalonePwa } from "./shared/pwa/detection";
 import { registerPushServiceWorker } from "./shared/pwa/push";
 
@@ -13,4 +15,21 @@ if ("serviceWorker" in navigator) {
 
 const target = document.getElementById("root");
 if (!target) throw new Error("Missing #root element");
-mount(App, { target });
+
+function pageForRoute() {
+  const route = window.location.hash.replace(/^#\/?/, "");
+  return route === "" ? EntryPage : route === "demo" ? DemoPage : App;
+}
+
+let currentPage = pageForRoute();
+let currentInstance = mount(currentPage, { target });
+
+window.addEventListener("hashchange", () => {
+  const nextPage = pageForRoute();
+  if (nextPage === currentPage) return;
+
+  currentPage = nextPage;
+  void unmount(currentInstance).then(() => {
+    currentInstance = mount(currentPage, { target });
+  });
+});

@@ -105,6 +105,32 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+test("shows the public entry with formal login and demo branches", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "先選一個入口，再開始看懂你的錢。" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "登入正式系統" }),
+  ).toHaveAttribute("href", "/#/overview");
+  await expect(
+    page.getByRole("link", { name: "瀏覽互動 Demo" }),
+  ).toHaveAttribute("href", "/#/demo");
+  await expect(
+    page.getByRole("link", { name: "直接操作 Demo" }),
+  ).toHaveAttribute("href", "/#/demo/overview");
+
+  await page.goto("/#/demo");
+  await expect(
+    page.getByRole("heading", { name: "讓每一筆錢，都有去處。" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "開始瀏覽 Demo" }),
+  ).toHaveAttribute("href", "/#/demo/overview");
+});
+
 async function expectSelectedConnectorInView(
   page: Page,
   connectorId: string,
@@ -228,11 +254,11 @@ test("overview uses one monthly bank request for balances and cash flow", async 
 test("loads the responsive shell and changes primary views", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/#/overview");
   await expect(page.getByText("不用記帳").first()).toBeVisible();
   await expect(page.getByText("ALL SET").first()).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "總覽", exact: true }),
+    page.getByRole("heading", { name: "財務概況", exact: true }),
   ).toBeVisible();
 
   await page
@@ -241,19 +267,19 @@ test("loads the responsive shell and changes primary views", async ({
     .first()
     .click();
   await expect(
-    page.getByRole("heading", { name: "資產清冊", exact: true }),
+    page.getByRole("heading", { name: "資產", exact: true }),
   ).toBeVisible();
   await expect(page).toHaveURL(/#\/assets$/);
 
   await page.goBack();
   await expect(
-    page.getByRole("heading", { name: "總覽", exact: true }),
+    page.getByRole("heading", { name: "財務概況", exact: true }),
   ).toBeVisible();
 });
 
 test("renders the mobile bottom navigation", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
+  await page.goto("/#/overview");
   await expect(
     page.getByRole("navigation", { name: "主要導覽" }),
   ).toBeVisible();
@@ -1114,7 +1140,7 @@ test("shows reliable activity times and sorts them on desktop and mobile", async
 test("uses app-like scrolling and history only in standalone display mode", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/#/overview");
   await expect(page.locator("html")).not.toHaveClass(/is-standalone/);
   await expect(page.locator("html")).toHaveCSS("touch-action", "manipulation");
 
@@ -1149,7 +1175,7 @@ test("uses app-like scrolling and history only in standalone display mode", asyn
   await page.getByRole("button", { name: "資產", exact: true }).last().click();
   await expect(page).toHaveURL(/#\/assets$/);
   await expect(
-    page.getByRole("heading", { name: "資產清冊", exact: true }),
+    page.getByRole("heading", { name: "資產", exact: true }),
   ).toBeVisible();
   expect(await page.evaluate(() => window.history.length)).toBe(historyLength);
 });
