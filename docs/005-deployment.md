@@ -56,6 +56,26 @@ Deploy to Cloudflare 會建立部署用 repository、D1 並設定 Workers Builds
 
 若同一 Worker 需要接受多個 Access Application，可設定 `POLICY_AUDS`，使用逗號或空白分隔多個 Audience。一般單一部署只需 `POLICY_AUD`，應刪除部署時暫填的 `POLICY_AUDS`。
 
+### 公開 Demo
+
+正式 Worker 的 hostname 維持 Restricted，根路徑登入後直接進入正式工作區。不要嘗試用 `/#/demo` 在同一個 hostname 繞過 Access：URL hash 不會送到 Cloudflare，Access 無法依 hash 分流。
+
+公開 Demo 應使用獨立的 Worker 與 D1。先建立一次 Demo D1，將回傳的 `database_id` 填入被 Git 追蹤的 Demo deployment 設定，接著從 repo root 執行：
+
+```bash
+XDG_CONFIG_HOME=.wrangler-config npx wrangler d1 create taiwan-fin-hub-demo
+XDG_CONFIG_HOME=.wrangler-config npx wrangler d1 migrations apply DB \
+  --remote --config apps/worker/wrangler.demo.toml
+XDG_CONFIG_HOME=.wrangler-config npx wrangler d1 execute DB \
+  --remote --config apps/worker/wrangler.demo.toml \
+  --file packages/db/seeds/demo.sql --yes
+npm run build -w @taiwan-fin-hub/web
+XDG_CONFIG_HOME=.wrangler-config npx wrangler deploy \
+  --config apps/worker/wrangler.demo.toml
+```
+
+`wrangler deploy` 會輸出公開的 `workers.dev` URL。這個 deployment 的 `DEMO_MODE=true` 會略過 Access JWT，並由唯讀 middleware 阻擋寫入、同步與其他會改變資料的操作；它只使用 Demo D1，不會使用正式資料庫。
+
 ### 使用 Cloudflare 帳號登入
 
 Cloudflare Access 預設可能使用 Email OTP。如要限定 Cloudflare 帳號成員：

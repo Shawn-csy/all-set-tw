@@ -1,5 +1,6 @@
 name = "taiwan-fin-hub-demo"
 main = "src/index.ts"
+workers_dev = true
 compatibility_date = "2026-06-01"
 compatibility_flags = ["nodejs_compat"]
 
@@ -15,4 +16,5 @@ APP_ORIGINS = "http://127.0.0.1:8787 http://localhost:8787"
 [[d1_databases]]
 binding = "DB"
 database_name = "taiwan-fin-hub-demo"
+database_id = "6c307c81-5281-4a60-8538-6dcf3b3d0d7c"
 migrations_dir = "../../packages/db/migrations"

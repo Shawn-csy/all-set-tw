@@ -99,10 +99,10 @@
     </nav>
 
     <a
-      href="/#/demo/overview"
+      href="/"
       class="inline-flex h-10 items-center gap-2 rounded-full bg-ink px-4 text-sm font-medium text-white shadow-sm transition-transform hover:-translate-y-0.5"
     >
-      進入主程式
+      開始操作 Demo
       <ArrowRight class="size-4" />
     </a>
   </header>
@@ -131,7 +131,7 @@
         </p>
         <div class="mt-9 flex flex-wrap items-center gap-3">
           <a
-            href="/#/demo/overview"
+            href="/"
             class="inline-flex h-12 items-center gap-2 rounded-full bg-steel px-6 text-sm font-semibold text-white shadow-lg shadow-steel/15 transition-transform hover:-translate-y-0.5"
           >
             開始瀏覽 Demo
@@ -378,9 +378,9 @@
           </p>
         </div>
         <a
-          href="/#/demo/overview"
+          href="/"
           class="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-full bg-white px-6 text-sm font-semibold text-ink transition-transform hover:-translate-y-0.5"
-          >進入主程式 <ArrowRight class="size-4" /></a
+          >開始操作 Demo <ArrowRight class="size-4" /></a
         >
       </div>
     </section>

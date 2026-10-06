@@ -18,7 +18,7 @@ if (!target) throw new Error("Missing #root element");
 
 function pageForRoute() {
   const route = window.location.hash.replace(/^#\/?/, "");
-  return route === "" ? EntryPage : route === "demo" ? DemoPage : App;
+  return route === "entry" ? EntryPage : route === "demo" ? DemoPage : App;
 }
 
 let currentPage = pageForRoute();

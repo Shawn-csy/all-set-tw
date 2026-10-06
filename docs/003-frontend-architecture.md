@@ -1,6 +1,6 @@
 # 前端架構
 
-`apps/web` 是 Svelte 5 + Vite 的 client-side application。Worker 提供 `/api` 與建置後的靜態資源；目前不使用 SvelteKit routing。`main.ts` 會在沒有 hash route 時顯示公開入口，正式工作區與 Demo 頁面則沿用 hash route。
+`apps/web` 是 Svelte 5 + Vite 的 client-side application。Worker 提供 `/api` 與建置後的靜態資源；目前不使用 SvelteKit routing。正式 hostname 的根路徑直接載入工作區 App，Demo deployment 的根路徑直接載入 fake D1 工作區；Demo 介紹頁仍可透過 `#/demo` 開啟。
 
 ## 目錄責任
 

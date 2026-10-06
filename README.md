@@ -181,14 +181,16 @@ npm run build
 
 ### 互動 Demo
 
-根網址現在是公開入口，會分流到正式登入或 Demo。要在本機啟動一份可操作、但完全不碰既有本地 D1 的 Demo：
+正式網址的根路徑會沿用原本的 Cloudflare Access 登入流程，登入後直接進入正式工作區。公開 Demo 使用獨立的 Workers deployment 與 fake D1，不共用正式 D1，也不需要登入。要在本機啟動一份可操作、但完全不碰既有本地 D1 的 Demo：
 
 ```bash
 npx wrangler login
 npm run demo
 ```
 
-啟動後開啟 `http://127.0.0.1:8787/`，選擇「瀏覽互動 Demo」即可。Demo 使用獨立的 `.wrangler-demo` 持久化目錄與 `packages/db/seeds/demo.sql`，每次啟動都會重建示範資料；`DEMO_MODE` 會停用登入需求與所有寫入、同步操作。要直接操作假 D1 工作區可使用 `http://127.0.0.1:8787/#/demo/overview`；正式主程式仍使用 `http://127.0.0.1:8787/#/overview`。
+啟動後開啟 `http://127.0.0.1:8787/`，即可直接操作假 D1 工作區。Demo 使用獨立的 `.wrangler-demo` 持久化目錄與 `packages/db/seeds/demo.sql`，每次啟動都會重建示範資料；`DEMO_MODE` 會停用登入需求與所有寫入、同步操作。要查看 Demo 介紹頁可使用 `http://127.0.0.1:8787/#/demo`；正式主程式仍使用 `http://127.0.0.1:8787/#/overview`。
+
+若要提供公開 Demo，請部署 `apps/worker/wrangler.demo.toml` 到獨立的 Workers deployment。部署完成後，將 Wrangler 顯示的 `https://<demo-worker>.<account>.workers.dev` 網址提供給訪客；Demo deployment 啟用 `DEMO_MODE`，不需要 Cloudflare Access，也不會連到正式 D1。公開 Demo 的 D1 應先套用 migrations，再使用 `packages/db/seeds/demo.sql` 建立虛構資料。
 
 ### 使用容器化環境執行
 

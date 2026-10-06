@@ -105,30 +105,21 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test("shows the public entry with formal login and demo branches", async ({
+test("opens the formal workspace from the root path", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "載入總覽中" })).toBeVisible();
+});
+
+test("keeps the demo landing page available as an explicit route", async ({
   page,
 }) => {
-  await page.goto("/");
-  await expect(
-    page.getByRole("heading", { name: "先選一個入口，再開始看懂你的錢。" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: "登入正式系統" }),
-  ).toHaveAttribute("href", "/#/overview");
-  await expect(
-    page.getByRole("link", { name: "瀏覽互動 Demo" }),
-  ).toHaveAttribute("href", "/#/demo");
-  await expect(
-    page.getByRole("link", { name: "直接操作 Demo" }),
-  ).toHaveAttribute("href", "/#/demo/overview");
-
   await page.goto("/#/demo");
   await expect(
     page.getByRole("heading", { name: "讓每一筆錢，都有去處。" }),
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "開始瀏覽 Demo" }),
-  ).toHaveAttribute("href", "/#/demo/overview");
+  ).toHaveAttribute("href", "/");
 });
 
 async function expectSelectedConnectorInView(
