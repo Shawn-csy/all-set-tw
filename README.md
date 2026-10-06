@@ -53,9 +53,7 @@
 
 ### 步驟一：部署唯讀雲端 Worker（選用）
 
-若需要在雲端檢查備份資料，可點擊下方按鈕。Cloudflare 會在你的 GitHub 帳號建立新的 repository、自動建立 D1 Database，並部署預設的唯讀 `cloud-backup` Worker：
-
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/TedLin1993/all-set-tw)
+若需要在雲端檢查備份資料，請先將本專案放到你自己的 GitHub repository，再從 Cloudflare Dashboard 的 **Deploy to Cloudflare** 流程選擇該 repository。Cloudflare 會自動建立 D1 Database，並部署預設的唯讀 `cloud-backup` Worker。部署時請使用你自己的 GitHub 帳號、repository、Worker 名稱與網域，不要直接沿用其他部署的設定。
 
 Cloudflare Builds 會在 build 階段自動檢查並建立排程同步所需的 Queue；正式部署腳本也會再次檢查。既有安裝更新到使用 Queue 的版本時不需要手動建立資源。
 
@@ -77,9 +75,9 @@ openssl rand -hex 32
 
 ### 步驟二：啟用登入保護
 
-1. 前往 [Cloudflare Dashboard](https://dash.cloudflare.com/) → **Workers & Pages**，選擇剛建立的 `taiwan-fin-hub`
-2. 確認 `workers.dev` 沒有啟用，正式入口只保留自訂網域 `finance.shawnup.com`
-3. 在 `finance.shawnup.com` 的 Access Application 上啟用 Cloudflare Access，將存取模式設為 **Restricted**
+1. 前往 [Cloudflare Dashboard](https://dash.cloudflare.com/) → **Workers & Pages**，選擇剛建立的 Worker
+2. 確認 `workers.dev` 沒有啟用，正式入口只保留你自己的自訂網域，例如 `finance.example.com`
+3. 在該自訂網域的 Access Application 上啟用 Cloudflare Access，將存取模式設為 **Restricted**
 
 <img src="images/deploy-domains-restricted.png" alt="啟用 Cloudflare Access" width="700">
 
@@ -106,14 +104,14 @@ Cloudflare Access 可能預設使用 Email OTP，登入狀態通常會在 24 小
 
 1. 前往 **Zero Trust → Integrations → Identity providers**，確認已有 **Cloudflare**；若沒有，點選 **Add new identity provider → Cloudflare**
 2. 啟用 **Restrict to account members** 並儲存，避免非此 Cloudflare 帳號成員登入
-3. 前往 **Zero Trust → Access controls → Applications → taiwan-fin-hub → Authentication**，將登入方式設為 **Cloudflare**
+3. 前往 **Zero Trust → Access controls → Applications → 你的 Access Application → Authentication**，將登入方式設為 **Cloudflare**
 4. 若只使用此登入方式，可啟用 **Apply instant authentication**，略過登入方式選擇頁
 
 新建立的 Zero Trust organization 通常已預設啟用 Cloudflare identity provider，不需要另外新增。
 
 #### 將登入期限延長至一個月
 
-1. 在 `taiwan-fin-hub` Access Application 中，將 **Session Duration** 設為 **1 month**
+1. 在你的 Access Application 中，將 **Session Duration** 設為 **1 month**
 2. 前往 **Zero Trust → Access controls → Access settings**，將 **Global session duration** 設為 **1 month**
 3. 若 Access Policy 另外設定了 Session Duration，也要改為一個月，否則會以較短的期限為準
 
@@ -179,7 +177,7 @@ macOS 的 OrbStack 本機環境分成開發與正式兩個 stack。開發容器�
 npm run dev:orbstack
 ```
 
-這會啟動 `finance-dev`，提供 `127.0.0.1:8788`；正式服務 `finance` 固定使用 `127.0.0.1:8787`。push 到 `main` 後，GitHub Actions 在同一台主機的 self-hosted runner 上建置並更新正式容器。完整說明請參考[OrbStack 本機開發 Worker](docs/007-orbstack-local-worker.md)與[本機開發／正式分離](docs/008-local-development-production.md)。
+這會啟動開發 stack，預設提供 `127.0.0.1:8788`；若啟用本機正式 stack，請依你的 production root、port 與 Tunnel hostname 設定執行。push 到 `main` 後，GitHub Actions 可在你設定的 self-hosted runner 上建置並更新正式容器。完整說明請參考[OrbStack 本機開發 Worker](docs/007-orbstack-local-worker.md)與[本機開發／正式分離](docs/008-local-development-production.md)。
 
 ## 地端優先與雲端備份
 
@@ -217,8 +215,10 @@ npm run dev
 
 本程式僅供個人研究與自用，未與臺灣集中保管結算所、財政部、金融監督管理委員會、各銀行或任何金融機構合作，亦未獲前述機構授權或背書。本程式所呈現之資料以您自行提供之憑證取得，作者不保證資料之即時性、正確性與完整性，亦不對因使用本程式所產生之任何直接或間接損失負責。請勿將本程式用於任何商業用途。
 
+## 致謝
+
+本專案以 [kevchentw/taiwan-fin-hub](https://github.com/kevchentw/taiwan-fin-hub) 為基礎發展而來。特別感謝上游專案的原作者與所有貢獻者，提供穩固的架構、連接器實作與持續累積的開源成果。
+
 ## License
 
 本專案採用 [MIT License](LICENSE)，並保留原專案的著作權與授權聲明。
-
-> 本專案以 [kevchentw/taiwan-fin-hub](https://github.com/kevchentw/taiwan-fin-hub) 為基礎發展而來。感謝原作者與貢獻者奠定專案基礎。
