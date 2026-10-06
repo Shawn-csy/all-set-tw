@@ -6,6 +6,16 @@
 
 **ALL SET — 自動同步銀行、信用卡、投資與電子發票的自架個人財務整合工具。**
 
+## 與上游原版的主要差異
+
+本版本以[上游專案](https://github.com/kevchentw/taiwan-fin-hub)為基礎，除了原有的銀行、信用卡、投資與電子發票同步外，主要增加與調整以下內容：
+
+- **地端優先與雲端備份：** 本地 Worker + 本地 D1 作為日常主環境，支援完整快照備份至 Cloudflare D1，以及從雲端快照還原；雲端 Worker 預設為唯讀，不執行同步與排程。
+- **更完整的財務分析：** 新增支出分析、購買品項、週期性支出、現金流分類與發票配對，並改善資產轉移、現金提款與現金支付的計算方式。
+- **投資與現金資產管理：** 支援現金錢包、手動資產、股票報價、投資交易整理、持倉成本與未實現損益分析。
+- **AI 財務資料匯出：** 可依日期範圍匯出經過去識別化的財務 JSON，提供 ChatGPT 或其他 AI 分析消費、現金流、持倉與投資交易。
+- **本機部署與開發環境：** 增加 OrbStack 本機 Worker、開發／正式環境分離、Cloudflare Tunnel 與 Access 的部署說明，並補強瀏覽器連接器在本機執行時的安全與穩定性。
+
 **可免費自架：** `main` 以地端優先與雲端備份為主要部署模式：本地 Worker + 本地 D1 負責日常使用，Cloudflare D1 保存備份。Cloudflare Worker 仍可透過 [Cloudflare Workers Free Plan](https://developers.cloudflare.com/workers/platform/pricing/) 部署，但公開 `wrangler.toml` 預設為唯讀的 `cloud-backup` 模式。
 
 ## 目前介面
