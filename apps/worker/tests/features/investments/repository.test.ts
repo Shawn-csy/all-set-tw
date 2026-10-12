@@ -290,4 +290,38 @@ describe("investment repository", () => {
       }),
     ]);
   });
+
+  it("lets a newly synced amount replace a historical-close estimate", async () => {
+    const db = harness.binding;
+    await trade({
+      id: "synced-amount",
+      sourceId: "synced-amount",
+      tradeDate: "2026-09-12",
+      amount: 70_000,
+    });
+    await expect(
+      repository.upsertInvestmentTransactionAmount(db, {
+        transactionId: "synced-amount",
+        amount: 123_000,
+        source: "historical-close",
+        referencePrice: 123,
+        priceDate: "2026-09-12",
+        provider: "twse-close",
+      }),
+    ).resolves.toBe(true);
+
+    expect(
+      await repository.listInvestmentTransactionsInRange(db, {
+        from: "2026-09-01",
+        to: "2026-10-01",
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        id: "synced-amount",
+        amount: 70_000,
+        rawAmount: 70_000,
+        amountSource: "synced",
+      }),
+    ]);
+  });
 });

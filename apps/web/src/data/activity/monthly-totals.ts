@@ -1,6 +1,7 @@
 import type { BankData, BankTransactionRow } from "@/data/bank/types";
 import {
   isLikelyInvestmentCashFlow,
+  isLikelyInvestmentIncome,
   allocateInvoiceCategories,
   countedInvoiceAmount,
   type InvestmentCashTransferHint,
@@ -86,7 +87,14 @@ function calculateMonthlyActivityBreakdown(
       );
       if (isInvestment) {
         if (amount < 0) result.investmentExpense += Math.abs(amount);
-        if (amount > 0) result.investmentIncome += amount;
+        if (
+          amount > 0 &&
+          isLikelyInvestmentIncome({
+            ...transaction,
+            categoryId: transaction.classification?.categoryId,
+          })
+        )
+          result.investmentIncome += amount;
         return result;
       }
       if (transaction.excludedFromCalculation) return result;
@@ -135,6 +143,17 @@ function calculateMonthlyActivityBreakdown(
       investmentExpense: 0,
     },
   );
+
+  for (const trade of investmentTrades) {
+    if (trade.realizedProfit == null || !Number.isFinite(trade.realizedProfit))
+      continue;
+    const realizedProfit = transactionValueTwd(
+      { amount: trade.realizedProfit, currency: trade.currency ?? "TWD" },
+      rates,
+    );
+    if (realizedProfit >= 0) totals.investmentIncome += realizedProfit;
+    else totals.investmentExpense += Math.abs(realizedProfit);
+  }
 
   totals.ordinaryExpense += invoices
     .filter((invoice) => !matches.invoiceToTransactionId.has(invoice.id))

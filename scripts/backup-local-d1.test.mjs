@@ -18,7 +18,7 @@ describe("local D1 backup", () => {
     );
     expect(sql).not.toContain("d1_migrations");
     expect(sql).toContain("PRAGMA defer_foreign_keys = ON;");
-    expect(BACKUP_TABLES).toHaveLength(37);
+    expect(BACKUP_TABLES).toHaveLength(41);
   });
 
   it("prepends the clear transaction to a local data export", () => {

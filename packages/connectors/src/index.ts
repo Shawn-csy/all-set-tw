@@ -43,6 +43,11 @@ export {
   TdccOtpExpiredError,
   TdccVerificationRequiredError,
 } from "./tdcc";
+export { fetchHistoricalClose } from "./taiwan-market-data";
+export type {
+  HistoricalCloseQuote,
+  MarketDataFetcher,
+} from "./taiwan-market-data";
 export type {
   TdccConfig,
   TdccHolding,

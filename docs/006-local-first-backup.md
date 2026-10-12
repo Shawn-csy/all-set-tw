@@ -37,6 +37,8 @@ npm run restore:local -- --confirm
 
 這會以雲端 D1 快照覆蓋地端 D1；若地端已有尚未備份的資料，請不要執行此指令。
 
+若目標是本機正式 stack，請使用 `LOCAL_PRODUCTION_RESTORE=true` 的 production restore 流程，讓 `finance` 與備份 sidecar 先停止，避免還原期間同時讀寫 D1。
+
 啟動地端 Worker：
 
 ```bash

@@ -49,7 +49,7 @@
 ## 使用限制
 
 - 可在「設定 → AI 匯出」選擇起訖日期，下載最多 367 天的 JSON，交給 ChatGPT 或其他 AI 分析消費、現金流、目前持倉與投資交易；也可直接讀取 `GET /api/ai/financial-context?from=YYYY-MM-DD&to=YYYY-MM-DD`。匯出會保留原始幣別並排除完整帳號、券商帳號與 raw payload。投資決策理由若未在資料中保存，JSON 會標示為資料限制，不會自行捏造。
-- 投資持倉可在「資產 → 投資」為同步持倉補上每股成本，並在「投資收益」查看已有成本持倉的未實現損益。若交易來源缺少成交金額或完整歷史，頁面會列出買賣／贖回事件，但不會將收回本金當成獲利，也不會宣稱已算出整體歷史報酬率。
+- 投資持倉可在「資產 → 投資」為同步持倉補上每股成本，並在「投資收益」查看已有成本持倉的未實現損益。若交易來源缺少成交金額，系統會優先以交易日歷史收盤價產生標記為估算的成交額；找不到行情時仍列出買賣／贖回事件，不會以股數或佔位價格冒充成交額，也不會宣稱已算出完整歷史報酬率。
 - 連接器依賴外部網頁、App API 與回應格式；資料來源改版後可能需要更新才能恢復同步。
 - 系統不會繞過圖形驗證碼、OTP、裝置驗證等互動式安全機制；需要人工處理時會停止同步並顯示提示。
 - 部分銀行自動登入可能中斷你正在使用的官方 App 或網銀工作階段。
@@ -190,11 +190,11 @@ npm run demo
 
 啟動後開啟 `http://127.0.0.1:8787/`，即可直接操作假 D1 工作區。Demo 使用獨立的 `.wrangler-demo` 持久化目錄與 `packages/db/seeds/demo.sql`，每次啟動都會重建示範資料；`DEMO_MODE` 會停用登入需求與所有寫入、同步操作。要查看 Demo 介紹頁可使用 `http://127.0.0.1:8787/#/demo`；正式主程式仍使用 `http://127.0.0.1:8787/#/overview`。
 
-若要提供公開 Demo，請部署 `apps/worker/wrangler.demo.toml` 到獨立的 Workers deployment。部署完成後，將 Wrangler 顯示的 `https://<demo-worker>.<account>.workers.dev` 網址提供給訪客；Demo deployment 啟用 `DEMO_MODE`，不需要 Cloudflare Access，也不會連到正式 D1。公開 Demo 的 D1 應先套用 migrations，再使用 `packages/db/seeds/demo.sql` 建立虛構資料。
+若要提供公開 Demo，請部署 `apps/worker/wrangler.demo.toml` 到獨立的 Workers deployment。預設會將 Demo 掛在 `https://demo.finance.shawnup.com`；若改用其他網域，請同步修改 `routes` 與 `APP_ORIGINS`。Demo deployment 啟用 `DEMO_MODE`，不需要 Cloudflare Access，也不會連到正式 D1。公開 Demo 的 D1 應先套用 migrations，再使用 `packages/db/seeds/demo.sql` 建立虛構資料。
 
 ### 使用容器化環境執行
 
-macOS 的本機容器環境分成開發與正式兩個 stack。開發容器使用完整工具鏈與 local dev D1，正式容器使用 runtime-only image 並連線既有的 Cloudflare D1：
+macOS 的本機容器環境分成開發與正式兩個 stack。開發容器使用完整工具鏈與 local dev D1；正式容器使用 runtime-only image 與本機正式 D1，再由 `finance-d1-sync` 定期備份到既有的 Cloudflare D1：
 
 ```bash
 npm run dev:orbstack
@@ -214,7 +214,7 @@ npm run db:migrate:local -w @taiwan-fin-hub/worker
 npm run dev
 ```
 
-備份前請準備被 Git 忽略的 `wrangler.private.toml`，確認它指向雲端 D1；再執行 `npm run backup:local -- --confirm`。若要以雲端快照重建本地 D1，執行 `npm run restore:local -- --confirm`。完整的 Tunnel、Access、備份排程與還原注意事項請參考[地端優先與雲端備份](docs/006-local-first-backup.md)。
+備份前請準備被 Git 忽略的 `wrangler.private.toml`，確認它指向雲端 D1；再執行 `npm run backup:local -- --confirm`。正式本機 stack 若要以雲端快照重建本地 D1，請使用 `LOCAL_PRODUCTION_RESTORE=true npm run restore:local -- --confirm`，讓容器先停止再還原。完整的 Tunnel、Access、備份排程與還原注意事項請參考[地端優先與雲端備份](docs/006-local-first-backup.md)。
 
 ## 技術架構
 

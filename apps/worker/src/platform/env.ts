@@ -19,6 +19,7 @@ export interface Env {
   POLICY_AUD?: string;
   POLICY_AUDS?: string;
   DEMO_MODE?: string | boolean;
+  DEMO_DATA_AS_OF_MONTH?: string;
   LOCAL_DEV_MODE?: string | boolean;
   DEPLOYMENT_MODE?: "cloud-primary" | "cloud-backup" | "local-primary" | string;
   APP_ORIGINS?: string;

@@ -74,7 +74,7 @@ XDG_CONFIG_HOME=.wrangler-config npx wrangler deploy \
   --config apps/worker/wrangler.demo.toml
 ```
 
-`wrangler deploy` 會輸出公開的 `workers.dev` URL。這個 deployment 的 `DEMO_MODE=true` 會略過 Access JWT，並由唯讀 middleware 阻擋寫入、同步與其他會改變資料的操作；它只使用 Demo D1，不會使用正式資料庫。
+`wrangler deploy` 會依 `apps/worker/wrangler.demo.toml` 的 custom domain 設定，將 Demo 掛到獨立的 `demo.finance.shawnup.com`。這個 deployment 的 `DEMO_MODE=true` 會略過 Access JWT，並由唯讀 middleware 阻擋寫入、同步與其他會改變資料的操作；它只使用 Demo D1，不會使用正式資料庫。若更換 Demo 網域，請同步修改 `routes` 與 `APP_ORIGINS`。
 
 ### 使用 Cloudflare 帳號登入
 
@@ -175,7 +175,7 @@ npm run db:migrate:remote
 
 中信行動銀行的 TLS endpoint 無法由 local workerd 直接連線，因此 `npm run dev` 會自動啟動只監聽 `127.0.0.1`、限制目的端點並使用單次隨機 token 的 Node relay；正式 Worker 不使用此 relay。
 
-若正式服務也執行在同一台 macOS／OrbStack 主機，請使用獨立的正式 image 與 production root，但讓正式 Worker 透過 remote binding 連線既有的 Cloudflare D1；不要讓正式容器依賴開發 checkout 或 local dev D1。完整的 dev／production 分離、push 後部署與清理方式請參閱 [`docs/008-local-development-production.md`](008-local-development-production.md)。
+若正式服務也執行在同一台 macOS／OrbStack 主機，請使用獨立的正式 image 與 production root；目前正式本機 stack 以本機持久化 D1 為主，並由 `finance-d1-sync` 定期備份到既有的 Cloudflare D1。不要讓正式容器依賴開發 checkout 或 dev D1。完整的 dev／production 分離、push 後部署與清理方式請參閱 [`docs/008-local-development-production.md`](008-local-development-production.md)。
 
 ## 部署至既有 D1
 

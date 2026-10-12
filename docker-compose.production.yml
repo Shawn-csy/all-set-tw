@@ -4,15 +4,22 @@ services:
     platform: linux/amd64
     container_name: finance
     init: true
+    mem_limit: 2g
+    memswap_limit: 2g
+    mem_reservation: 768m
+    pids_limit: 256
     ports:
       - "127.0.0.1:8787:8787"
     environment:
       TZ: Asia/Taipei
       CI: "true"
       X_BROWSER_HEADFUL: "false"
-      WRANGLER_DEV_IP: 0.0.0.0
-      WRANGLER_DEV_PORT: 8787
       WRANGLER_CONFIG: wrangler.production.local.toml
+      WORKER_RUNTIME_HOST: 0.0.0.0
+      WORKER_RUNTIME_PORT: 8787
+      WORKER_STATE_PATH: /workspace/apps/worker/.wrangler/state/v3
+      WORKER_TMP_PATH: /workspace/apps/worker/.wrangler/tmp
+      LOCAL_CRON_INTERVAL_MINUTES: 10
       XDG_CONFIG_HOME: /workspace/.wrangler-config
       SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
     volumes:
@@ -27,12 +34,54 @@ services:
         - node
         - -e
         - >-
-          fetch('http://127.0.0.1:8787/api/runtime').then((response) => {
+          fetch('http://127.0.0.1:8787/api/ready').then((response) => {
           if (!response.ok) process.exit(1); }).catch(() => process.exit(1))
       interval: 15s
       timeout: 5s
       retries: 10
       start_period: 120s
+    restart: unless-stopped
+
+  d1-sync:
+    image: finance-worker-production:${FINANCE_PRODUCTION_TAG:-latest}
+    platform: linux/amd64
+    container_name: finance-d1-sync
+    init: true
+    mem_limit: 768m
+    memswap_limit: 768m
+    mem_reservation: 128m
+    pids_limit: 128
+    environment:
+      TZ: Asia/Taipei
+      CI: "true"
+      XDG_CONFIG_HOME: /workspace/.wrangler-config
+      LOCAL_WRANGLER_CONFIG: apps/worker/wrangler.production.local.toml
+      REMOTE_WRANGLER_CONFIG: /workspace/wrangler.private.toml
+      LOCAL_D1_PERSIST_TO: /workspace/apps/worker/.wrangler
+      LOCAL_BACKUP_STATUS_PATH: /workspace/apps/worker/.wrangler/backup-status.json
+      LOCAL_BACKUP_INTERVAL_MINUTES: 30
+      BACKUP_MAX_AGE_MINUTES: 90
+    volumes:
+      - ${FINANCE_PRODUCTION_ROOT:?Set FINANCE_PRODUCTION_ROOT}/state:/workspace/apps/worker/.wrangler
+      - ${FINANCE_PRODUCTION_ROOT:?Set FINANCE_PRODUCTION_ROOT}/wrangler-config:/workspace/.wrangler-config
+      - ${FINANCE_PRODUCTION_ROOT:?Set FINANCE_PRODUCTION_ROOT}/vars/.dev.vars:/workspace/apps/worker/.dev.vars:ro
+      - ${FINANCE_PRODUCTION_ROOT:?Set FINANCE_PRODUCTION_ROOT}/wrangler.private.toml:/workspace/wrangler.private.toml:ro
+    depends_on:
+      worker:
+        condition: service_healthy
+    entrypoint:
+      - /usr/local/bin/node
+    command:
+      - /workspace/scripts/watch-local-d1-backup.mjs
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - /workspace/scripts/check-local-d1-backup-health.mjs
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 180s
     restart: unless-stopped
 
 secrets:

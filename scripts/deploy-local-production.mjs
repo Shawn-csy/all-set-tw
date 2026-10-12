@@ -38,21 +38,53 @@ const imageTag = sanitizeTag(
     `local-${Date.now()}`,
 );
 const image = `finance-worker-production:${imageTag}`;
+const releaseMetadataPath = path.join(productionRoot, "release.json");
+const sourceState = readSourceState();
+
+if (
+  sourceState.dirty &&
+  (process.env.REQUIRE_CLEAN_DEPLOY === "true" || process.env.CI === "true")
+) {
+  throw new Error(
+    "Refusing to deploy a dirty working tree. Commit the release or unset REQUIRE_CLEAN_DEPLOY for an explicitly local deployment.",
+  );
+}
+if (sourceState.dirty) {
+  console.warn(
+    "Deploying a dirty working tree; release.json will record the uncommitted source state.",
+  );
+}
 
 await prepareProductionRoot();
 await ensureWranglerAuth();
 await ensureProductionVars();
 await writeConfigKey();
+await ensureCloudBackupConfig();
 await copyFile(
   path.join(projectRoot, "docker-compose.production.yml"),
   productionCompose,
 );
 await writeFile(
   productionEnv,
-  `FINANCE_PRODUCTION_ROOT=${productionRoot}\nFINANCE_PRODUCTION_TAG=latest\n`,
+  `FINANCE_PRODUCTION_ROOT=${productionRoot}\nFINANCE_PRODUCTION_TAG=${imageTag}\n`,
   { encoding: "utf8", mode: 0o600 },
 );
 await chmod(productionEnv, 0o600);
+await writeFile(
+  releaseMetadataPath,
+  `${JSON.stringify(
+    {
+      image,
+      sourceCommit: sourceState.commit,
+      sourceBranch: sourceState.branch,
+      dirty: sourceState.dirty,
+      deployedAt: new Date().toISOString(),
+    },
+    null,
+  )}\n`,
+  { encoding: "utf8", mode: 0o600 },
+);
+await chmod(releaseMetadataPath, 0o600);
 
 console.log(`Building ${image}...`);
 await run("docker", [
@@ -87,8 +119,14 @@ await run(
   { cwd: productionRoot },
 );
 
-await waitForHealthy();
-console.log("Local production is healthy: finance on 127.0.0.1:8787");
+await waitForHealthy("finance");
+await waitForHealthy("finance-d1-sync");
+await run("node", [
+  path.join(projectRoot, "scripts/check-local-production-runtime.mjs"),
+]);
+console.log(
+  "Local production is healthy: finance on 127.0.0.1:8787; D1 backup is fresh.",
+);
 
 async function prepareProductionRoot() {
   await mkdir(path.join(productionRoot, "state"), {
@@ -171,6 +209,23 @@ async function writeConfigKey() {
   await chmod(configKeyPath, 0o600);
 }
 
+async function ensureCloudBackupConfig() {
+  const source = path.join(projectRoot, "wrangler.private.toml");
+  const target = path.join(productionRoot, "wrangler.private.toml");
+  try {
+    await stat(source);
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      throw new Error(
+        `Missing private Wrangler config: ${source}. Create it with the Cloudflare D1 database_id before deploying local production.`,
+      );
+    }
+    throw error;
+  }
+  await copyFile(source, target);
+  await chmod(target, 0o600);
+}
+
 function loadKeychainConfigKey() {
   if (process.platform !== "darwin") return "";
   try {
@@ -191,23 +246,50 @@ function loadKeychainConfigKey() {
   }
 }
 
-async function waitForHealthy() {
+async function waitForHealthy(containerName) {
   for (let attempt = 0; attempt < 180; attempt += 1) {
     const result = await capture("docker", [
       "inspect",
       "--format",
       "{{.State.Health.Status}}",
-      "finance",
+      containerName,
     ]);
     if (result.code === 0 && result.stdout.trim() === "healthy") return;
     if (result.code === 0 && result.stdout.trim() === "unhealthy") {
-      await run("docker", ["logs", "--tail", "100", "finance"]);
-      throw new Error("Local production failed its healthcheck.");
+      await run("docker", ["logs", "--tail", "100", containerName]);
+      throw new Error(`${containerName} failed its healthcheck.`);
     }
     await delay(1000);
   }
-  await run("docker", ["logs", "--tail", "100", "finance"]);
-  throw new Error("Timed out waiting for local production to become healthy.");
+  await run("docker", ["logs", "--tail", "100", containerName]);
+  throw new Error(`Timed out waiting for ${containerName} to become healthy.`);
+}
+
+function readSourceState() {
+  try {
+    const commit = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: projectRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    const branch = execFileSync("git", ["branch", "--show-current"], {
+      cwd: projectRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    const changes = execFileSync(
+      "git",
+      ["status", "--porcelain", "--untracked-files=all"],
+      {
+        cwd: projectRoot,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      },
+    ).trim();
+    return { commit, branch, dirty: changes.length > 0 };
+  } catch {
+    return { commit: null, branch: null, dirty: true };
+  }
 }
 
 function sanitizeTag(value) {

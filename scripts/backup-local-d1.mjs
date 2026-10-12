@@ -34,7 +34,11 @@ export const BACKUP_TABLES = [
   "investment_positions",
   "investment_position_cost_overrides",
   "investment_transactions",
+  "investment_transaction_amount_overrides",
   "invoice_line_items",
+  "invoice_merchant_overrides",
+  "invoice_payment_accounts",
+  "invoice_payment_account_rules",
   "invoice_transaction_preferences",
   "invoices",
   "manual_assets",
@@ -84,22 +88,28 @@ function configPath(name, fallback) {
   return resolve(repositoryDirectory, process.env[name]?.trim() || fallback);
 }
 
+function localPersistArgs() {
+  const persistTo = process.env.LOCAL_D1_PERSIST_TO?.trim();
+  return persistTo ? ["--persist-to", persistTo] : [];
+}
+
 async function runWrangler(args) {
-  const executable = process.platform === "win32" ? "npx.cmd" : "npx";
-  const { stdout, stderr } = await execFileAsync(
-    executable,
-    ["wrangler", ...args],
-    {
-      cwd: repositoryDirectory,
-      env: {
-        ...process.env,
-        XDG_CONFIG_HOME:
-          process.env.XDG_CONFIG_HOME ||
-          join(repositoryDirectory, ".wrangler-config"),
-      },
-      maxBuffer: 16 * 1024 * 1024,
-    },
+  const executable = resolve(
+    repositoryDirectory,
+    process.platform === "win32"
+      ? "node_modules/wrangler/bin/wrangler.js"
+      : "node_modules/.bin/wrangler",
   );
+  const { stdout, stderr } = await execFileAsync(executable, args, {
+    cwd: repositoryDirectory,
+    env: {
+      ...process.env,
+      XDG_CONFIG_HOME:
+        process.env.XDG_CONFIG_HOME ||
+        join(repositoryDirectory, ".wrangler-config"),
+    },
+    maxBuffer: 16 * 1024 * 1024,
+  });
   if (stdout.trim()) process.stdout.write(stdout);
   if (stderr.trim()) process.stderr.write(stderr);
 }
@@ -137,6 +147,7 @@ export async function backupLocalD1({ confirm = false } = {}) {
       "--local",
       "--config",
       localConfig,
+      ...localPersistArgs(),
     ]);
 
     console.log("[backup] Exporting local D1 data.");
@@ -225,6 +236,7 @@ export async function restoreCloudD1ToLocal({ confirm = false } = {}) {
       "--local",
       "--config",
       localConfig,
+      ...localPersistArgs(),
     ]);
 
     console.log("[restore] Exporting the cloud backup data.");
@@ -262,6 +274,7 @@ export async function restoreCloudD1ToLocal({ confirm = false } = {}) {
       "--yes",
       "--config",
       localConfig,
+      ...localPersistArgs(),
     ]);
     console.log("[restore] Cloud backup restored to local D1.");
   } finally {

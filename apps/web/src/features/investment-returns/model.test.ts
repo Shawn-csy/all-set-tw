@@ -58,6 +58,11 @@ describe("investment return model", () => {
     ).toBe("income");
     expect(
       classifyInvestmentTransaction(
+        transaction({ transactionCode: "600", transactionName: "買賣相抵" }),
+      ),
+    ).toBe("other");
+    expect(
+      classifyInvestmentTransaction(
         transaction({
           transactionCode: "113",
           transactionName: "買　　進",

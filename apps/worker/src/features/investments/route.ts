@@ -226,14 +226,26 @@ function registerInvestmentRoutes(api: Hono<AppBindings>) {
     async (c) => {
       const range = resolveMonthDateRange(c.req.valid("query"));
       if (range)
-        return c.json(await getInvestmentTransactionsRange(c.env.DB, range));
+        return c.json(
+          await getInvestmentTransactionsRange(
+            c.env.DB,
+            range,
+            undefined,
+            fetch,
+          ),
+        );
 
       const { limit, cursor } = parseKeysetPagination(
         c.req.query(),
         transactionPageCursorSchema,
         100,
       );
-      const page = await getInvestmentTransactionPage(c.env.DB, limit, cursor);
+      const page = await getInvestmentTransactionPage(
+        c.env.DB,
+        limit,
+        cursor,
+        fetch,
+      );
       setKeysetPaginationHeaders((name, value) => c.header(name, value), {
         hasMore: page.hasMore,
         nextCursor:

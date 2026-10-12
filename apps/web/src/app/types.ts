@@ -18,6 +18,7 @@ export type View = PrimaryView | DetailView | MobileSettingsView | "more";
 
 export interface RuntimeInfo {
   demoMode: boolean;
+  demoDataAsOfMonth?: string;
   deploymentMode?: "cloud-primary" | "cloud-backup" | "local-primary" | string;
   cloudBackup?: boolean;
 }

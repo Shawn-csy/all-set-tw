@@ -12,6 +12,7 @@
     activityDisplayAmount,
     buildActivityItems,
     isLikelyInvestmentCashFlow,
+    isLikelyInvestmentIncome,
     type ActivityItem,
   } from "@taiwan-fin-hub/core";
   import Button from "@/shared/ui/Button.svelte";
@@ -115,18 +116,26 @@
   let {
     api,
     navigate,
+    demoDataAsOfMonth,
   }: {
     api: ApiClient;
     navigate: (view: View, connectorId?: ConnectorId) => void;
+    demoDataAsOfMonth?: string;
   } = $props();
 
   type OverviewPeriod = "calendar" | "salary";
-  const overviewNow = new Date();
-  const monthKey = `${overviewNow.getFullYear()}-${String(overviewNow.getMonth() + 1).padStart(2, "0")}`;
-  const calendarDateRange: CalendarDateRange = {
+  const overviewNow = $derived(
+    demoDataAsOfMonth
+      ? new Date(`${demoDataAsOfMonth}-15T12:00:00+08:00`)
+      : new Date(),
+  );
+  const monthKey = $derived(
+    `${overviewNow.getFullYear()}-${String(overviewNow.getMonth() + 1).padStart(2, "0")}`,
+  );
+  const calendarDateRange = $derived<CalendarDateRange>({
     from: `${monthKey}-01`,
     to: `${monthKey}-${String(overviewNow.getDate()).padStart(2, "0")}`,
-  };
+  });
   let overviewPeriod = $state<OverviewPeriod>("salary");
   let salaryDay = $state(String(readSalaryDay()));
   const periodDateRange = $derived(
@@ -688,13 +697,18 @@
           (flow === "invested"
             ? transaction.amount < 0
             : transaction.amount > 0) &&
-          isLikelyInvestmentCashFlow(
-            {
-              ...transaction,
-              categoryId: transaction.classification?.categoryId,
-            },
-            trades,
-          ),
+          (flow === "returned"
+            ? isLikelyInvestmentIncome({
+                ...transaction,
+                categoryId: transaction.classification?.categoryId,
+              })
+            : isLikelyInvestmentCashFlow(
+                {
+                  ...transaction,
+                  categoryId: transaction.classification?.categoryId,
+                },
+                trades,
+              )),
       )
       .map((transaction): SpendingDetail => {
         const matches = investmentTradeMatches(transaction, trades);
@@ -730,38 +744,75 @@
         };
       });
   }
-  const investmentSpendingDetails = $derived(
-    investmentSpendingDetailsFor(
+  function realizedProfitDetailsFor(
+    trades: InvestmentTransactionRow[],
+    flow: "income" | "expense",
+  ) {
+    return trades.flatMap((trade): SpendingDetail[] => {
+      if (
+        trade.realizedProfit == null ||
+        !Number.isFinite(trade.realizedProfit) ||
+        (flow === "income"
+          ? trade.realizedProfit <= 0
+          : trade.realizedProfit >= 0)
+      )
+        return [];
+      const amount = toTwd(Math.abs(trade.realizedProfit), trade.currency);
+      if (!Number.isFinite(amount) || amount <= 0) return [];
+      const security = trade.symbol ?? trade.name ?? "標的";
+      const title = `已實現損益 ${security}`;
+      return [
+        {
+          id: `realized-profit-${trade.id}`,
+          key: spendingDetailKey(title),
+          date: trade.tradeDate ?? trade.postedDate,
+          title,
+          subtitle: [
+            trade.transactionName ?? trade.transactionCode ?? "賣出／贖回",
+            "已扣除對應成本",
+          ].join(" · "),
+          amount,
+          count: 1,
+        },
+      ];
+    });
+  }
+  const investmentSpendingDetails = $derived([
+    ...investmentSpendingDetailsFor(
       periodBankData.transactions,
       periodInvestmentTrades,
       "invested",
       manualInvestmentHoldings,
     ),
-  );
-  const previousInvestmentSpendingDetails = $derived(
-    investmentSpendingDetailsFor(
+    ...realizedProfitDetailsFor(periodInvestmentTrades, "expense"),
+  ]);
+  const previousInvestmentSpendingDetails = $derived([
+    ...investmentSpendingDetailsFor(
       previousBankData.transactions,
       previousInvestmentTrades,
       "invested",
       manualInvestmentHoldings,
     ),
-  );
-  const investmentReturnDetails = $derived(
-    investmentSpendingDetailsFor(
+    ...realizedProfitDetailsFor(previousInvestmentTrades, "expense"),
+  ]);
+  const investmentReturnDetails = $derived([
+    ...investmentSpendingDetailsFor(
       periodBankData.transactions,
       periodInvestmentTrades,
       "returned",
       manualInvestmentHoldings,
     ),
-  );
-  const previousInvestmentReturnDetails = $derived(
-    investmentSpendingDetailsFor(
+    ...realizedProfitDetailsFor(periodInvestmentTrades, "income"),
+  ]);
+  const previousInvestmentReturnDetails = $derived([
+    ...investmentSpendingDetailsFor(
       previousBankData.transactions,
       previousInvestmentTrades,
       "returned",
       manualInvestmentHoldings,
     ),
-  );
+    ...realizedProfitDetailsFor(previousInvestmentTrades, "income"),
+  ]);
   function activitySpendingDetailsFor(category: string, items: ActivityItem[]) {
     const details: SpendingDetail[] = [];
     for (const item of items) {
@@ -1357,7 +1408,7 @@
               <div class="md:col-span-2 border-t border-ink/10 px-2 pt-3">
                 <p class="text-sm font-semibold">本期投資相關</p>
                 <p class="mt-0.5 text-xs text-subtle">
-                  投入計入支出、收回計入收入，但與一般消費分開列示。
+                  投入列為支出；賣出／贖回本金不直接算收入，只計已實現損益與配息。
                 </p>
               </div>
             {/if}

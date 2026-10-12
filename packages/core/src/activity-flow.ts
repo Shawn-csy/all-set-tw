@@ -9,6 +9,8 @@ export interface InvestmentCashTransferHint {
   postedDate?: string | null;
   transactionName?: string | null;
   transactionCode?: string | null;
+  realizedProfit?: number | null;
+  currency?: string | null;
 }
 
 export interface InvestmentCashMovement {
@@ -59,8 +61,9 @@ export function isLikelyInvestmentCashTransfer(
 
 /**
  * Detects both principal movements and investment income on the bank side.
- * The sign is interpreted by the caller: negative is an investment expense,
- * positive is an investment income/cash return.
+ * The sign is interpreted by the caller: negative is an investment expense;
+ * positive principal returns are kept as asset transfers, while dividends
+ * are classified separately as investment income.
  */
 export function isLikelyInvestmentCashFlow(
   movement: InvestmentCashMovement,
@@ -76,6 +79,21 @@ export function isLikelyInvestmentCashFlow(
   if (!text || INVESTMENT_FEE_MARKER.test(text)) return false;
   if (INVESTMENT_INCOME_MARKER.test(text)) return true;
   return isLikelyInvestmentCashTransfer(movement, trades);
+}
+
+/** Only dividends and similar distributions are income before realized P&L. */
+export function isLikelyInvestmentIncome(movement: InvestmentCashMovement) {
+  if (movement.accountType === "credit") return false;
+  const text = normalizeMatchText(
+    [movement.description, movement.counterparty, movement.sourceSummary]
+      .filter(Boolean)
+      .join(" "),
+  );
+  return Boolean(
+    text &&
+    !INVESTMENT_FEE_MARKER.test(text) &&
+    INVESTMENT_INCOME_MARKER.test(text),
+  );
 }
 
 export function activityDisplayAmount(item: ActivityItem) {

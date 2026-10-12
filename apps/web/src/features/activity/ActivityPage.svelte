@@ -40,6 +40,7 @@
   import { classificationMerchantsQuery } from "@/data/classification/queries";
   import type { ClassificationMerchantRow } from "@/data/classification/types";
   import { investmentTransactionsRangeQuery } from "@/data/investments/queries";
+  import type { InvestmentTransactionRow } from "@/data/investments/types";
   import {
     invoiceDetailQuery,
     invoicePaymentAccountsQuery,
@@ -96,6 +97,7 @@
   } from "@/shared/format/financial";
   import {
     monthRangeCoveringDates,
+    previousCalendarDateRange,
     persistSalaryDay,
     previousSalaryCycleDateRange,
     readSalaryDay,
@@ -106,11 +108,16 @@
     type MonthRange,
   } from "@/shared/date-range";
   import { swipeBack } from "@/shared/actions/swipe-back";
-  let { api }: { api: ApiClient } = $props();
-  const initialSelectedMonth = currentActivityMonthKey();
+  let {
+    api,
+    demoDataAsOfMonth,
+  }: { api: ApiClient; demoDataAsOfMonth?: string } = $props();
+  const initialSelectedMonth = $derived(
+    demoDataAsOfMonth ?? currentActivityMonthKey(),
+  );
   // Keep API ranges and month options anchored to the same Taipei month key.
-  const activityMonthAnchor = new Date(
-    `${initialSelectedMonth}-15T12:00:00+08:00`,
+  const activityMonthAnchor = $derived(
+    new Date(`${initialSelectedMonth}-15T12:00:00+08:00`),
   );
   type TimelinePreset = "current" | "3months" | "6months" | "salary" | "custom";
   type CashFlowSection = "income" | "expense";
@@ -133,11 +140,22 @@
     previous?: CashFlowDetail;
   }
   let timelinePreset = $state<TimelinePreset>("current");
-  let timelineFrom = $state(initialSelectedMonth);
-  let timelineTo = $state(initialSelectedMonth);
+  let timelineCustomFrom = $state(`${currentActivityMonthKey()}-01`);
+  let timelineCustomTo = $state(monthEnd(currentActivityMonthKey()));
   let salaryDay = $state(String(readSalaryDay()));
-  let selectedMonth = $state(initialSelectedMonth);
-  const minimumActivityRange = recentMonthRange(6, activityMonthAnchor);
+  let selectedMonth = $state(currentActivityMonthKey());
+  const minimumActivityRange = $derived(
+    recentMonthRange(6, activityMonthAnchor),
+  );
+  let appliedDemoDataAsOfMonth = $state<string | undefined>(undefined);
+  $effect(() => {
+    if (demoDataAsOfMonth && appliedDemoDataAsOfMonth !== demoDataAsOfMonth) {
+      appliedDemoDataAsOfMonth = demoDataAsOfMonth;
+      timelineCustomFrom = `${demoDataAsOfMonth}-01`;
+      timelineCustomTo = monthEnd(demoDataAsOfMonth);
+      selectedMonth = demoDataAsOfMonth;
+    }
+  });
   function monthEnd(month: string) {
     const [year, monthNumber] = month.split("-").map(Number);
     return `${month}-${String(new Date(year, monthNumber, 0).getDate()).padStart(2, "0")}`;
@@ -161,21 +179,33 @@
     );
     return recentMonthKeys(count, new Date(toYear, toMonth - 1, 15));
   }
+  const customTimelineDateRange = $derived.by(() => {
+    const fallback = {
+      from: `${initialSelectedMonth}-01`,
+      to: monthEnd(initialSelectedMonth),
+    };
+    const from = /^\d{4}-\d{2}-\d{2}$/.test(timelineCustomFrom)
+      ? timelineCustomFrom
+      : fallback.from;
+    const to = /^\d{4}-\d{2}-\d{2}$/.test(timelineCustomTo)
+      ? timelineCustomTo
+      : fallback.to;
+    return from <= to ? { from, to } : { from: to, to: from };
+  });
   const monthTimelineRange = $derived.by(() => {
     if (timelinePreset === "3months")
       return recentMonthRange(3, activityMonthAnchor);
     if (timelinePreset === "6months")
       return recentMonthRange(6, activityMonthAnchor);
     if (timelinePreset === "custom") {
-      return timelineFrom <= timelineTo
-        ? { from: timelineFrom, to: timelineTo }
-        : { from: timelineTo, to: timelineFrom };
+      return monthRangeCoveringDates(customTimelineDateRange);
     }
     return { from: initialSelectedMonth, to: initialSelectedMonth };
   });
   const timelineDateRange = $derived.by(() => {
     if (timelinePreset === "salary")
       return salaryCycleDateRange(new Date(), Number(salaryDay));
+    if (timelinePreset === "custom") return customTimelineDateRange;
     return {
       from: `${monthTimelineRange.from}-01`,
       to: monthEnd(monthTimelineRange.to),
@@ -189,6 +219,8 @@
   const previousTimelineDateRange = $derived.by(() => {
     if (timelinePreset === "salary")
       return previousSalaryCycleDateRange(new Date(), Number(salaryDay));
+    if (timelinePreset === "custom")
+      return previousCalendarDateRange(timelineDateRange);
     const offset = monthCount(timelineRange);
     const from = shiftMonthKey(timelineRange.from, -offset);
     const to = shiftMonthKey(timelineRange.to, -offset);
@@ -197,20 +229,29 @@
       to: monthEnd(to),
     };
   });
-  const activityRange = $derived.by(() => ({
-    from:
-      previousTimelineDateRange.from.slice(0, 7) < minimumActivityRange.from
-        ? previousTimelineDateRange.from.slice(0, 7)
-        : timelineRange.from < minimumActivityRange.from
-          ? timelineRange.from
+  const activityRange = $derived.by(() => {
+    const requested = {
+      from:
+        previousTimelineDateRange.from.slice(0, 7) < timelineRange.from
+          ? previousTimelineDateRange.from.slice(0, 7)
+          : timelineRange.from,
+      to:
+        previousTimelineDateRange.to.slice(0, 7) > timelineRange.to
+          ? previousTimelineDateRange.to.slice(0, 7)
+          : timelineRange.to,
+    };
+    if (timelinePreset === "custom") return requested;
+    return {
+      from:
+        requested.from < minimumActivityRange.from
+          ? requested.from
           : minimumActivityRange.from,
-    to:
-      previousTimelineDateRange.to.slice(0, 7) > minimumActivityRange.to
-        ? previousTimelineDateRange.to.slice(0, 7)
-        : timelineRange.to > minimumActivityRange.to
-          ? timelineRange.to
+      to:
+        requested.to > minimumActivityRange.to
+          ? requested.to
           : minimumActivityRange.to,
-  }));
+    };
+  });
   const bank = createQuery(
     toStore(() => bankRangeQuery(() => api, activityRange)),
   );
@@ -573,7 +614,11 @@
   const detailInvoice = createQuery(
     toStore(() => invoiceDetailQuery(() => api, detailInvoiceId)),
   );
-  const cashFlowMonths = $derived(monthKeysBetween(activityRange));
+  const cashFlowMonths = $derived(
+    timelinePreset === "custom"
+      ? monthKeysBetween(timelineRange)
+      : monthKeysBetween(activityRange),
+  );
   const timelineDates = $derived({
     from: timelineDateRange.from,
     to: timelineDateRange.to,
@@ -612,6 +657,33 @@
         .map((item) => item.currency),
     ),
   ]);
+  function realizedProfitForRange(range: { from: string; to: string }) {
+    return (tradeData ?? []).reduce((sum, trade) => {
+      const date = (trade.tradeDate ?? trade.postedDate)?.slice(0, 10);
+      if (
+        date == null ||
+        date < range.from ||
+        date > range.to ||
+        trade.realizedProfit == null ||
+        !Number.isFinite(trade.realizedProfit)
+      )
+        return sum;
+      if (trade.currency === "TWD") return sum + trade.realizedProfit;
+      const rate = rateValues[trade.currency];
+      return rate != null && Number.isFinite(rate)
+        ? sum + trade.realizedProfit * rate
+        : sum;
+    }, 0);
+  }
+  const realizedProfit = $derived(realizedProfitForRange(timelineDates));
+  const previousRealizedProfit = $derived(
+    realizedProfitForRange(previousTimelineDateRange),
+  );
+  const realizedProfitIncome = $derived(Math.max(realizedProfit, 0));
+  const realizedProfitLoss = $derived(Math.max(-realizedProfit, 0));
+  const previousRealizedProfitIncome = $derived(
+    Math.max(previousRealizedProfit, 0),
+  );
   const incomeSlices = $derived(
     buildActivityCategorySlices(monthlyCalculatedItems, "income", rateValues),
   );
@@ -640,11 +712,15 @@
   const ordinaryExpenseTotal = $derived(
     expenseSlices.reduce((sum, slice) => sum + slice.amount, 0),
   );
-  const investmentIncomeTotal = $derived(
+  const investmentDividendTotal = $derived(
     investmentIncomeSlices.reduce((sum, slice) => sum + slice.amount, 0),
   );
+  const investmentIncomeTotal = $derived(
+    investmentDividendTotal + realizedProfitIncome,
+  );
   const investmentExpenseTotal = $derived(
-    investmentExpenseSlices.reduce((sum, slice) => sum + slice.amount, 0),
+    investmentExpenseSlices.reduce((sum, slice) => sum + slice.amount, 0) +
+      realizedProfitLoss,
   );
   const incomeTotal = $derived(ordinaryIncomeTotal + investmentIncomeTotal);
   const expenseTotal = $derived(ordinaryExpenseTotal + investmentExpenseTotal);
@@ -661,6 +737,23 @@
       "expense",
       rateValues,
     ),
+  );
+  const previousInvestmentIncomeSlices = $derived(
+    buildActivityCategorySlices(
+      previousMonthlyCalculatedItems,
+      "income",
+      rateValues,
+      "investment",
+    ),
+  );
+  const previousInvestmentDividendTotal = $derived(
+    previousInvestmentIncomeSlices.reduce(
+      (sum, slice) => sum + slice.amount,
+      0,
+    ),
+  );
+  const previousInvestmentIncomeTotal = $derived(
+    previousInvestmentDividendTotal + previousRealizedProfitIncome,
   );
   function mergeCategorySlices(
     current: typeof incomeSlices,
@@ -716,12 +809,16 @@
     }
     return summary;
   }
-  const investmentSummary = $derived(
-    investmentSummaryRows(monthlyCalculatedItems),
-  );
-  const previousInvestmentSummary = $derived(
-    investmentSummaryRows(previousMonthlyCalculatedItems),
-  );
+  const investmentSummary = $derived.by(() => {
+    const summary = investmentSummaryRows(monthlyCalculatedItems);
+    summary.set("投資收入", investmentIncomeTotal);
+    return summary;
+  });
+  const previousInvestmentSummary = $derived.by(() => {
+    const summary = investmentSummaryRows(previousMonthlyCalculatedItems);
+    summary.set("投資收入", previousInvestmentIncomeTotal);
+    return summary;
+  });
   const investmentRows = $derived(
     ["投資投入", "投資收入"]
       .map((category, index) => ({
@@ -747,7 +844,7 @@
         key: "investmentIncome" as const,
         label: "投資收入",
         amount: investmentIncomeTotal,
-        previousAmount: previousInvestmentSummary.get("投資收入") ?? 0,
+        previousAmount: previousInvestmentIncomeTotal,
       },
     ].filter((row) => row.amount > 0 || row.previousAmount > 0),
   );
@@ -779,6 +876,8 @@
   function cashFlowDetailsFor(
     key: CashFlowBreakdownKey,
     items: ActivityItem[],
+    trades: InvestmentTransactionRow[],
+    range: { from: string; to: string },
   ) {
     const flow = key.endsWith("Income") ? "income" : "expense";
     const investment = key.startsWith("investment");
@@ -818,6 +917,39 @@
         count: 1,
       });
     }
+    if (key === "investmentIncome" || key === "investmentExpense") {
+      const wantIncome = key === "investmentIncome";
+      for (const trade of trades) {
+        const date = (trade.tradeDate ?? trade.postedDate)?.slice(0, 10);
+        if (
+          date == null ||
+          date < range.from ||
+          date > range.to ||
+          trade.realizedProfit == null ||
+          !Number.isFinite(trade.realizedProfit) ||
+          (wantIncome ? trade.realizedProfit <= 0 : trade.realizedProfit >= 0)
+        )
+          continue;
+        const amount =
+          trade.currency === "TWD"
+            ? Math.abs(trade.realizedProfit)
+            : Math.abs(trade.realizedProfit) *
+              (rateValues[trade.currency] ?? 0);
+        if (!Number.isFinite(amount) || amount <= 0) continue;
+        const security = trade.symbol ?? trade.name ?? "標的";
+        details.push({
+          key: cashFlowDetailKey(`已實現損益 ${security}`),
+          date,
+          title: `已實現損益 ${security}`,
+          subtitle: [
+            trade.transactionName ?? trade.transactionCode ?? "賣出／贖回",
+            "已扣除對應成本",
+          ].join(" · "),
+          amount,
+          count: 1,
+        });
+      }
+    }
     return details;
   }
   function aggregateCashFlowDetails(details: CashFlowDetail[]) {
@@ -841,7 +973,12 @@
   const currentCashFlowDetails = $derived.by(() =>
     expandedCashFlowBreakdown
       ? aggregateCashFlowDetails(
-          cashFlowDetailsFor(expandedCashFlowBreakdown, monthlyCalculatedItems),
+          cashFlowDetailsFor(
+            expandedCashFlowBreakdown,
+            monthlyCalculatedItems,
+            tradeData ?? [],
+            timelineDates,
+          ),
         )
       : [],
   );
@@ -851,6 +988,8 @@
           cashFlowDetailsFor(
             expandedCashFlowBreakdown,
             previousMonthlyCalculatedItems,
+            tradeData ?? [],
+            previousTimelineDateRange,
           ),
         )
       : [],
@@ -916,9 +1055,11 @@
         ? "上月"
         : "前一段期間",
   );
-  const currentMonth = currentActivityMonthKey();
+  const currentMonth = $derived(initialSelectedMonth);
   const timelineLabel = $derived.by(() => {
     if (timelinePreset === "salary")
+      return `${timelineDateRange.from} 至 ${timelineDateRange.to}`;
+    if (timelinePreset === "custom")
       return `${timelineDateRange.from} 至 ${timelineDateRange.to}`;
     if (timelineRange.from === timelineRange.to)
       return `${timelineRange.from.slice(0, 4)} 年 ${Number(timelineRange.from.slice(5))} 月`;
@@ -929,6 +1070,9 @@
       const items = rawItems.filter(
         (item) =>
           activityDateKey(item).startsWith(month) &&
+          (timelinePreset !== "custom" ||
+            (activityDateKey(item) >= timelineDates.from &&
+              activityDateKey(item) <= timelineDates.to)) &&
           (item.source === "bank" ||
             item.source === "card" ||
             item.source === "invoice"),
@@ -1244,18 +1388,15 @@
     chooseFlow(flow === nextFlow && !selectedCategory ? "all" : nextFlow);
   }
   function setTimelinePreset(next: TimelinePreset) {
+    const previousMonthRange = monthTimelineRange;
     timelinePreset = next;
-    if (next === "current") {
-      timelineFrom = initialSelectedMonth;
-      timelineTo = initialSelectedMonth;
-    } else if (next === "3months") {
-      const range = recentMonthRange(3, activityMonthAnchor);
-      timelineFrom = range.from;
-      timelineTo = range.to;
-    } else if (next === "6months") {
-      const range = recentMonthRange(6, activityMonthAnchor);
-      timelineFrom = range.from;
-      timelineTo = range.to;
+    if (next === "custom") {
+      const range =
+        previousMonthRange.from <= previousMonthRange.to
+          ? previousMonthRange
+          : { from: initialSelectedMonth, to: initialSelectedMonth };
+      timelineCustomFrom = `${range.from}-01`;
+      timelineCustomTo = monthEnd(range.to);
     }
     selectedCategory = null;
   }
@@ -1274,8 +1415,8 @@
   function chooseMonth(month: string) {
     selectedMonth = month;
     timelinePreset = "custom";
-    timelineFrom = month;
-    timelineTo = month;
+    timelineCustomFrom = `${month}-01`;
+    timelineCustomTo = monthEnd(month);
     selectedCategory = null;
   }
   function retryActivityData() {
@@ -1701,14 +1842,27 @@
         {#if timelinePreset === "custom"}
           <div class="mt-1 grid grid-cols-2 gap-2 sm:max-w-md">
             <label class="grid gap-1 text-caption text-subtle">
-              開始月份
-              <Input type="month" bind:value={timelineFrom} class="h-10" />
+              開始日期
+              <Input
+                type="date"
+                bind:value={timelineCustomFrom}
+                class="h-10"
+                aria-label="時間序開始日期"
+              />
             </label>
             <label class="grid gap-1 text-caption text-subtle">
-              結束月份
-              <Input type="month" bind:value={timelineTo} class="h-10" />
+              結束日期
+              <Input
+                type="date"
+                bind:value={timelineCustomTo}
+                class="h-10"
+                aria-label="時間序結束日期"
+              />
             </label>
           </div>
+          <p class="mt-1 text-xs text-subtle">
+            自訂日期會精確套用到收支、分類與投資收入；資料查詢仍以涵蓋日期的月份載入。
+          </p>
         {/if}
         <div class="mt-2 grid grid-cols-3 gap-2 md:gap-4">
           <div class="min-w-0">
@@ -2038,7 +2192,9 @@
         <section class="hidden min-w-0 border-t border-ink/10 pt-5 md:block">
           <div class="flex items-center justify-between gap-3">
             <h2 class="text-base font-semibold">現金流趨勢</h2>
-            <span class="text-caption text-subtle">6 個月　收入／支出</span>
+            <span class="text-caption text-subtle"
+              >{cashFlowMonths.length} 個月　收入／支出</span
+            >
           </div>
           <div class="pt-5">
             {#if activitySummaryIncomplete}
@@ -2048,7 +2204,10 @@
                 活動資料尚未完整載入，現金流趨勢暫不計算。
               </div>
             {:else}
-              <div class="grid grid-cols-6 gap-3">
+              <div
+                class="grid gap-3"
+                style={`grid-template-columns:repeat(${Math.max(cashFlowMonths.length, 1)}, minmax(0, 1fr))`}
+              >
                 {#each cashFlow as point (point.month)}
                   <button
                     aria-pressed={selectedMonth === point.month}
@@ -2154,15 +2313,15 @@
               <summary
                 class="flex min-h-10 cursor-pointer items-center text-sm font-medium text-steel"
               >
-                篩選來源與搜尋本月{source !== "all"
+                篩選來源與搜尋{timelineLabel}{source !== "all"
                   ? ` · ${{ bank: "銀行", card: "信用卡", invoice: "發票" }[source]}`
                   : ""}
               </summary>
               <div class="grid gap-2 pb-3">
                 <Input
                   type="search"
-                  aria-label="搜尋該月活動"
-                  placeholder="搜尋該月活動"
+                  aria-label="搜尋此期間活動"
+                  placeholder="搜尋此期間活動"
                   class="h-11"
                   bind:value={monthlySearch}
                 />

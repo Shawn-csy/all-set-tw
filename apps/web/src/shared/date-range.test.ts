@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   monthRangeCoveringDates,
+  previousCalendarDateRange,
   previousCalendarMonthDateRange,
   previousSalaryCycleDateRange,
   recentMonthRange,
@@ -48,6 +49,12 @@ describe("monthRangeCoveringDates", () => {
 });
 
 describe("previous period ranges", () => {
+  it("returns an equally long previous custom date range", () => {
+    expect(
+      previousCalendarDateRange({ from: "2026-09-10", to: "2026-09-24" }),
+    ).toEqual({ from: "2026-08-26", to: "2026-09-09" });
+  });
+
   it("returns the previous salary cycle", () => {
     expect(previousSalaryCycleDateRange(new Date(2026, 8, 29), 31)).toEqual({
       from: "2026-07-31",

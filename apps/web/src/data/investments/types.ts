@@ -43,5 +43,6 @@ export interface InvestmentTransactionRow {
   amountReferencePrice?: number | null;
   amountPriceDate?: string | null;
   amountProvider?: string | null;
+  realizedProfit?: number | null;
   currency: string;
 }

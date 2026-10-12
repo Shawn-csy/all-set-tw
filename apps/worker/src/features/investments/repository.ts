@@ -31,17 +31,22 @@ const investmentTransactionColumns = {
   transactionName: investmentTransactions.transactionName,
   quantity: investmentTransactions.quantity,
   price: investmentTransactions.price,
-  amount: sql<
-    number | null
-  >`COALESCE(${amountOverride.amount}, ${investmentTransactions.amount})`.as(
-    "amount",
-  ),
+  amount: sql<number | null>`CASE
+    WHEN ${amountOverride.amount} IS NOT NULL
+      AND (${amountOverride.source} IS NULL OR ${amountOverride.source} != 'historical-close'
+        OR ${investmentTransactions.amount} IS NULL)
+      THEN ${amountOverride.amount}
+    ELSE ${investmentTransactions.amount}
+  END`.as("amount"),
   rawAmount: investmentTransactions.amount,
   amountSource: sql<"synced" | "manual" | "historical-close" | "missing">`CASE
     WHEN ${amountOverride.amount} IS NOT NULL
       AND ${amountOverride.source} = 'historical-close'
+      AND ${investmentTransactions.amount} IS NULL
       THEN 'historical-close'
-    WHEN ${amountOverride.amount} IS NOT NULL THEN 'manual'
+    WHEN ${amountOverride.amount} IS NOT NULL
+      AND ${amountOverride.source} != 'historical-close'
+      THEN 'manual'
     WHEN ${investmentTransactions.amount} IS NOT NULL THEN 'synced'
     ELSE 'missing'
   END`.as("amountSource"),
@@ -309,6 +314,26 @@ export async function listInvestmentTransactionsInRange(
       desc(investmentTransactions.effectiveDate),
       desc(investmentTransactions.updatedAt),
       desc(investmentTransactions.id),
+    )
+    .all();
+}
+
+export async function listInvestmentTransactionsThrough(
+  db: D1Database,
+  to: string,
+) {
+  return createDrizzle(db)
+    .select(investmentTransactionColumns)
+    .from(investmentTransactions)
+    .leftJoin(
+      amountOverride,
+      eq(amountOverride.transactionId, investmentTransactions.id),
+    )
+    .where(sql`${investmentTransactions.effectiveDate} < ${to}`)
+    .orderBy(
+      asc(investmentTransactions.effectiveDate),
+      asc(investmentTransactions.updatedAt),
+      asc(investmentTransactions.id),
     )
     .all();
 }

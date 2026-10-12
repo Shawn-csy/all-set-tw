@@ -80,6 +80,25 @@ export function monthRangeCoveringDates(range: CalendarDateRange): MonthRange {
   };
 }
 
+export function previousCalendarDateRange(
+  range: CalendarDateRange,
+): CalendarDateRange {
+  const from = dateFromKey(range.from);
+  const to = dateFromKey(range.to);
+  const duration = Math.max(
+    1,
+    Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1,
+  );
+  const previousTo = new Date(from);
+  previousTo.setDate(previousTo.getDate() - 1);
+  const previousFrom = new Date(previousTo);
+  previousFrom.setDate(previousFrom.getDate() - duration + 1);
+  return {
+    from: dateKey(previousFrom),
+    to: dateKey(previousTo),
+  };
+}
+
 export function readSalaryDay(defaultDay = 31) {
   if (typeof window === "undefined") return defaultDay;
   const value = Number(window.localStorage.getItem(salaryDayStorageKey));

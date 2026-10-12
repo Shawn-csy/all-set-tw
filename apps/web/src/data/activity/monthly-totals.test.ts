@@ -354,7 +354,7 @@ describe("calculateMonthlyActivityTotals", () => {
     });
   });
 
-  it("把投資收回與配息列入投資收入", () => {
+  it("只把扣除成本後的已實現損益與配息列入投資收入", () => {
     const result = calculateMonthlyActivityTotals(
       {
         accounts: [
@@ -380,7 +380,7 @@ describe("calculateMonthlyActivityTotals", () => {
           }),
           transaction({
             id: "investment-redemption",
-            amount: 8_000,
+            amount: 12_000,
             excludedFromCalculation: true,
             classification: {
               categoryId: "investment",
@@ -399,16 +399,26 @@ describe("calculateMonthlyActivityTotals", () => {
       [],
       [],
       {},
+      [
+        {
+          symbol: "GOOGL",
+          name: "Alphabet",
+          tradeDate: "2026-07-02",
+          transactionCode: "123",
+          realizedProfit: 2_000,
+          currency: "TWD",
+        },
+      ],
     );
 
     expect(result).toEqual({
-      income: 8_200,
+      income: 2_200,
       expense: 10_000,
       ordinaryIncome: 0,
       ordinaryExpense: 0,
-      investmentIncome: 8_200,
+      investmentIncome: 2_200,
       investmentExpense: 10_000,
-      netCashFlow: -1_800,
+      netCashFlow: -7_800,
     });
   });
 });

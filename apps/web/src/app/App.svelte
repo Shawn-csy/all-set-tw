@@ -324,7 +324,11 @@
         class="mx-auto max-w-[1600px] px-4 pb-4 pt-0 sm:px-6 md:py-4 xl:px-8 xl:py-5"
       >
         {#if view === "overview"}
-          <Overview {api} {navigate} />
+          <Overview
+            {api}
+            {navigate}
+            demoDataAsOfMonth={runtime.demoDataAsOfMonth}
+          />
         {:else}
           {#await pagePromise}
             <EmptyState title="載入頁面中" body="正在準備內容。" />
@@ -337,7 +341,7 @@
               {:else if view === "activity"}
                 {@const Page =
                   module.default as typeof import("@/features/activity/ActivityPage.svelte").default}
-                <Page {api} />
+                <Page {api} demoDataAsOfMonth={runtime.demoDataAsOfMonth} />
               {:else if view === "investments"}
                 {@const Page =
                   module.default as typeof import("@/features/assets/Investments.svelte").default}
@@ -349,7 +353,7 @@
               {:else if view === "purchases"}
                 {@const Page =
                   module.default as typeof import("@/features/purchases/PurchasesPage.svelte").default}
-                <Page {api} />
+                <Page {api} demoDataAsOfMonth={runtime.demoDataAsOfMonth} />
               {:else if view === "investment-returns"}
                 {@const Page =
                   module.default as typeof import("@/features/investment-returns/InvestmentReturnsPage.svelte").default}

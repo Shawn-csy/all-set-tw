@@ -30,15 +30,23 @@
   type PurchasePeriod = "current" | "previous" | "threeMonths" | "year";
   type PurchaseSort = "amount" | "recent" | "frequency" | "name";
 
-  let { api }: { api: ApiClient } = $props();
+  let {
+    api,
+    demoDataAsOfMonth,
+  }: { api: ApiClient; demoDataAsOfMonth?: string } = $props();
 
-  const monthKeys = recentMonthKeys(12);
-  const currentMonth = monthKeys.at(-1) ?? "";
-  const previousMonth = monthKeys.at(-2) ?? currentMonth;
-  const previousRange: MonthRange = {
+  const dataAnchor = $derived(
+    demoDataAsOfMonth
+      ? new Date(`${demoDataAsOfMonth}-15T12:00:00+08:00`)
+      : new Date(),
+  );
+  const monthKeys = $derived(recentMonthKeys(12, dataAnchor));
+  const currentMonth = $derived(monthKeys.at(-1) ?? "");
+  const previousMonth = $derived(monthKeys.at(-2) ?? currentMonth);
+  const previousRange = $derived<MonthRange>({
     from: previousMonth,
     to: previousMonth,
-  };
+  });
 
   let period = $state<PurchasePeriod>("current");
   let search = $state("");
@@ -50,8 +58,8 @@
 
   const invoiceRange = $derived.by((): MonthRange => {
     if (period === "previous") return previousRange;
-    if (period === "threeMonths") return recentMonthRange(3);
-    if (period === "year") return recentMonthRange(12);
+    if (period === "threeMonths") return recentMonthRange(3, dataAnchor);
+    if (period === "year") return recentMonthRange(12, dataAnchor);
     return { from: currentMonth, to: currentMonth };
   });
 

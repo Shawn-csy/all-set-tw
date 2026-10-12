@@ -1,4 +1,7 @@
-import { isLikelyInvestmentCashFlow } from "./activity-flow";
+import {
+  isLikelyInvestmentCashFlow,
+  isLikelyInvestmentIncome,
+} from "./activity-flow";
 import type { ActivityItem } from "./activity-types";
 import type { ClassificationBehavior } from "./activity-types";
 import {
@@ -68,6 +71,7 @@ export interface ActivityTrade {
   quantity?: number | null;
   price?: number | null;
   amount?: number | null;
+  realizedProfit?: number | null;
   currency: string;
 }
 const formatNumber = (value: number) =>
@@ -124,6 +128,10 @@ export function buildActivityItems(
           },
           trades,
         );
+      const isInvestmentIncome = isLikelyInvestmentIncome({
+        ...t,
+        categoryId: t.classification?.categoryId,
+      });
       // The bank/card row establishes payment; invoice items establish what
       // was purchased. Its old transaction category must not hide the items.
       const classificationBehavior = categoryParts
@@ -161,7 +169,7 @@ export function buildActivityItems(
         cashFlowType: isInvestmentCashFlow
           ? t.amount < 0
             ? ("investment_expense" as const)
-            : t.amount > 0
+            : t.amount > 0 && isInvestmentIncome
               ? ("investment_income" as const)
               : ("asset_transfer" as const)
           : isCashWithdrawal || isClassificationAssetTransfer

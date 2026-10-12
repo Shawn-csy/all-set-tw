@@ -110,6 +110,89 @@ describe("recurring expense analysis", () => {
     expect(analysis.extraCategories).toHaveLength(0);
   });
 
+  it("requires an ordinary item to recur through most of the window", () => {
+    const months = [
+      "2026-01",
+      "2026-02",
+      "2026-03",
+      "2026-04",
+      "2026-05",
+      "2026-06",
+    ];
+    const items = months
+      .slice(0, 3)
+      .map((month) =>
+        item(`sparse-${month}`, `${month}-12`, "只出現三個月", -1000),
+      );
+
+    const analysis = analyzeRecurringExpenses(items, months, (entry) =>
+      Math.abs(entry.amount ?? 0),
+    );
+
+    expect(analysis.recurringExpenses).toHaveLength(0);
+  });
+
+  it("does not classify a sparse category as a fixed baseline", () => {
+    const months = [
+      "2026-01",
+      "2026-02",
+      "2026-03",
+      "2026-04",
+      "2026-05",
+      "2026-06",
+    ];
+    const items = months
+      .slice(0, 4)
+      .map((month, index) =>
+        item(
+          `meal-${month}`,
+          `${month}-12`,
+          `不同餐廳 ${index + 1}`,
+          -1000,
+          "餐飲",
+        ),
+      );
+
+    const analysis = analyzeRecurringExpenses(items, months, (entry) =>
+      Math.abs(entry.amount ?? 0),
+    );
+
+    expect(
+      analysis.recurringExpenses.some(
+        (expense) => expense.scope === "category" && expense.title === "餐飲",
+      ),
+    ).toBe(false);
+    expect(analysis.extraCategories).toMatchObject([
+      { category: "餐飲", amount: 4000, count: 4 },
+    ]);
+  });
+
+  it("does not merge multiple same-month charges into a fixed item", () => {
+    const months = [
+      "2026-01",
+      "2026-02",
+      "2026-03",
+      "2026-04",
+      "2026-05",
+      "2026-06",
+    ];
+    const items = months
+      .slice(0, 4)
+      .flatMap((month, index) => [
+        item(`split-${month}-a`, `${month}-05`, "數字型交易", -500, "未分類"),
+        item(`split-${month}-b`, `${month}-20`, "數字型交易", -300, "未分類"),
+      ]);
+
+    const analysis = analyzeRecurringExpenses(items, months, (entry) =>
+      Math.abs(entry.amount ?? 0),
+    );
+
+    expect(analysis.recurringExpenses).toHaveLength(0);
+    expect(analysis.extraCategories).toMatchObject([
+      { category: "未分類", amount: 3200, count: 8 },
+    ]);
+  });
+
   it("compares ordinary and investment outflow with the salary baseline", () => {
     const months = ["2026-04", "2026-05", "2026-06"];
     const items = months.flatMap((month, index) => {

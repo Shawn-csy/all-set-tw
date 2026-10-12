@@ -15,6 +15,13 @@ RUN chown node:node /workspace
 USER node
 RUN npm ci --ignore-scripts
 RUN npm run build -w @taiwan-fin-hub/web
+RUN mkdir -p apps/worker/dist \
+  && ./node_modules/.bin/wrangler deploy \
+    --config apps/worker/wrangler.production.local.toml \
+    --dry-run \
+    --minify \
+    --outdir /workspace/apps/worker/dist \
+    --assets apps/web/dist
 
 FROM node:22-bookworm-slim
 
@@ -42,6 +49,7 @@ RUN npm ci --omit=dev --ignore-scripts \
   && rm -rf /home/node/.npm
 
 COPY --from=builder --chown=node:node /workspace/apps/web/dist ./apps/web/dist
+COPY --from=builder --chown=node:node /workspace/apps/worker/dist ./apps/worker/dist
 
 USER root
 COPY docker/orbstack/entrypoint.production.sh /usr/local/bin/taiwan-fin-hub-production

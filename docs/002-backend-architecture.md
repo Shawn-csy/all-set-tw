@@ -103,7 +103,7 @@ flowchart TD
 
 ### 投資持倉成本
 
-TDCC 的 `investment_positions` 為帶日期的快照，`source_id` 末尾包含快照日期。使用者輸入的成本單價獨立保存在 `investment_position_cost_overrides`，以 `connector_id` 與去除日期後的持倉鍵（券商帳戶＋標的）對應。`GET /api/investments` 在讀取最新快照時合併成本，並依最新股數計算成本基礎；`PUT /api/investments/:id/cost` 更新該持倉的成本單價。投資交易來源若沒有成交金額，不能以股數或佔位價格推算買賣收益。
+TDCC 的 `investment_positions` 為帶日期的快照，`source_id` 末尾包含快照日期。使用者輸入的成本單價獨立保存在 `investment_position_cost_overrides`，以 `connector_id` 與去除日期後的持倉鍵（券商帳戶＋標的）對應。`GET /api/investments` 在讀取最新快照時合併成本，並依最新股數計算成本基礎；`PUT /api/investments/:id/cost` 更新該持倉的成本單價。投資交易來源若沒有成交金額，不能以股數或佔位價格推算買賣收益。同步後可用交易日的歷史收盤價產生標記為 `historical-close` 的估算成交額，但不得當作券商實際成交價；頁面須保留估算來源，並允許使用者改成實際成交額。活動與總覽的「投資收入」只計股利／配息及依交易順序配對成本後的已實現損益；賣出／贖回收到的本金不直接列為收入。
 
 複雜 feature 通常採用以下結構：
 

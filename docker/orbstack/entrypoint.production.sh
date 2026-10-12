@@ -28,9 +28,13 @@ fi
 export CONFIG_ENCRYPTION_KEY
 export X_BROWSER_HEADFUL="${X_BROWSER_HEADFUL:-false}"
 export WRANGLER_CONFIG="$wrangler_config"
-export WRANGLER_DEV_PORT="${WRANGLER_DEV_PORT:-8787}"
+export WORKER_RUNTIME_CONFIG="/workspace/apps/worker/$WRANGLER_CONFIG"
+export WORKER_RUNTIME_PORT="${WORKER_RUNTIME_PORT:-8787}"
+export WORKER_STATE_PATH="${WORKER_STATE_PATH:-/workspace/apps/worker/.wrangler/state/v3}"
+export WORKER_TMP_PATH="${WORKER_TMP_PATH:-/workspace/apps/worker/.wrangler/tmp}"
 
-/workspace/node_modules/.bin/wrangler d1 migrations apply DB --remote \
-  --config "/workspace/apps/worker/$WRANGLER_CONFIG"
+/workspace/node_modules/.bin/wrangler d1 migrations apply DB --local \
+  --persist-to "/workspace/apps/worker/.wrangler" \
+  --config "$WORKER_RUNTIME_CONFIG"
 
-exec node /workspace/scripts/dev-worker.mjs
+exec node /workspace/scripts/local-production-runtime.mjs

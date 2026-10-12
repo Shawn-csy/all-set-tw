@@ -93,6 +93,13 @@ const BASELINE_CATEGORIES = new Set([
   "軟體服務",
 ]);
 
+function minimumOccurrencesForRatio(months: string[], ratio: number) {
+  // A single month cannot establish a recurring pattern. Keep this explicit
+  // rather than allowing the ratio calculation to classify the current month.
+  if (months.length < 3) return Number.POSITIVE_INFINITY;
+  return Math.max(3, Math.ceil(months.length * ratio));
+}
+
 function normalizeExpenseTitle(title: string) {
   return title
     .normalize("NFKC")
@@ -172,6 +179,16 @@ function recurringExpenseFromGroup(
     averageAmount === 0 ? 0 : (maximum - minimum) / averageAmount;
   if (values.length < minimumOccurrences || stability > maximumStability)
     return null;
+  if (scope === "item") {
+    const entriesPerMonth = new Map<string, number>();
+    for (const entry of group.entries) {
+      entriesPerMonth.set(
+        entry.month,
+        (entriesPerMonth.get(entry.month) ?? 0) + 1,
+      );
+    }
+    if ([...entriesPerMonth.values()].some((count) => count > 1)) return null;
+  }
   const latestMonth = [...group.monthlyAmounts.keys()].sort().at(-1);
   return {
     key: group.key,
@@ -241,13 +258,17 @@ export function analyzeRecurringExpenses(
     groups.set(key, group);
   }
 
-  const minimumOccurrences = Math.max(3, Math.ceil(months.length / 2));
+  // A fixed ordinary expense should recur through most of the selected
+  // window. The old half-window threshold classified one-off transfers that
+  // happened in only three of six months as fixed expenses.
+  const minimumItemOccurrences = minimumOccurrencesForRatio(months, 2 / 3);
+  const minimumCategoryOccurrences = minimumOccurrencesForRatio(months, 3 / 4);
   const recurringItemExpenses = [...groups.values()]
     .map((group) =>
       recurringExpenseFromGroup(
         group,
         months,
-        minimumOccurrences,
+        minimumItemOccurrences,
         0.35,
         "item",
         group.entries.map((entry) => ({
@@ -293,7 +314,7 @@ export function analyzeRecurringExpenses(
       recurringExpenseFromGroup(
         group,
         months,
-        minimumOccurrences,
+        minimumCategoryOccurrences,
         BASELINE_CATEGORIES.has(group.title) ? Number.POSITIVE_INFINITY : 0.45,
         "category",
         group.entries.flatMap((entry) =>
@@ -348,7 +369,7 @@ export function analyzeRecurringExpenses(
       recurringExpenseFromGroup(
         group,
         months,
-        minimumOccurrences,
+        minimumOccurrencesForRatio(months, 1 / 2),
         0.5,
         "investment",
         group.entries.map((entry) => ({
