@@ -2,6 +2,7 @@ import type { Hono } from "hono";
 import type { AppBindings } from "../../platform/env";
 import { honoFactory } from "../../platform/hono";
 import { isCloudBackupMode, isDemoMode } from "../../platform/http";
+import { checkHealth } from "../health/service";
 import { getDashboardSummary } from "./service";
 
 export const dashboardRoutes = honoFactory.createApp();
@@ -26,12 +27,11 @@ function registerDashboardRoutes(api: Hono<AppBindings>) {
     });
   });
   api.get("/ready", async (c) => {
-    try {
-      await c.env.DB.prepare("SELECT 1").first();
-      return c.json({ ready: true, d1: true });
-    } catch {
-      return c.json({ ready: false, d1: false }, 503);
-    }
+    const health = await checkHealth(c.env.DB);
+    return c.json(
+      { ready: health.ready, d1: health.d1 },
+      health.ready ? 200 : 503,
+    );
   });
   api.get("/summary", async (c) => c.json(await getDashboardSummary(c.env.DB)));
 }

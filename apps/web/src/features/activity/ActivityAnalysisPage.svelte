@@ -8,6 +8,7 @@
   import { exchangeRatesQuery } from "@/data/assets/queries";
   import { bankRangeQuery } from "@/data/bank/queries";
   import type { BankTransactionRow } from "@/data/bank/types";
+  import { readyQuery } from "@/data/health/queries";
   import {
     investmentsQuery,
     investmentTransactionsRangeQuery,
@@ -45,6 +46,7 @@
   const analysisRange = $derived(recentMonthRange(analysisMonths));
   const analysisMonthKeys = $derived(recentMonthKeys(analysisMonths));
 
+  const ready = createQuery(readyQuery(() => api));
   const bank = createQuery(
     toStore(() => bankRangeQuery(() => api, analysisRange)),
   );
@@ -218,8 +220,81 @@
     Math.max(1, ...analysis.extraCategories.map((item) => item.amount)),
   );
   const queryError = $derived(
-    $bank.isError || $invoices.isError || $trades.isError,
+    $bank.isError ||
+      $invoices.isError ||
+      $invoiceMappings.isError ||
+      $invoicePaymentAccountRules.isError ||
+      $invoicePaymentAccounts.isError ||
+      $trades.isError ||
+      $investments.isError ||
+      $rates.isError,
   );
+  const queryPending = $derived(
+    $bank.isPending ||
+      $invoices.isPending ||
+      $invoiceMappings.isPending ||
+      $invoicePaymentAccountRules.isPending ||
+      $invoicePaymentAccounts.isPending ||
+      $trades.isPending ||
+      $investments.isPending ||
+      $rates.isPending,
+  );
+
+  type QueryState = { isPending: boolean; isError: boolean };
+  type ApiStatus = "checking" | "healthy" | "error";
+
+  function statusOf(query: QueryState): ApiStatus {
+    if (query.isPending) return "checking";
+    return query.isError ? "error" : "healthy";
+  }
+
+  function combinedStatus(queries: QueryState[]): ApiStatus {
+    if (queries.some((query) => query.isPending)) return "checking";
+    return queries.some((query) => query.isError) ? "error" : "healthy";
+  }
+
+  function statusLabel(status: ApiStatus) {
+    if (status === "checking") return "檢查中";
+    return status === "healthy" ? "正常" : "失敗";
+  }
+
+  function statusClasses(status: ApiStatus) {
+    if (status === "checking") return "border-amber/30 bg-amber/10 text-amber";
+    return status === "healthy"
+      ? "border-moss/25 bg-moss/10 text-moss"
+      : "border-coral/25 bg-coral/10 text-coral";
+  }
+
+  function statusDotClasses(status: ApiStatus) {
+    if (status === "checking") return "bg-amber";
+    return status === "healthy" ? "bg-moss" : "bg-coral";
+  }
+
+  const apiStatuses = $derived([
+    { label: "銀行／信用卡", status: statusOf($bank) },
+    {
+      label: "發票配對",
+      status: combinedStatus([
+        $invoices,
+        $invoiceMappings,
+        $invoicePaymentAccountRules,
+        $invoicePaymentAccounts,
+      ]),
+    },
+    {
+      label: "投資資料",
+      status: combinedStatus([$trades, $investments]),
+    },
+    { label: "匯率", status: statusOf($rates) },
+  ]);
+
+  const readyStatus = $derived(
+    $ready.isPending
+      ? "checking"
+      : $ready.isError || !$ready.data?.ready || !$ready.data.d1
+        ? "error"
+        : "healthy",
+  ) satisfies ApiStatus;
 
   function handleAnalysisMonthsChange(event: Event) {
     const value = Number((event.currentTarget as HTMLSelectElement).value);
@@ -260,12 +335,51 @@
   }
 </script>
 
-{#if $bank.isPending || $invoices.isPending || $trades.isPending}
-  <EmptyState title="載入支出分析中" body="正在整理帳務資料。" />
-{:else if queryError}
-  <EmptyState title="支出分析載入失敗" body="請重新整理後再試一次。" alert />
-{:else}
-  <div class="grid min-w-0 gap-4">
+<div class="grid min-w-0 gap-4">
+  <section
+    class="grid gap-3 rounded-xl border border-ink/10 bg-white px-4 py-3 sm:flex sm:items-center sm:justify-between"
+    aria-label="資料 API 狀態"
+  >
+    <div class="flex items-center gap-3">
+      <span
+        class={`flex size-8 shrink-0 items-center justify-center rounded-full ${statusClasses(readyStatus)}`}
+        aria-hidden="true"
+      >
+        <span class={`size-2.5 rounded-full ${statusDotClasses(readyStatus)}`}
+        ></span>
+      </span>
+      <div>
+        <p class="text-sm font-semibold">
+          服務 API · {statusLabel(readyStatus)}
+        </p>
+        <p class="text-xs text-subtle">
+          {readyStatus === "healthy"
+            ? "Worker 與 D1 目前可用，資料區塊會持續使用即時 API。"
+            : readyStatus === "checking"
+              ? "正在確認 Worker 與 D1 的存活狀態。"
+              : "Worker 或 D1 尚未就緒，資料可能無法更新。"}
+        </p>
+      </div>
+    </div>
+    <div class="flex flex-wrap gap-2" aria-label="資料 API 狀態清單">
+      {#each apiStatuses as item (item.label)}
+        <span
+          class={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${statusClasses(item.status)}`}
+        >
+          <span
+            class={`size-1.5 rounded-full ${statusDotClasses(item.status)}`}
+            aria-hidden="true"
+          ></span>
+          {item.label} · {statusLabel(item.status)}
+        </span>
+      {/each}
+    </div>
+  </section>
+  {#if queryPending}
+    <EmptyState title="載入支出分析中" body="正在整理帳務資料。" />
+  {:else if queryError}
+    <EmptyState title="支出分析載入失敗" body="請重新整理後再試一次。" alert />
+  {:else}
     <section class="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h2 class="text-xl font-semibold tracking-tight">支出分析</h2>
@@ -717,5 +831,5 @@
         </div>
       </div>
     </section>
-  </div>
-{/if}
+  {/if}
+</div>

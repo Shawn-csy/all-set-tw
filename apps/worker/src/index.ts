@@ -7,6 +7,7 @@ import { classificationRoutes } from "./features/classification/route";
 import { connectorRoutes } from "./features/connectors/route";
 import { dashboardRoutes } from "./features/dashboard/route";
 import { exchangeRateRoutes } from "./features/exchange-rates/route";
+import { healthRoutes } from "./features/health/route";
 import { investmentRoutes } from "./features/investments/route";
 import { invoiceRoutes } from "./features/invoices/route";
 import { manualAssetRoutes } from "./features/manual-assets/route";
@@ -34,6 +35,10 @@ import {
 
 export const app = honoFactory.createApp();
 export const api = honoFactory.createApp();
+
+// This endpoint is intentionally outside the authenticated /api app so that
+// an external uptime monitor can check Worker and D1 availability.
+app.route("/", healthRoutes);
 
 api.use("*", accessMiddleware);
 api.use("*", requestSecurityMiddleware);

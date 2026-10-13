@@ -34,6 +34,15 @@ Deploy to Cloudflare 會建立部署用 repository、D1 並設定 Workers Builds
 
 ## Cloudflare Access
 
+### 公開健康檢查端點
+
+Worker 提供 `GET /health` 作為外部 uptime monitor 的 Health API。它不使用應用程式的 Access JWT，並會執行 `SELECT 1` 檢查 D1：
+
+- Worker 與 D1 正常時回傳 HTTP `200`，JSON 為 `{"status":"ok","ready":true,"d1":true}`。
+- D1 無法使用時回傳 HTTP `503`，JSON 為 `{"status":"error","ready":false,"d1":false}`。
+
+若 Cloudflare Access Application 覆蓋整個 `finance.shawnup.com`，仍須在 Access 設定新增 `/health` 的 Bypass path policy，或替健康檢查使用沒有 Access 的獨立 hostname；否則請求會在抵達 Worker 前被 Access 擋下。`/api/ready` 保留給已登入的應用程式使用，不作為外部監控網址。
+
 ### 啟用登入保護
 
 1. 前往 **Workers & Pages** 並選擇部署完成的 Worker。

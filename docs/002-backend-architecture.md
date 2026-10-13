@@ -31,6 +31,7 @@ apps/
     │   │   ├── connectors/
     │   │   ├── dashboard/
     │   │   ├── exchange-rates/
+    │   │   ├── health/
     │   │   ├── investments/
     │   │   ├── invoices/
     │   │   ├── manual-assets/
@@ -355,7 +356,7 @@ promotion 後更新授權配對，中信刪除副本前處理 matched reference�
 
 ## HTTP Request 流程
 
-所有 API 掛載在 `/api`：
+一般應用程式 API 掛載在 `/api`：
 
 ```text
 Request
@@ -369,6 +370,8 @@ Request
 ```
 
 非 `/api` 路徑交由 `ASSETS` binding 提供前端靜態檔案。
+
+例外是公開的 `GET /health`，由 `health` feature 在 Access middleware 之前掛載，供外部 uptime monitor 檢查 Worker 與 D1；它只回傳健康狀態，不提供應用程式資料或寫入能力。
 
 ### AI 財務摘要匯出
 

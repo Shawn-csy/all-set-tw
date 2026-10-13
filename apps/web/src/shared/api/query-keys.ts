@@ -1,5 +1,6 @@
 export const queryKeys = {
   runtime: ["runtime"] as const,
+  ready: ["ready"] as const,
   summary: ["summary"] as const,
   bank: ["bank"] as const,
   bankRange: (from: string, to: string) => ["bank", "range", from, to] as const,
